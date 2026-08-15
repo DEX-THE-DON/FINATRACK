@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finatrack - Rider Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+        const USD_TO_KES = {{ usd_to_kes }};
+
+        function getCurrency() { return localStorage.getItem('finatrack_currency') || 'Ksh'; }
+        function setCurrency(curr) {
+            localStorage.setItem('finatrack_currency', curr);
+            applyConversion();
+        }
+
+        function applyConversion() {
+            const curr = getCurrency();
+            document.cookie = "finatrack_currency=" + curr + ";path=/;max-age=31536000";
+            const selectEl = document.getElementById('currency-selector');
+            if (selectEl) selectEl.value = curr;
+
+            document.querySelectorAll('.convertible-amount').forEach(el => {
+                const usdValue = parseFloat(el.getAttribute('data-usd')) || 0;
+                if (curr === 'Ksh') {
+                    el.innerText = 'Ksh ' + (usdValue * USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                } else {
+                    el.innerText = '$' + usdValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                }
+            });
+            document.querySelectorAll('.curr-symbol-label').forEach(el => { el.innerText = curr === 'Ksh' ? 'Ksh' : '$'; });
+        }
+
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.documentElement.classList.add('dark');
+            }
+            applyConversion();
+            
+            // Toast handler
+            const urlParams = new URLSearchParams(window.location.search);
+            const toastMsg = urlParams.get('toast');
+            if (toastMsg) {
+                const toast = document.getElementById('toast');
+                toast.innerText = toastMsg;
+                toast.classList.remove('translate-y-20', 'opacity-0');
+                setTimeout(() => { toast.classList.add('translate-y-20', 'opacity-0'); }, 4000);
+            }
+        });
+    </script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 min-h-screen p-6 transition-colors duration-200">
+    
+    <!-- Toast Notification Banner -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-lg font-medium text-sm"></div>
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        <!-- Navigation Header -->
+        <div class="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold">Rider Performance & Fleet Tracking</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Track earnings, fuel efficiency, maintenance upkeep, and net savings.</p>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button onclick="toggleDarkMode()" class="p-2.5 rounded-xl border dark:border-gray-700 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 transition text-sm">🌓 Theme</button>
+                <div class="flex items-center space-x-2 bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded-xl border dark:border-gray-700">
+                    <span class="text-xs font-semibold">Currency:</span>
+                    <select id="currency-selector" onchange="setCurrency(this.value)" class="bg-transparent text-sm font-bold focus:outline-none cursor-pointer">
+                        <option value="Ksh" class="dark:bg-gray-800">Ksh (KES)</option>
+                        <option value="$" class="dark:bg-gray-800">Dollars (USD)</option>
+                    </select>
+                </div>
+                <a href="/" class="inline-flex items-center bg-gray-900 dark:bg-gray-100 dark:text-gray-900 hover:bg-black text-white font-semibold py-2.5 px-5 rounded-xl shadow transition text-sm">&larr; Finance</a>
+            </div>
+        </div>
+
+        <!-- Analytics Overview Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Daily -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border dark:border-gray-700 space-y-3">
+                <h3 class="font-bold text-lg border-b dark:border-gray-700 pb-2">Today's Summary</h3>
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">Earned:</span><span class="font-semibold text-emerald-600 convertible-amount" data-usd="{{ daily_earned }}">{{ daily_earned }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Upkeep & Exp:</span><span class="font-semibold text-rose-600 convertible-amount" data-usd="{{ daily_exp }}">{{ daily_exp }}</span></div>
+                    <div class="flex justify-between pt-2 border-t dark:border-gray-700 font-bold"><span class="text-gray-700 dark:text-gray-300">Net Profit:</span><span class="text-indigo-600 convertible-amount" data-usd="{{ daily_saved }}">{{ daily_saved }}</span></div>
+                </div>
+            </div>
+            <!-- Weekly -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border dark:border-gray-700 space-y-3">
+                <h3 class="font-bold text-lg border-b dark:border-gray-700 pb-2">Weekly Summary</h3>
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">Earned:</span><span class="font-semibold text-emerald-600 convertible-amount" data-usd="{{ weekly_earned }}">{{ weekly_earned }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Upkeep & Exp:</span><span class="font-semibold text-rose-600 convertible-amount" data-usd="{{ weekly_exp }}">{{ weekly_exp }}</span></div>
+                    <div class="flex justify-between pt-2 border-t dark:border-gray-700 font-bold"><span class="text-gray-700 dark:text-gray-300">Net Profit:</span><span class="text-indigo-600 convertible-amount" data-usd="{{ weekly_saved }}">{{ weekly_saved }}</span></div>
+                </div>
+            </div>
+            <!-- Monthly -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border dark:border-gray-700 space-y-3">
+                <h3 class="font-bold text-lg border-b dark:border-gray-700 pb-2">Monthly Summary</h3>
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">Earned:</span><span class="font-semibold text-emerald-600 convertible-amount" data-usd="{{ monthly_earned }}">{{ monthly_earned }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Upkeep & Exp:</span><span class="font-semibold text-rose-600 convertible-amount" data-usd="{{ monthly_exp }}">{{ monthly_exp }}</span></div>
+                    <div class="flex justify-between pt-2 border-t dark:border-gray-700 font-bold"><span class="text-gray-700 dark:text-gray-300">Net Profit:</span><span class="text-indigo-600 convertible-amount" data-usd="{{ monthly_saved }}">{{ monthly_saved }}</span></div>
+                </div>
+            </div>
+            <!-- Yearly -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border dark:border-gray-700 space-y-3">
+                <h3 class="font-bold text-lg border-b dark:border-gray-700 pb-2">Yearly Summary</h3>
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">Earned:</span><span class="font-semibold text-emerald-600 convertible-amount" data-usd="{{ yearly_earned }}">{{ yearly_earned }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Upkeep & Exp:</span><span class="font-semibold text-rose-600 convertible-amount" data-usd="{{ yearly_exp }}">{{ yearly_exp }}</span></div>
+                    <div class="flex justify-between pt-2 border-t dark:border-gray-700 font-bold"><span class="text-gray-700 dark:text-gray-300">Net Profit:</span><span class="text-indigo-600 convertible-amount" data-usd="{{ yearly_saved }}">{{ yearly_saved }}</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Rider Log Form -->
+        <form action="/rider/logs" method="POST" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border dark:border-gray-700 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <h2 class="sm:col-span-2 lg:col-span-4 text-xl font-bold border-b dark:border-gray-700 pb-2">Log Daily Rider Activity</h2>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Date</label>
+                <input type="date" name="log_date" value="{{ today }}" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Trips Completed</label>
+                <input type="number" name="trips_completed" value="0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Distance Covered (Km)</label>
+                <input type="number" step="0.1" name="kilometers" value="0.0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Total Earned (<span class="curr-symbol-label">Ksh</span>)</label>
+                <input type="number" step="0.01" name="total_earned" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Fuel Used (Liters)</label>
+                <input type="number" step="0.01" name="fuel_used_liters" value="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Fuel Cost (<span class="curr-symbol-label">Ksh</span>)</label>
+                <input type="number" step="0.01" name="fuel_cost" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Maintenance / Repair (<span class="curr-symbol-label">Ksh</span>)</label>
+                <input type="number" step="0.01" name="maintenance_cost" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Airtime Spent (<span class="curr-symbol-label">Ksh</span>)</label>
+                <input type="number" step="0.01" name="airtime_spent" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Misc Expenses (<span class="curr-symbol-label">Ksh</span>)</label>
+                <input type="number" step="0.01" name="misc_expenses" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+            </div>
+            <div class="sm:col-span-2 lg:col-span-3 flex items-end">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition shadow">Save Rider Log</button>
+            </div>
+        </form>
+
+        <!-- Rider Logs Table -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border dark:border-gray-700 overflow-hidden">
+            <div class="p-6 border-b dark:border-gray-700">
+                <h2 class="text-xl font-bold">Rider History Logs & Fleet Metrics</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-300 uppercase">
+                            <th class="p-4">Date</th>
+                            <th class="p-4">Trips</th>
+                            <th class="p-4">Distance</th>
+                            <th class="p-4">Efficiency</th>
+                            <th class="p-4">Earned</th>
+                            <th class="p-4">Fuel Cost</th>
+                            <th class="p-4">Maintenance</th>
+                            <th class="p-4">Other Exp</th>
+                            <th class="p-4 text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y dark:divide-gray-700 text-sm">
+                        {% for log in logs %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td class="p-4">{{ log.date }}</td>
+                            <td class="p-4 font-semibold">{{ log.trips_completed }}</td>
+                            <td class="p-4">{{ log.kilometers }} km</td>
+                            <td class="p-4 text-blue-500 font-medium">
+                                {% if log.fuel_used_liters > 0 %}
+                                    {{ "%.1f"|format(log.kilometers / log.fuel_used_liters) }} km/L
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="p-4 text-emerald-600 font-bold">+<span class="convertible-amount" data-usd="{{ log.total_earned }}">{{ log.total_earned }}</span></td>
+                            <td class="p-4 text-rose-600">-<span class="convertible-amount" data-usd="{{ log.fuel_cost }}">{{ log.fuel_cost }}</span></td>
+                            <td class="p-4 text-rose-600">-<span class="convertible-amount" data-usd="{{ log.maintenance_cost }}">{{ log.maintenance_cost }}</span></td>
+                            <td class="p-4 text-rose-600">-<span class="convertible-amount" data-usd="{{ log.airtime_spent + log.misc_expenses }}">{{ log.airtime_spent + log.misc_expenses }}</span></td>
+                            <td class="p-4 text-center">
+                                <form action="/rider/logs/delete/{{ log.id }}" method="POST" onsubmit="return confirm('Delete log entry?');">
+                                    <button type="submit" class="text-rose-500 hover:text-rose-700 text-xs font-medium">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="p-6 text-center text-gray-400">No rider logs recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
