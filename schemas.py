@@ -1,19 +1,114 @@
 from datetime import date
-from pydantic import BaseModel
+from typing import Optional
+from pydantic import BaseModel, ConfigDict
 
 
-class RiderLogCreate(BaseModel):
+class AccountBase(BaseModel):
+  name: str
+  account_type: str = "BANK"
+  balance: float = 0.0
+
+
+class AccountCreate(AccountBase):
+  pass
+
+
+class AccountResponse(AccountBase):
+  id: int
+  model_config = ConfigDict(from_attributes=True)
+
+
+class TransactionBase(BaseModel):
+  account_id: int
+  transaction_type: str  # INCOME or EXPENSE
+  category: str
+  amount: float
+  date: date
+  description: Optional[str] = None
+  rider_log_id: Optional[int] = None
+
+
+class TransactionCreate(TransactionBase):
+  pass
+
+
+class TransactionResponse(TransactionBase):
+  id: int
+  model_config = ConfigDict(from_attributes=True)
+
+
+class BudgetBase(BaseModel):
+  category: str
+  limit_amount: float
+
+
+class BudgetCreate(BudgetBase):
+  pass
+
+
+class BudgetResponse(BudgetBase):
+  id: int
+  model_config = ConfigDict(from_attributes=True)
+
+
+class GoalBase(BaseModel):
+  title: str
+  target_amount: float
+  current_amount: float = 0.0
+  target_date: Optional[date] = None
+
+
+class GoalCreate(GoalBase):
+  pass
+
+
+class GoalResponse(GoalBase):
+  id: int
+  model_config = ConfigDict(from_attributes=True)
+
+
+class RiderLogBase(BaseModel):
   date: date
   trips_completed: int = 0
+  kilometers: float = 0.00
+  total_earned: float = 0.00
   fuel_used_liters: float = 0.00
   fuel_cost: float = 0.00
   airtime_spent: float = 0.00
+  food_spent: float = 0.00
   misc_expenses: float = 0.00
-  total_earned: float = 0.00
+  maintenance_cost: float = 0.00
+  earnings_account_id: Optional[int] = None
+  expense_account_id: Optional[int] = None
 
 
-class RiderLogResponse(RiderLogCreate):
+class RiderLogCreate(RiderLogBase):
+  pass
+
+
+class RiderLogResponse(RiderLogBase):
   id: int
+  model_config = ConfigDict(from_attributes=True)
 
-  class Config:
-    from_attributes = True
+
+class DebtBase(BaseModel):
+  person_name: str
+  debt_type: str  # 'I_OWE' or 'OWED_TO_ME'
+  total_amount: float
+  paid_amount: float = 0.0
+  status: str = "ACTIVE"
+  description: Optional[str] = None
+
+
+class DebtCreate(DebtBase):
+  due_at: str
+  issued_at: Optional[str] = None
+
+
+class DebtRepay(BaseModel):
+  amount: float
+
+
+class DebtResponse(DebtBase):
+  id: int
+  model_config = ConfigDict(from_attributes=True)

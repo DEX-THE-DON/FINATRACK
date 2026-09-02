@@ -1,0 +1,29 @@
+{
+  "name": "Finatrack - Boda Boda Fleet & Finance",
+  "short_name": "Finatrack",
+  "description": "Smart fleet operations, shift logging, M-Pesa tracking, and finance manager for motorcycle riders.",
+  "start_url": "/rider",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

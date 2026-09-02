@@ -1,0 +1,9 @@
+{
+  "appId": "com.finatrack.app",
+  "appName": "Finatrack",
+  "webDir": "www",
+  "server": {
+    "cleartext": true,
+    "androidScheme": "http"
+  }
+}

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Finatrack - Official Rider Statement</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 14mm 12mm 14mm 12mm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 8pt;
+                color: #6b7280;
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            }
+            @bottom-left {
+                content: "Generated via Finatrack Fleet Management";
+                font-size: 8pt;
+                color: #6b7280;
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            }
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1f2937;
+            margin: 0;
+            padding: 0;
+            font-size: 9pt;
+            line-height: 1.4;
+        }
+
+        .header {
+            border-bottom: 2.5px solid #2563eb;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .header-table td {
+            vertical-align: top;
+        }
+
+        .logo-title {
+            font-size: 20pt;
+            font-weight: 800;
+            color: #1e3a8a;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-subtitle {
+            font-size: 9pt;
+            color: #4b5563;
+            margin-top: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .doc-meta {
+            text-align: right;
+            font-size: 8.5pt;
+        }
+
+        .doc-badge {
+            display: inline-block;
+            background-color: #dbeafe;
+            color: #1e40af;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 8.5pt;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        /* Metadata Details Box */
+        .details-grid {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+        }
+
+        .details-grid td {
+            padding: 8px 12px;
+            font-size: 8.5pt;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .details-grid strong {
+            color: #111827;
+        }
+
+        /* KPI Summary Cards */
+        .kpi-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 8px 0;
+            margin-bottom: 18px;
+        }
+
+        .kpi-card {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        .kpi-title {
+            font-size: 7.5pt;
+            text-transform: uppercase;
+            color: #6b7280;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .kpi-value {
+            font-size: 13pt;
+            font-weight: 800;
+            color: #111827;
+        }
+
+        .kpi-net {
+            background-color: #ecfdf5;
+            border-color: #a7f3d0;
+        }
+
+        .kpi-net .kpi-value {
+            color: #059669;
+        }
+
+        .kpi-exp {
+            background-color: #fff1f2;
+            border-color: #fecdd3;
+        }
+
+        .kpi-exp .kpi-value {
+            color: #e11d48;
+        }
+
+        /* Section Headings */
+        .section-heading {
+            font-size: 10pt;
+            font-weight: 700;
+            color: #1f2937;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            margin-top: 14px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 4px;
+        }
+
+        /* Data Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+            font-size: 8pt;
+        }
+
+        .data-table th {
+            background-color: #f3f4f6;
+            color: #374151;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 6px 8px;
+            border: 1px solid #e5e7eb;
+            font-size: 7.5pt;
+        }
+
+        .data-table td {
+            padding: 5px 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+
+        .text-green { color: #059669; font-weight: bold; }
+        .text-rose { color: #e11d48; }
+
+        /* Financing Box */
+        .financing-box {
+            background-color: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+        }
+
+        /* Signature Section */
+        .signatures {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 28px;
+            page-break-inside: avoid;
+        }
+
+        .signatures td {
+            width: 50%;
+            padding: 0 15px;
+            vertical-align: top;
+        }
+
+        .sig-line {
+            border-top: 1px dashed #9ca3af;
+            margin-top: 40px;
+            padding-top: 6px;
+            font-size: 8pt;
+            color: #4b5563;
+        }
+
+        .stamp-box {
+            border: 1px dashed #d1d5db;
+            height: 48px;
+            margin-top: 8px;
+            border-radius: 4px;
+            color: #9ca3af;
+            font-size: 7.5pt;
+            text-align: center;
+            line-height: 48px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <table class="header-table">
+            <tr>
+                <td>
+                    <h1 class="logo-title">FINATRACK</h1>
+                    <div class="logo-subtitle">Official Boda Boda Operations & Remittance Statement</div>
+                </td>
+                <td class="doc-meta">
+                    <span class="doc-badge">Official Audit Copy</span>
+                    <div><strong>Period:</strong> {{ timeframe_label }}</div>
+                    <div><strong>Generated:</strong> {{ generated_date }}</div>
+                    <div><strong>Statement Ref:</strong> {{ statement_ref }}</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Metadata Details -->
+    <table class="details-grid">
+        <tr>
+            <td width="33%"><strong>Rider Name:</strong> {{ rider_name or 'Independent Operator' }}</td>
+            <td width="33%"><strong>Motorcycle Reg:</strong> {{ bike_reg or 'Assigned Fleet' }}</td>
+            <td width="34%"><strong>SACCO / Stage:</strong> {{ sacco_name or 'Direct Boda Stage' }}</td>
+        </tr>
+        <tr>
+            <td><strong>DL Status:</strong> {{ dl_status }}</td>
+            <td><strong>PSV Insurance:</strong> {{ psv_status }}</td>
+            <td><strong>Next Service Due:</strong> {{ next_service_due }}</td>
+        </tr>
+    </table>
+
+    <!-- KPI Executive Summary -->
+    <table class="kpi-table">
+        <tr>
+            <td class="kpi-card" width="25%">
+                <div class="kpi-title">Gross Revenue</div>
+                <div class="kpi-value text-green">Ksh {{ "{:,.2f}".format(total_earned) }}</div>
+            </td>
+            <td class="kpi-card kpi-exp" width="25%">
+                <div class="kpi-title">Operating Upkeep</div>
+                <div class="kpi-value">Ksh {{ "{:,.2f}".format(total_exp) }}</div>
+            </td>
+            <td class="kpi-card kpi-net" width="25%">
+                <div class="kpi-title">Net Remittance</div>
+                <div class="kpi-value">Ksh {{ "{:,.2f}".format(net_remittance) }}</div>
+            </td>
+            <td class="kpi-card" width="25%">
+                <div class="kpi-title">Productivity</div>
+                <div class="kpi-value" style="font-size: 11pt; padding-top: 2px;">{{ total_trips }} trips / {{ "{:,.1f}".format(total_km) }} km</div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Lipa Mdogo Mdogo Financing Status (if active) -->
+    {% if financing %}
+    <div class="financing-box">
+        <table width="100%" style="border-collapse: collapse; font-size: 8pt;">
+            <tr>
+                <td><strong>Lipa Mdogo Mdogo Financing:</strong> {{ financing.provider_name }} ({{ financing.status }})</td>
+                <td class="text-right"><strong>Daily Rate:</strong> Ksh {{ "{:,.2f}".format(financing.daily_amount) }} / day</td>
+            </tr>
+            <tr>
+                <td style="padding-top: 4px;"><strong>Total Bike Price:</strong> Ksh {{ "{:,.2f}".format(financing.total_cost) }} | <strong>Paid:</strong> Ksh {{ "{:,.2f}".format(financing.paid_amount) }} ({{ financing.percentage }}%)</td>
+                <td class="text-right" style="padding-top: 4px;"><strong>Remaining Balance:</strong> <span class="text-rose">Ksh {{ "{:,.2f}".format(financing.remaining) }}</span></td>
+            </tr>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Shift Records Breakdown Table -->
+    <div class="section-heading">Detailed Shift Log & Operating Breakdown</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th width="12%">Date</th>
+                <th width="8%" class="text-center">Trips</th>
+                <th width="10%" class="text-center">Distance</th>
+                <th width="12%" class="text-right">Gross Earned</th>
+                <th width="10%" class="text-right">Fuel</th>
+                <th width="10%" class="text-right">Food/Meals</th>
+                <th width="10%" class="text-right">Repairs</th>
+                <th width="10%" class="text-right">Airtime/Misc</th>
+                <th width="14%" class="text-right">Net Remit</th>
+                <th width="14%">Payment Account</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.date }}</td>
+                <td class="text-center">{{ log.trips_completed }}</td>
+                <td class="text-center">{{ log.kilometers }} km</td>
+                <td class="text-right text-green">+{{ "{:,.2f}".format(log.total_earned) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(log.fuel_cost) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(log.food_spent) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(log.maintenance_cost) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(log.airtime_spent + log.misc_expenses) }}</td>
+                <td class="text-right" style="font-weight: bold; color: #1e40af;">
+                    {{ "{:,.2f}".format(log.total_earned - (log.fuel_cost + log.food_spent + log.maintenance_cost + log.airtime_spent + log.misc_expenses)) }}
+                </td>
+                <td style="font-size: 7.5pt; color: #4b5563;">{{ log.earnings_account_name or 'Cash/Direct' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="10" class="text-center" style="padding: 16px; color: #9ca3af;">No shift records found for this timeframe.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="background-color: #f3f4f6; font-weight: bold;">
+                <td>TOTALS</td>
+                <td class="text-center">{{ total_trips }}</td>
+                <td class="text-center">{{ "{:,.1f}".format(total_km) }} km</td>
+                <td class="text-right text-green">+{{ "{:,.2f}".format(total_earned) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(total_fuel) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(total_food) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(total_maint) }}</td>
+                <td class="text-right text-rose">-{{ "{:,.2f}".format(total_other) }}</td>
+                <td class="text-right text-green">+{{ "{:,.2f}".format(net_remittance) }}</td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <!-- Verification & Signatures -->
+    <table class="signatures">
+        <tr>
+            <td>
+                <div class="sig-line">
+                    <strong>Rider Confirmation:</strong> {{ rider_name or 'Operator' }}<br>
+                    <span>I verify that the above shift metrics and operating expenses are accurate.</span><br>
+                    <span style="font-size: 7.5pt; color: #9ca3af;">Signature & Date: ____________________________________</span>
+                </div>
+            </td>
+            <td>
+                <div class="sig-line">
+                    <strong>SACCO Official / Bike Owner Endorsement:</strong><br>
+                    <span>Approved & verified for compliance and remittance audit.</span>
+                    <div class="stamp-box">OFFICIAL SACCO / OWNER STAMP</div>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>
