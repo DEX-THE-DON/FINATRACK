@@ -343,6 +343,12 @@
                         <p class="text-[10px] text-gray-400 mt-2">
                             Daily growth: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400" data-usd="{{ mmf.daily_return }}">{{ mmf.daily_return }}</strong> / day &nbsp;•&nbsp; Annual: <strong class="convertible-amount" data-usd="{{ mmf.annual_return }}">{{ mmf.annual_return }}</strong>
                         </p>
+                        {% if 'ziidi' in mmf.name|lower %}
+                        <div class="mt-2.5 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                            <span class="font-bold flex items-center space-x-1"><span>🔄</span> <span>10% Auto-Save Rule: Active</span></span>
+                            <span class="text-[10px] opacity-80">Send / Paybill / Buy Goods</span>
+                        </div>
+                        {% endif %}
                     </div>
                     <form action="/accounts/interest/log/{{ mmf.id }}" method="POST">
                         <button type="submit" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-2 rounded-lg text-xs transition shadow-xs flex items-center justify-center space-x-1.5">

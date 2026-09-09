@@ -53,6 +53,15 @@ try:
       """))
       conn.commit()
 
+    # Seed Ziidi MMF (Safaricom) account if not present
+    res_ziidi = conn.execute(text("SELECT COUNT(*) FROM accounts WHERE name ILIKE '%Ziidi%';")).scalar()
+    if res_ziidi == 0:
+      conn.execute(text("""
+        INSERT INTO accounts (name, account_number, account_type, balance, interest_rate_p_a)
+        VALUES ('Ziidi MMF (Safaricom)', 'M-PESA-GROW', 'MMF', 5000.0, 13.5);
+      """))
+      conn.commit()
+
     # Seed default maintenance schedule if empty
     res_maint = conn.execute(text("SELECT COUNT(*) FROM maintenance_schedules;")).scalar()
     if res_maint == 0:
@@ -1095,6 +1104,10 @@ def parse_mpesa_sms(sms_text: str) -> dict:
     category = "Maintenance & Repairs"
     field = "maintenance_cost"
     icon = "🔧"
+  elif any(k in upper_text for k in ["ZIIDI", "ZIIDI MMF", "M-PESA GROW", "GROW MMF"]):
+    category = "Ziidi MMF Investment"
+    field = "investment"
+    icon = "📈"
   elif any(k in upper_text for k in ["MOGO", "SPIRO", "WATU", "ZENO"]):
     category = "Bike Financing (Lipa Mdogo)"
     field = "financing"
@@ -1258,6 +1271,24 @@ async def mpesa_sms_webhook(request: Request, db: Session = Depends(get_db)):
         rider_log_id=log.id,
     )
     db.add(tx)
+
+    # 10% Auto-Save into Ziidi MMF on Outgoing Transactions (Send Money, Paybill, Buy Goods, Fuel, Food, Airtime)
+    if tx_type == "EXPENSE":
+      ziidi_acc = db.query(account_model).filter(account_model.name.ilike("%Ziidi%")).first()
+      if ziidi_acc:
+        auto_save_amt = round(amt_norm * 0.10, 2)
+        if auto_save_amt > 0:
+          ziidi_acc.balance = float(ziidi_acc.balance or 0.0) + auto_save_amt
+          tx_ziidi = models.Transaction(
+              account_id=ziidi_acc.id,
+              transaction_type="INCOME",
+              category="Ziidi 10% Auto-Save",
+              amount=auto_save_amt,
+              description=f"10% Auto-Save from M-Pesa {category} ({receipt})",
+              date=today_date,
+              rider_log_id=log.id,
+          )
+          db.add(tx_ziidi)
 
   db.commit()
   return {
