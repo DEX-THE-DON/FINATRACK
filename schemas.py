@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class AccountBase(BaseModel):
   name: str
+  account_number: Optional[str] = None
   account_type: str = "BANK"
   balance: float = 0.0
 

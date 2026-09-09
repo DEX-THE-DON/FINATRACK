@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 models.Base.metadata.create_all(bind=engine)
 try:
   with engine.connect() as conn:
+    conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS account_number VARCHAR;"))
     conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS earnings_account_id INTEGER;"))
     conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS expense_account_id INTEGER;"))
     conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS rider_log_id INTEGER;"))
@@ -364,6 +365,7 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
 def create_account(
     request: Request,
     name: str = Form(...),
+    account_number: Optional[str] = Form(None),
     account_type: str = Form(...),
     balance: float = Form(0.00),
     db: Session = Depends(get_db),
@@ -373,9 +375,16 @@ def create_account(
       str(balance / get_live_rate() if currency_pref == "Ksh" else balance)
   )
 
+  acc_num = account_number.strip() if account_number and account_number.strip() else None
+
   account_model = getattr(models, "FinanceAccount", getattr(models, "Account", None))
   if account_model:
-    acc = account_model(name=name, account_type=account_type, balance=final_balance)
+    acc = account_model(
+        name=name.strip(),
+        account_number=acc_num,
+        account_type=account_type,
+        balance=final_balance,
+    )
     db.add(acc)
     db.commit()
   return RedirectResponse(url="/", status_code=303)
@@ -386,6 +395,7 @@ def update_account(
     request: Request,
     acc_id: int,
     name: str = Form(...),
+    account_number: Optional[str] = Form(None),
     account_type: str = Form(...),
     balance: float = Form(...),
     db: Session = Depends(get_db),
@@ -398,7 +408,8 @@ def update_account(
         str(balance / get_live_rate() if currency_pref == "Ksh" else balance)
     )
 
-    acc.name = name
+    acc.name = name.strip()
+    acc.account_number = account_number.strip() if account_number and account_number.strip() else None
     acc.account_type = account_type
     acc.balance = final_balance
     db.commit()

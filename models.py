@@ -8,6 +8,7 @@ class Account(Base):
 
   id = Column(Integer, primary_key=True, index=True)
   name = Column(String, index=True)
+  account_number = Column(String, nullable=True, index=True)
   account_type = Column(String, default='BANK')  # MOBILE, BANK, CASH
   balance = Column(Float, default=0.0)
 

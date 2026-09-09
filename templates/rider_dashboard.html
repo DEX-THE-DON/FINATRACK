@@ -920,7 +920,7 @@
                             <select name="payment_account_id" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
                                 <option value="">-- Do not deduct from finance --</option>
                                 {% for acc in accounts %}
-                                <option value="{{ acc.id }}">{{ acc.name }} ({{ acc.account_type }})</option>
+                                <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% else %} ({{ acc.account_type }}){% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -944,35 +944,42 @@
                 {% if maintenance %}
                 <div class="pt-3 border-t dark:border-gray-700">
                     <button type="button" onclick="toggleServiceForm()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-xl text-xs transition shadow flex justify-center items-center space-x-1">
-                        <span>✓ Log Service Done Today</span>
+                        <span>🔧 Record Full Service Completed</span>
                     </button>
 
-                    <!-- Service Form Popup / Toggle -->
+                    <!-- Hidden Full Service Modal/Form -->
                     <form id="service-modal-form" action="/rider/maintenance/complete/{{ maintenance.id }}" method="POST" class="hidden mt-3 p-3.5 bg-gray-50 dark:bg-gray-700/60 rounded-xl border dark:border-gray-600 space-y-2.5 text-xs">
-                        <div class="font-bold text-gray-800 dark:text-gray-200">Record Today's Service Details</div>
-                        <div>
-                            <label class="block text-gray-500 dark:text-gray-400 mb-1">Service & Oil Cost (<span class="curr-symbol-label">Ksh</span>)</label>
-                            <input type="number" step="0.01" name="service_cost" placeholder="e.g. 500.00" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
-                        </div>
-
-                        <!-- Brake pads replacement option -->
-                        <div class="p-2 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 space-y-2">
-                            <label class="flex items-center space-x-2 cursor-pointer">
-                                <input type="checkbox" name="bought_brake_pads" value="on" onchange="toggleBrakePadCost(this)" class="rounded text-blue-600 h-4 w-4">
-                                <span class="font-semibold text-gray-800 dark:text-gray-200">Bought new brake pads today?</span>
-                            </label>
-                            <div id="brake-pad-cost-container" class="hidden pt-1">
-                                <label class="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">Brake Pads Cost (<span class="curr-symbol-label">Ksh</span>)</label>
-                                <input type="number" step="0.01" name="brake_pad_cost" placeholder="e.g. 350.00" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 rounded text-xs">
+                        <div class="font-bold text-gray-800 dark:text-gray-200">Complete & Reset Service Schedule</div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-gray-500 dark:text-gray-400 mb-1">Service Date</label>
+                                <input type="date" name="service_date" value="{{ today }}" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs" required>
+                            </div>
+                            <div>
+                                <label class="block text-gray-500 dark:text-gray-400 mb-1">Total Cost (<span class="curr-symbol-label">Ksh</span>)</label>
+                                <input type="number" step="0.01" name="cost" placeholder="e.g. 850.00" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs" required>
                             </div>
                         </div>
-
+                        <div class="space-y-1 py-1">
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="checkbox" name="replaced_oil" checked class="rounded text-blue-600">
+                                <span>Oil & filter changed</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="checkbox" name="serviced_chain" checked class="rounded text-blue-600">
+                                <span>Chain cleaned, tightened & oiled</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="checkbox" name="replaced_brake_pads" class="rounded text-blue-600">
+                                <span>Replaced brake pads</span>
+                            </label>
+                        </div>
                         <div>
                             <label class="block text-gray-500 dark:text-gray-400 mb-1">Deduct from Account</label>
                             <select name="payment_account_id" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
                                 <option value="">-- Do not deduct from finance --</option>
                                 {% for acc in accounts %}
-                                <option value="{{ acc.id }}">{{ acc.name }} ({{ acc.account_type }})</option>
+                                <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% else %} ({{ acc.account_type }}){% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -1058,7 +1065,7 @@
                                 <select name="payment_account_id" class="flex-1 p-1 border dark:border-gray-600 dark:bg-gray-800 rounded text-[10px]">
                                     <option value="">No deduction</option>
                                     {% for acc in accounts %}
-                                    <option value="{{ acc.id }}">{{ acc.name }}</option>
+                                    <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% else %} ({{ acc.account_type }}){% endif %}</option>
                                     {% endfor %}
                                 </select>
                                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] px-2 py-1 rounded font-semibold whitespace-nowrap">Renew</button>
@@ -1136,7 +1143,7 @@
                                 <select name="payment_account_id" class="flex-1 p-1.5 border dark:border-gray-600 dark:bg-gray-800 rounded text-xs">
                                     <option value="">No account link</option>
                                     {% for acc in accounts %}
-                                    <option value="{{ acc.id }}">{{ acc.name }}</option>
+                                    <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% else %} ({{ acc.account_type }}){% endif %}</option>
                                     {% endfor %}
                                 </select>
                                 <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap shadow">Pay</button>
@@ -1244,7 +1251,7 @@
                 <select name="earnings_account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
                     <option value="">-- Don't deposit --</option>
                     {% for acc in accounts %}
-                    <option value="{{ acc.id }}">{{ acc.name }} ({{ acc.account_type }})</option>
+                    <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% else %} ({{ acc.account_type }}){% endif %}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -1253,7 +1260,7 @@
                 <select name="expense_account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
                     <option value="">-- Don't deduct --</option>
                     {% for acc in accounts %}
-                    <option value="{{ acc.id }}">{{ acc.name }} ({{ acc.account_type }})</option>
+                    <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% else %} ({{ acc.account_type }}){% endif %}</option>
                     {% endfor %}
                 </select>
             </div>

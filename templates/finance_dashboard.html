@@ -292,7 +292,12 @@
                             <div class="flex justify-between items-start">
                                 <div>
                                     <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg">{{ acc.name }}</h3>
-                                    <span class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full font-medium">{{ acc.account_type }}</span>
+                                    <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                                        <span class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full font-medium">{{ acc.account_type }}</span>
+                                        {% if acc.account_number %}
+                                        <span class="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-200/70 dark:bg-gray-700 px-2 py-0.5 rounded-md font-semibold"># {{ acc.account_number }}</span>
+                                        {% endif %}
+                                    </div>
                                 </div>
                                 <form action="/accounts/delete/{{ acc.id }}" method="POST" onsubmit="return confirm('Delete account?');">
                                     <button type="submit" class="text-rose-500 text-xs font-semibold hover:text-rose-700">Delete</button>
@@ -308,8 +313,12 @@
                         <div id="acc-edit-{{ acc.id }}" class="hidden space-y-2">
                             <form action="/accounts/update/{{ acc.id }}" method="POST" class="space-y-2">
                                 <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Name</label>
+                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account Name</label>
                                     <input type="text" name="name" value="{{ acc.name }}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account / Phone / Till No.</label>
+                                    <input type="text" name="account_number" value="{{ acc.account_number or '' }}" placeholder="e.g. 0712345678 or 1234567890" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
                                 </div>
                                 <div>
                                     <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
@@ -335,15 +344,16 @@
                     {% endfor %}
                 </div>
 
-                <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <input type="text" name="name" placeholder="Account Name" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
+                <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, KCB)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
+                    <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
                     <select name="account_type" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
                         <option value="MOBILE">Mobile Money</option>
                         <option value="BANK">Bank</option>
                         <option value="CASH">Cash</option>
                     </select>
                     <input type="number" step="0.01" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
-                    <div class="sm:col-span-3">
+                    <div class="sm:col-span-2 lg:col-span-4">
                         <button type="submit" class="w-full bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-sm font-semibold py-2 rounded-lg transition">Add Account</button>
                     </div>
                 </form>
@@ -359,7 +369,7 @@
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">From Account</label>
                             <select name="from_account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
                                 {% for acc in accounts %}
-                                <option value="{{ acc.id }}">{{ acc.name }}</option>
+                                <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -367,7 +377,7 @@
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">To Account</label>
                             <select name="to_account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
                                 {% for acc in accounts %}
-                                <option value="{{ acc.id }}">{{ acc.name }}</option>
+                                <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -391,7 +401,7 @@
                         <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Account</label>
                         <select name="account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
                             {% for acc in accounts %}
-                            <option value="{{ acc.id }}">{{ acc.name }}</option>
+                            <option value="{{ acc.id }}">{{ acc.name }}{% if acc.account_number %} ({{ acc.account_number }}){% endif %}</option>
                             {% endfor %}
                         </select>
                     </div>
