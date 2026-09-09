@@ -8,6 +8,7 @@ class AccountBase(BaseModel):
   account_number: Optional[str] = None
   account_type: str = "BANK"
   balance: float = 0.0
+  interest_rate_p_a: float = 0.0
 
 
 class AccountCreate(AccountBase):
@@ -68,13 +69,54 @@ class GoalResponse(GoalBase):
   model_config = ConfigDict(from_attributes=True)
 
 
+class BillBase(BaseModel):
+  title: str
+  category: str = "UTILITY"
+  amount: float
+  due_day: int = 1
+  payment_account_id: Optional[int] = None
+  last_paid_date: Optional[date] = None
+  is_recurring: int = 1
+  notes: Optional[str] = None
+
+
+class BillCreate(BillBase):
+  pass
+
+
+class BillResponse(BillBase):
+  id: int
+  model_config = ConfigDict(from_attributes=True)
+
+
+class BikeBase(BaseModel):
+  plate_number: str
+  model_name: Optional[str] = None
+  owner_name: Optional[str] = None
+  daily_target: float = 2500.0
+  is_active: int = 1
+
+
+class BikeCreate(BikeBase):
+  pass
+
+
+class BikeResponse(BikeBase):
+  id: int
+  model_config = ConfigDict(from_attributes=True)
+
+
 class RiderLogBase(BaseModel):
+  bike_id: Optional[int] = None
   date: date
   trips_completed: int = 0
   kilometers: float = 0.00
   total_earned: float = 0.00
   fuel_used_liters: float = 0.00
   fuel_cost: float = 0.00
+  fuel_station: Optional[str] = None
+  fuel_litres: Optional[float] = None
+  shift_hours: float = 8.0
   airtime_spent: float = 0.00
   food_spent: float = 0.00
   misc_expenses: float = 0.00

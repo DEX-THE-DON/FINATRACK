@@ -9,8 +9,9 @@ class Account(Base):
   id = Column(Integer, primary_key=True, index=True)
   name = Column(String, index=True)
   account_number = Column(String, nullable=True, index=True)
-  account_type = Column(String, default='BANK')  # MOBILE, BANK, CASH
+  account_type = Column(String, default='BANK')  # MOBILE, BANK, SAVINGS, MMF, LOOP, CASH
   balance = Column(Float, default=0.0)
+  interest_rate_p_a = Column(Float, default=0.0)  # Annual percentage yield (e.g. 14.5% for Sanlam MMF)
 
 
 class Transaction(Base):
@@ -58,16 +59,45 @@ class Debt(Base):
   description = Column(Text, nullable=True)
 
 
+class Bill(Base):
+  __tablename__ = 'bills'
+
+  id = Column(Integer, primary_key=True, index=True)
+  title = Column(String, index=True, nullable=False)  # e.g. KPLC Tokens, Nairobi Water, Zuku Wi-Fi, Rent
+  category = Column(String, index=True, default='UTILITY')  # KPLC, WATER, INTERNET, RENT, SUBSCRIPTION, OTHER
+  amount = Column(Float, nullable=False)
+  due_day = Column(Integer, default=1)  # 1 to 31
+  payment_account_id = Column(Integer, nullable=True)
+  last_paid_date = Column(Date, nullable=True)
+  is_recurring = Column(Integer, default=1)  # 1 = Active
+  notes = Column(Text, nullable=True)
+
+
+class Bike(Base):
+  __tablename__ = 'bikes'
+
+  id = Column(Integer, primary_key=True, index=True)
+  plate_number = Column(String, unique=True, index=True, nullable=False)  # e.g. KMDN 456Y
+  model_name = Column(String, nullable=True)  # e.g. Bajaj Boxer 150, TVS HLX 125
+  owner_name = Column(String, nullable=True)
+  daily_target = Column(Float, default=2500.0)
+  is_active = Column(Integer, default=1)
+
+
 class RiderLog(Base):
   __tablename__ = 'rider_logs'
 
   id = Column(Integer, primary_key=True, index=True)
+  bike_id = Column(Integer, index=True, nullable=True)
   date = Column(Date, nullable=False, index=True)
   trips_completed = Column(Integer, default=0)
   kilometers = Column(Float, default=0.0)
   total_earned = Column(Float, default=0.0)
   fuel_used_liters = Column(Float, default=0.0)
   fuel_cost = Column(Float, default=0.0)
+  fuel_station = Column(String, nullable=True)  # RUBIS, TOTAL, SHELL, OLA, HASS, OTHER
+  fuel_litres = Column(Float, nullable=True)
+  shift_hours = Column(Float, default=8.0)
   airtime_spent = Column(Float, default=0.0)
   food_spent = Column(Float, default=0.0)
   misc_expenses = Column(Float, default=0.0)
@@ -80,6 +110,7 @@ class MaintenanceSchedule(Base):
   __tablename__ = 'maintenance_schedules'
 
   id = Column(Integer, primary_key=True, index=True)
+  bike_id = Column(Integer, index=True, nullable=True)
   service_type = Column(String, default='Oil Change & Inspection')
   interval_weeks = Column(Integer, default=3)  # 3 or 4 weeks
   last_service_date = Column(Date, nullable=True)
@@ -93,6 +124,7 @@ class ComplianceDeadline(Base):
   __tablename__ = 'compliance_deadlines'
 
   id = Column(Integer, primary_key=True, index=True)
+  bike_id = Column(Integer, index=True, nullable=True)
   title = Column(String, nullable=False)  # e.g., 'Driving License', 'Motorbike Insurance'
   interval_months = Column(Integer, default=12)  # 6 or 12 months
   last_renewed_date = Column(Date, nullable=True)
@@ -104,6 +136,7 @@ class BikeFinancing(Base):
   __tablename__ = 'bike_financings'
 
   id = Column(Integer, primary_key=True, index=True)
+  bike_id = Column(Integer, index=True, nullable=True)
   provider_name = Column(String, nullable=False)  # Mogo, Spiro, Watu, Zeno
   daily_amount = Column(Float, nullable=False)
   total_cost = Column(Float, nullable=False)

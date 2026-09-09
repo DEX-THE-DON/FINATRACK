@@ -679,13 +679,34 @@
     </div>
 
     <div class="max-w-7xl mx-auto space-y-6">
-        <!-- Navigation Header -->
-        <div class="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 gap-4">
-            <div>
-                <h1 class="text-3xl font-extrabold">Rider Performance & Fleet Tracking</h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400">Track earnings, fuel efficiency, maintenance upkeep, and net savings.</p>
+        <!-- Navigation Header & Multi-Bike Fleet Selector -->
+        <div class="flex flex-col lg:flex-row justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 gap-4">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full lg:w-auto">
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-extrabold">Rider Performance & Fleet</h1>
+                    <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Track daily targets, fuel brands, upkeep & SACCO remittances.</p>
+                </div>
+                <!-- Multi-Bike Fleet Selector -->
+                {% if bikes %}
+                <div class="flex items-center space-x-2 bg-blue-50 dark:bg-blue-950/60 p-1.5 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <span class="text-xs font-bold text-blue-700 dark:text-blue-300 ml-1">🏍️ Bike:</span>
+                    <select onchange="window.location.href='/rider?bike_id=' + this.value" class="bg-white dark:bg-gray-800 text-xs font-bold text-gray-800 dark:text-gray-200 px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700 focus:outline-none cursor-pointer">
+                        {% for b in bikes %}
+                        <option value="{{ b.id }}" {% if selected_bike and selected_bike.id == b.id %}selected{% endif %}>
+                            {{ b.plate_number }} ({{ b.model_name }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" onclick="document.getElementById('bike-create-modal').classList.remove('hidden')" class="p-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-2" title="Add another motorbike">
+                        + Bike
+                    </button>
+                </div>
+                {% endif %}
             </div>
-            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto justify-end">
+                <a href="{{ whatsapp_url }}" target="_blank" class="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm">
+                    <span>📲 WhatsApp Shift Report</span>
+                </a>
                 <button id="pwa-install-btn" onclick="installPWA()" class="hidden flex items-center space-x-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition shadow-sm">
                     <span>📱 Install App</span>
                 </button>
@@ -695,7 +716,7 @@
                 <button onclick="togglePdfExportModal()" class="flex items-center space-x-1.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition shadow-sm">
                     <span>📄 Export PDF</span>
                 </button>
-                <button onclick="toggleDarkMode()" class="p-2.5 rounded-xl border dark:border-gray-700 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 transition text-sm">🌓 Theme</button>
+                <button onclick="toggleDarkMode()" class="p-2.5 rounded-xl border dark:border-gray-700 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 transition text-sm">🌓</button>
                 <div class="flex items-center space-x-2 bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded-xl border dark:border-gray-700">
                     <span class="text-xs font-semibold">Currency:</span>
                     <select id="currency-selector" onchange="setCurrency(this.value)" class="bg-transparent text-sm font-bold focus:outline-none cursor-pointer">
@@ -704,6 +725,99 @@
                     </select>
                 </div>
                 <a href="/" class="inline-flex items-center bg-gray-900 dark:bg-gray-100 dark:text-gray-900 hover:bg-black text-white font-semibold py-2 px-4 rounded-xl shadow transition text-sm">&larr; Finance</a>
+            </div>
+        </div>
+
+        <!-- Add Motorcycle Fleet Modal -->
+        <div id="bike-create-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 border dark:border-gray-700 space-y-4">
+                <div class="flex justify-between items-center border-b dark:border-gray-700 pb-3">
+                    <h3 class="font-bold text-lg flex items-center space-x-2">
+                        <span>🏍️</span>
+                        <span>Add Motorcycle to Fleet</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('bike-create-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg">✕</button>
+                </div>
+                <form action="/rider/bikes/create" method="POST" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Registration Plate Number</label>
+                        <input type="text" name="plate_number" placeholder="e.g. KMDN 456Y" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-700 rounded-xl text-sm font-bold uppercase" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Motorcycle Model</label>
+                        <input type="text" name="model_name" placeholder="e.g. Bajaj Boxer 150, TVS HLX 125, Haojue" value="Bajaj Boxer 150" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-700 rounded-xl text-sm font-medium">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Owner / Stage Name</label>
+                            <input type="text" name="owner_name" placeholder="e.g. Dennis" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-700 rounded-xl text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Daily Target (Ksh)</label>
+                            <input type="number" step="100" name="daily_target" value="2500" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-700 rounded-xl text-sm font-bold" required>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-2">
+                        <button type="button" onclick="document.getElementById('bike-create-modal').classList.add('hidden')" class="px-4 py-2 text-xs font-semibold text-gray-500 rounded-xl">Cancel</button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition shadow">Save Motorcycle</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Daily Shift Target & Performance Gamification Card -->
+        <div class="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-sm border border-blue-800/60 space-y-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                        <span class="text-2xl">🎯</span>
+                        <h2 class="text-xl font-black">Daily Shift Performance & Target</h2>
+                        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full {% if target_pct >= 100 %}bg-emerald-400 text-gray-950{% elif target_pct >= 75 %}bg-amber-300 text-gray-950{% else %}bg-blue-500/30 text-blue-200 border border-blue-400/30{% endif %}">
+                            {% if target_pct >= 100 %}🏆 Target Smashed! ({{ target_pct }}%){% else %}{{ target_pct }}% of Goal{% endif %}
+                        </span>
+                    </div>
+                    <p class="text-xs text-blue-200 mt-1">
+                        {% if selected_bike %}
+                        Active Bike: <strong>{{ selected_bike.plate_number }} ({{ selected_bike.model_name }})</strong> &nbsp;•&nbsp; Daily Goal: <strong>Ksh {{ daily_target|int }}</strong>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="flex items-center space-x-3 w-full md:w-auto justify-end flex-wrap gap-2">
+                    <a href="{{ whatsapp_url }}" target="_blank" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow flex items-center space-x-1.5">
+                        <span>📲 Send WhatsApp Shift Report</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Target Progress Bar -->
+            <div class="space-y-1.5">
+                <div class="flex justify-between text-xs text-blue-200">
+                    <span>Gross Earned Today: <strong class="text-white text-sm convertible-amount" data-usd="{{ daily_earned }}">{{ daily_earned }}</strong></span>
+                    <span>Daily Target: <strong class="text-white">Ksh {{ daily_target|int }}</strong></span>
+                </div>
+                <div class="w-full bg-blue-950 h-3 rounded-full overflow-hidden border border-blue-800">
+                    <div class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-all duration-700" style="width: {{ display_target_pct }}%"></div>
+                </div>
+            </div>
+
+            <!-- Performance Metrics Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div class="bg-blue-950/60 p-3 rounded-xl border border-blue-800/60 text-center">
+                    <p class="text-[10px] uppercase font-bold text-blue-300">Trips Done</p>
+                    <p class="text-lg font-black text-white mt-0.5">{{ today_trips }} rides</p>
+                </div>
+                <div class="bg-blue-950/60 p-3 rounded-xl border border-blue-800/60 text-center">
+                    <p class="text-[10px] uppercase font-bold text-blue-300">Distance</p>
+                    <p class="text-lg font-black text-white mt-0.5">{{ today_km }} km</p>
+                </div>
+                <div class="bg-blue-950/60 p-3 rounded-xl border border-blue-800/60 text-center">
+                    <p class="text-[10px] uppercase font-bold text-blue-300">Hourly Wage</p>
+                    <p class="text-lg font-black text-emerald-400 mt-0.5"><span class="convertible-amount" data-usd="{{ hourly_rate }}">{{ hourly_rate }}</span>/hr</p>
+                </div>
+                <div class="bg-blue-950/60 p-3 rounded-xl border border-blue-800/60 text-center">
+                    <p class="text-[10px] uppercase font-bold text-blue-300">Rate per Km</p>
+                    <p class="text-lg font-black text-teal-300 mt-0.5"><span class="convertible-amount" data-usd="{{ earnings_per_km }}">{{ earnings_per_km }}</span>/km</p>
+                </div>
             </div>
         </div>
 
@@ -1169,7 +1283,7 @@
             <div class="sm:col-span-2 lg:col-span-4 flex flex-col sm:flex-row justify-between sm:items-center border-b dark:border-gray-700 pb-3 gap-2">
                 <div>
                     <h2 class="text-xl font-bold">Log Daily Rider Activity</h2>
-                    <p class="text-xs text-gray-400">Record shift metrics, fuel, food, and optionally sync to your finance accounts.</p>
+                    <p class="text-xs text-gray-400">Record shift metrics, fuel brand, food, and optionally sync to your finance accounts.</p>
                 </div>
                 <div class="flex items-center space-x-2">
                     <button type="button" onclick="toggleMpesaBox()" class="flex items-center space-x-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition shadow-sm">
@@ -1204,13 +1318,28 @@
                 </div>
             </div>
 
+            <!-- Shift Details Fields -->
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Date</label>
                 <input type="date" name="log_date" value="{{ today }}" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
             </div>
             <div>
+                <label class="block text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Motorcycle</label>
+                <select name="bike_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm font-semibold">
+                    {% for b in bikes %}
+                    <option value="{{ b.id }}" {% if selected_bike and selected_bike.id == b.id %}selected{% endif %}>
+                        {{ b.plate_number }} ({{ b.model_name }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Trips Completed</label>
                 <input type="number" name="trips_completed" value="0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Shift Hours Worked</label>
+                <input type="number" step="0.5" name="shift_hours" value="8.0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Distance Covered (Km)</label>
@@ -1221,8 +1350,20 @@
                 <input type="number" step="0.01" id="input_total_earned" name="total_earned" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300" required>
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Fuel Used (Liters)</label>
-                <input type="number" step="0.01" id="input_fuel_used_liters" name="fuel_used_liters" value="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+                <label class="block text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Petrol Station Brand</label>
+                <select name="fuel_station" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm font-medium">
+                    <option value="RUBIS">Rubis Energy</option>
+                    <option value="TOTAL">TotalEnergies</option>
+                    <option value="SHELL">Shell / Vivo</option>
+                    <option value="OLA">Ola Energy</option>
+                    <option value="HASS">Hass Petroleum</option>
+                    <option value="ASTROL">Astrol Petroleum</option>
+                    <option value="OTHER">Other Station</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Fuel Pumped (Litres)</label>
+                <input type="number" step="0.01" id="input_fuel_litres" name="fuel_litres" value="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Fuel Cost (<span class="curr-symbol-label">Ksh</span>)</label>
@@ -1237,7 +1378,7 @@
                 <input type="number" step="0.01" id="input_maintenance_cost" name="maintenance_cost" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Airtime Spent (<span class="curr-symbol-label">Ksh</span>)</label>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Airtime / Bundles (<span class="curr-symbol-label">Ksh</span>)</label>
                 <input type="number" step="0.01" id="input_airtime_spent" name="airtime_spent" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
             </div>
             <div>
@@ -1256,7 +1397,7 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs font-medium text-rose-500 dark:text-rose-400 mb-1">Pay Expenses From (Fuel, Repairs)</label>
+                <label class="block text-xs font-medium text-rose-500 dark:text-rose-400 mb-1">Pay Expenses From</label>
                 <select name="expense_account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
                     <option value="">-- Don't deduct --</option>
                     {% for acc in accounts %}
@@ -1266,11 +1407,47 @@
             </div>
 
             <div class="flex items-end">
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition shadow">Save & Link to Finance</button>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition shadow">Save Shift & Link Finance</button>
             </div>
         </form>
 
-        <!-- Step 2: Visual Trend Charts & Analytics (Chart.js) -->
+        <!-- Petrol Station Brand Comparison Card -->
+        {% if station_stats %}
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">⛽</span>
+                        <h2 class="text-lg font-bold">Petrol Station Brand Efficiency Comparison</h2>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Compare Km/L fuel economy across Rubis, Shell, Total, Ola and other fuel stations.</p>
+                </div>
+                <span class="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
+                    🏆 Top Brand: {{ station_stats[0].station }} ({{ station_stats[0].efficiency_km_l }} Km/L)
+                </span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                {% for st in station_stats %}
+                <div class="p-3.5 bg-gray-50 dark:bg-gray-700/50 rounded-xl border dark:border-gray-700 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-sm text-gray-900 dark:text-white">{{ st.station }}</span>
+                        <span class="text-xs font-black px-2 py-0.5 rounded-full {% if loop.first %}bg-emerald-500 text-white{% else %}bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200{% endif %}">
+                            {{ st.efficiency_km_l }} Km/L
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1 text-[11px] text-gray-500 dark:text-gray-400 pt-1 border-t dark:border-gray-600">
+                        <span>Distance: <strong class="text-gray-800 dark:text-gray-200">{{ st.total_km }} km</strong></span>
+                        <span>Fuel: <strong class="text-gray-800 dark:text-gray-200">{{ st.total_litres }} L</strong></span>
+                    </div>
+                    <p class="text-[10px] text-gray-400">Total shifts: <strong>{{ st.shifts }}</strong></p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Visual Trend Charts & Analytics (Chart.js) -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left 2 Cols: Cash Flow & Upkeep Trend -->
             <div class="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -1322,7 +1499,7 @@
                             <th class="p-4">Date</th>
                             <th class="p-4">Trips</th>
                             <th class="p-4">Distance</th>
-                            <th class="p-4">Efficiency</th>
+                            <th class="p-4">Efficiency & Station</th>
                             <th class="p-4">Earned</th>
                             <th class="p-4">Fuel</th>
                             <th class="p-4">Food</th>
@@ -1338,11 +1515,17 @@
                             <td class="p-4">{{ log.date }}</td>
                             <td class="p-4 font-semibold">{{ log.trips_completed }}</td>
                             <td class="p-4">{{ log.kilometers }} km</td>
-                            <td class="p-4 text-blue-500 font-medium">
-                                {% if log.fuel_used_liters > 0 %}
-                                    {{ "%.1f"|format(log.kilometers / log.fuel_used_liters) }} km/L
-                                {% else %}
-                                    -
+                            <td class="p-4">
+                                <div class="font-bold text-blue-500">
+                                    {% if (log.fuel_litres and log.fuel_litres > 0) or (log.fuel_used_liters and log.fuel_used_liters > 0) %}
+                                        {% set ltr = log.fuel_litres if log.fuel_litres else log.fuel_used_liters %}
+                                        {{ "%.1f"|format(log.kilometers / ltr) }} km/L
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </div>
+                                {% if log.fuel_station and log.fuel_station != 'OTHER' %}
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-semibold">{{ log.fuel_station }}</span>
                                 {% endif %}
                             </td>
                             <td class="p-4 text-emerald-600 font-bold">+<span class="convertible-amount" data-usd="{{ log.total_earned }}">{{ log.total_earned }}</span></td>

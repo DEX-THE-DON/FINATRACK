@@ -5,6 +5,7 @@ from database import engine, get_db
 import models
 import re
 import requests
+import urllib.parse
 import weasyprint
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -18,10 +19,39 @@ models.Base.metadata.create_all(bind=engine)
 try:
   with engine.connect() as conn:
     conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS account_number VARCHAR;"))
+    conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS interest_rate_p_a FLOAT DEFAULT 0.0;"))
+    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
+    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS fuel_station VARCHAR;"))
+    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS fuel_litres FLOAT;"))
+    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS shift_hours FLOAT DEFAULT 8.0;"))
     conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS earnings_account_id INTEGER;"))
     conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS expense_account_id INTEGER;"))
+    conn.execute(text("ALTER TABLE maintenance_schedules ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
+    conn.execute(text("ALTER TABLE compliance_deadlines ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
+    conn.execute(text("ALTER TABLE bike_financings ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
     conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS rider_log_id INTEGER;"))
     conn.commit()
+
+    # Seed default bike if empty
+    res_bike = conn.execute(text("SELECT COUNT(*) FROM bikes;")).scalar()
+    if res_bike == 0:
+      conn.execute(text("""
+        INSERT INTO bikes (plate_number, model_name, owner_name, daily_target, is_active)
+        VALUES ('KMDN 456Y', 'Bajaj Boxer 150 UG', 'Dennis', 2500.0, 1);
+      """))
+      conn.commit()
+
+    # Seed default recurring bills if empty
+    res_bill = conn.execute(text("SELECT COUNT(*) FROM bills;")).scalar()
+    if res_bill == 0:
+      conn.execute(text("""
+        INSERT INTO bills (title, category, amount, due_day, is_recurring, notes)
+        VALUES 
+        ('KPLC Prepaid Electricity Tokens', 'KPLC', 1500.0, 5, 1, 'Meter # 142389102'),
+        ('Nairobi Water & Sewerage', 'WATER', 650.0, 10, 1, 'Acc # 00192837'),
+        ('Home Wi-Fi Fiber (Safaricom / Zuku)', 'INTERNET', 2999.0, 15, 1, 'Monthly unlimited internet');
+      """))
+      conn.commit()
 
     # Seed default maintenance schedule if empty
     res_maint = conn.execute(text("SELECT COUNT(*) FROM maintenance_schedules;")).scalar()
@@ -281,6 +311,103 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
   )
   usd_to_kes = get_live_rate()
 
+  # 1. Net Worth & Emergency Safety Runway
+  net_worth = total_balance - total_i_owe
+  if monthly_expense > 0:
+    emergency_runway_months = round(total_balance / monthly_expense, 1)
+  elif total_balance > 0:
+    emergency_runway_months = 99.0
+  else:
+    emergency_runway_months = 0.0
+
+  # 2. MMF & Savings Accounts Interest Yield Calculations
+  mmf_accounts = []
+  total_monthly_passive_income = 0.0
+  total_annual_passive_income = 0.0
+  for acc in accounts:
+    rate_pa = float(getattr(acc, "interest_rate_p_a", 0.0) or 0.0)
+    bal = float(acc.balance or 0.0)
+    acc_type = getattr(acc, "account_type", "BANK").upper()
+    if rate_pa > 0 or acc_type in ["MMF", "SAVINGS"]:
+      ann_ret = bal * (rate_pa / 100.0)
+      month_ret = ann_ret / 12.0
+      day_ret = ann_ret / 365.0
+      total_annual_passive_income += ann_ret
+      total_monthly_passive_income += month_ret
+      mmf_accounts.append({
+          "id": acc.id,
+          "name": acc.name,
+          "account_number": getattr(acc, "account_number", None),
+          "account_type": acc_type,
+          "balance": bal,
+          "interest_rate_p_a": rate_pa,
+          "annual_return": ann_ret,
+          "monthly_return": month_ret,
+          "daily_return": day_ret,
+      })
+
+  # 3. Recurring Bills & Utilities
+  bill_model = getattr(models, "Bill", None)
+  raw_bills = db.query(bill_model).all() if bill_model else []
+  bills_data = []
+  today_dt = date.today()
+  current_day = today_dt.day
+  total_monthly_bills = 0.0
+  total_pending_bills = 0.0
+
+  accounts_map = {acc.id: acc.name for acc in accounts}
+
+  for b in raw_bills:
+    amt = float(b.amount or 0.0)
+    due_day = int(b.due_day or 1)
+    total_monthly_bills += amt
+
+    # Determine if paid this month
+    is_paid_this_month = False
+    if b.last_paid_date:
+      if b.last_paid_date.year == today_dt.year and b.last_paid_date.month == today_dt.month:
+        is_paid_this_month = True
+
+    if not is_paid_this_month:
+      total_pending_bills += amt
+
+    # Calculate countdown
+    days_left = due_day - current_day
+    is_overdue = (days_left < 0) and (not is_paid_this_month)
+    is_due_soon = (0 <= days_left <= 3) and (not is_paid_this_month)
+
+    if is_paid_this_month:
+      status_label = f"Paid on {b.last_paid_date.strftime('%b %d')}"
+      status_badge = "emerald"
+    elif is_overdue:
+      status_label = f"Overdue by {abs(days_left)}d (Due day {due_day})"
+      status_badge = "rose"
+    elif is_due_soon:
+      status_label = f"Due in {days_left}d (Day {due_day})" if days_left > 0 else "Due Today!"
+      status_badge = "amber"
+    else:
+      status_label = f"Due in {days_left}d (Day {due_day})"
+      status_badge = "indigo"
+
+    bills_data.append({
+        "id": b.id,
+        "title": b.title,
+        "category": b.category or "UTILITY",
+        "amount": amt,
+        "due_day": due_day,
+        "payment_account_id": b.payment_account_id,
+        "payment_account_name": accounts_map.get(b.payment_account_id, "Any Account"),
+        "last_paid_date": b.last_paid_date,
+        "is_recurring": b.is_recurring,
+        "notes": b.notes or "",
+        "is_paid_this_month": is_paid_this_month,
+        "is_overdue": is_overdue,
+        "is_due_soon": is_due_soon,
+        "days_left": days_left,
+        "status_label": status_label,
+        "status_badge": status_badge,
+    })
+
   # Unique categories for transaction filter dropdown
   unique_categories = sorted(list(set(
       getattr(tx, "category", "") for tx in transactions if getattr(tx, "category", "")
@@ -349,8 +476,16 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
           "total_owed_to_me": total_owed_to_me,
           "overdue_alerts": overdue_alerts,
           "total_balance": total_balance,
+          "net_worth": net_worth,
+          "emergency_runway_months": emergency_runway_months,
           "monthly_income": monthly_income,
           "monthly_expense": monthly_expense,
+          "mmf_accounts": mmf_accounts,
+          "total_monthly_passive_income": total_monthly_passive_income,
+          "total_annual_passive_income": total_annual_passive_income,
+          "bills": bills_data,
+          "total_monthly_bills": total_monthly_bills,
+          "total_pending_bills": total_pending_bills,
           "usd_to_kes": usd_to_kes,
           "today": date.today(),
           "now_iso": datetime.now().strftime("%Y-%m-%dT%H:%M"),
@@ -367,6 +502,7 @@ def create_account(
     name: str = Form(...),
     account_number: Optional[str] = Form(None),
     account_type: str = Form(...),
+    interest_rate_p_a: float = Form(0.0),
     balance: float = Form(0.00),
     db: Session = Depends(get_db),
 ):
@@ -383,6 +519,7 @@ def create_account(
         name=name.strip(),
         account_number=acc_num,
         account_type=account_type,
+        interest_rate_p_a=float(interest_rate_p_a or 0.0),
         balance=final_balance,
     )
     db.add(acc)
@@ -397,6 +534,7 @@ def update_account(
     name: str = Form(...),
     account_number: Optional[str] = Form(None),
     account_type: str = Form(...),
+    interest_rate_p_a: float = Form(0.0),
     balance: float = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -411,9 +549,115 @@ def update_account(
     acc.name = name.strip()
     acc.account_number = account_number.strip() if account_number and account_number.strip() else None
     acc.account_type = account_type
+    acc.interest_rate_p_a = float(interest_rate_p_a or 0.0)
     acc.balance = final_balance
     db.commit()
   return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/accounts/interest/log/{acc_id}")
+def log_account_interest(
+    request: Request,
+    acc_id: int,
+    db: Session = Depends(get_db),
+):
+  account_model = getattr(models, "FinanceAccount", getattr(models, "Account", None))
+  acc = db.query(account_model).filter(account_model.id == acc_id).first() if account_model else None
+  if acc:
+    rate_pa = float(getattr(acc, "interest_rate_p_a", 0.0) or 0.0)
+    bal = float(acc.balance or 0.0)
+    if rate_pa > 0 and bal > 0:
+      monthly_interest = round(bal * (rate_pa / 100.0) / 12.0, 2)
+      acc.balance = bal + monthly_interest
+
+      if hasattr(models, "Transaction"):
+        tx = models.Transaction(
+            account_id=acc.id,
+            transaction_type="INCOME",
+            category="Interest & Yield",
+            amount=monthly_interest,
+            description=f"Monthly MMF Interest Yield ({acc.name} @ {rate_pa}% p.a.)",
+            date=date.today(),
+        )
+        db.add(tx)
+      db.commit()
+  return RedirectResponse(url="/?toast=Monthly+interest+deposited+successfully", status_code=303)
+
+
+# --- RECURRING BILLS & UTILITY ROUTES ---
+
+
+@app.post("/bills/create")
+def create_bill(
+    request: Request,
+    title: str = Form(...),
+    category: str = Form("UTILITY"),
+    amount: float = Form(...),
+    due_day: int = Form(1),
+    payment_account_id: Optional[int] = Form(None),
+    notes: Optional[str] = Form(""),
+    db: Session = Depends(get_db),
+):
+  if hasattr(models, "Bill"):
+    currency_pref = request.cookies.get("finatrack_currency", "Ksh")
+    rate = get_live_rate()
+    norm_amount = float(amount / rate if currency_pref == "Ksh" else amount)
+
+    bill = models.Bill(
+        title=title.strip(),
+        category=category.strip(),
+        amount=norm_amount,
+        due_day=due_day,
+        payment_account_id=payment_account_id if payment_account_id else None,
+        notes=notes.strip() if notes else None,
+        is_recurring=1,
+    )
+    db.add(bill)
+    db.commit()
+  return RedirectResponse(url="/?toast=Recurring+bill+added+successfully", status_code=303)
+
+
+@app.post("/bills/pay/{bill_id}")
+def pay_bill(
+    request: Request,
+    bill_id: int,
+    payment_account_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+):
+  if hasattr(models, "Bill"):
+    bill = db.query(models.Bill).filter(models.Bill.id == bill_id).first()
+    if bill:
+      today_dt = date.today()
+      bill.last_paid_date = today_dt
+
+      acc_id = payment_account_id or bill.payment_account_id
+      if acc_id and hasattr(models, "Transaction"):
+        account_model = getattr(models, "FinanceAccount", getattr(models, "Account", None))
+        acc = db.query(account_model).filter(account_model.id == acc_id).first() if account_model else None
+        if acc:
+          acc.balance = float(acc.balance or 0.0) - float(bill.amount or 0.0)
+          tx = models.Transaction(
+              account_id=acc.id,
+              transaction_type="EXPENSE",
+              category=f"Utility: {bill.category}",
+              amount=float(bill.amount or 0.0),
+              description=f"Bill Payment: {bill.title}",
+              date=today_dt,
+          )
+          db.add(tx)
+
+      db.commit()
+  return RedirectResponse(url="/?toast=Bill+paid+and+expense+recorded", status_code=303)
+
+
+@app.post("/bills/delete/{bill_id}")
+def delete_bill(bill_id: int, db: Session = Depends(get_db)):
+  if hasattr(models, "Bill"):
+    bill = db.query(models.Bill).filter(models.Bill.id == bill_id).first()
+    if bill:
+      db.delete(bill)
+      db.commit()
+  return RedirectResponse(url="/?toast=Bill+removed", status_code=303)
 
 
 @app.post("/accounts/delete/{acc_id}")
@@ -1031,15 +1275,43 @@ async def mpesa_sms_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/rider")
-def rider_dashboard(request: Request, db: Session = Depends(get_db)):
+def rider_dashboard(
+    request: Request,
+    bike_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+  # 1. Multi-Bike Fleet Selector
+  bike_model = getattr(models, "Bike", None)
+  bikes = db.query(bike_model).all() if bike_model else []
+
+  selected_bike_id = bike_id
+  if not selected_bike_id:
+    cookie_bike = request.cookies.get("finatrack_bike_id")
+    if cookie_bike and cookie_bike.isdigit():
+      selected_bike_id = int(cookie_bike)
+
+  selected_bike = None
+  if selected_bike_id and bikes:
+    selected_bike = next((b for b in bikes if b.id == selected_bike_id), None)
+  if not selected_bike and bikes:
+    selected_bike = bikes[0]
+    selected_bike_id = selected_bike.id
+
   rider_log_model = getattr(models, "RiderLog", None)
-  logs = (
+  all_logs = (
       db.query(rider_log_model)
       .order_by(rider_log_model.date.desc())
       .all()
       if rider_log_model
       else []
   )
+
+  # Filter logs for selected bike if multiple bikes exist
+  if selected_bike_id and any(getattr(l, "bike_id", None) == selected_bike_id for l in all_logs):
+    logs = [l for l in all_logs if getattr(l, "bike_id", None) in [selected_bike_id, None]]
+  else:
+    logs = all_logs
+
   today_date = date.today()
 
   def calc_totals(filtered_logs):
@@ -1054,7 +1326,7 @@ def rider_dashboard(request: Request, db: Session = Depends(get_db)):
     ])
     saved = earned - exp
     total_km = sum([float(getattr(l, "kilometers", 0)) for l in filtered_logs])
-    total_liters = sum([float(l.fuel_used_liters) for l in filtered_logs])
+    total_liters = sum([float(getattr(l, "fuel_litres", 0.0) or l.fuel_used_liters or 0.0) for l in filtered_logs])
     fuel_efficiency = (
         round(total_km / total_liters, 2) if total_liters > 0 else 0.0
     )
@@ -1115,16 +1387,20 @@ def rider_dashboard(request: Request, db: Session = Depends(get_db)):
   accounts = db.query(account_model).all() if account_model else []
   accounts_map = {acc.id: acc.name for acc in accounts}
 
-  # Enrich logs with account names
+  # Enrich logs with account names and station info
   enriched_logs = []
   for l in logs:
     enriched_logs.append({
         "id": l.id,
+        "bike_id": getattr(l, "bike_id", None),
         "date": l.date,
         "trips_completed": l.trips_completed,
         "kilometers": l.kilometers,
         "total_earned": l.total_earned,
         "fuel_used_liters": l.fuel_used_liters,
+        "fuel_litres": getattr(l, "fuel_litres", None),
+        "fuel_station": getattr(l, "fuel_station", None) or "OTHER",
+        "shift_hours": getattr(l, "shift_hours", 8.0) or 8.0,
         "fuel_cost": l.fuel_cost,
         "food_spent": float(getattr(l, "food_spent", 0.0) or 0.0),
         "airtime_spent": l.airtime_spent,
@@ -1195,7 +1471,66 @@ def rider_dashboard(request: Request, db: Session = Depends(get_db)):
         "notes": f.notes or "",
     })
 
-  # 4. Chart Data Aggregation: Daily, Weekly, and Monthly
+  # 4. Petrol Station Fuel Efficiency Comparison (Rubis, Total, Shell, Ola, Hass, Other)
+  station_map = {}
+  for l in logs:
+    st = getattr(l, "fuel_station", None) or "OTHER"
+    st = st.upper().strip()
+    km = float(getattr(l, "kilometers", 0.0) or 0.0)
+    litres = float(getattr(l, "fuel_litres", 0.0) or l.fuel_used_liters or 0.0)
+    cost = float(getattr(l, "fuel_cost", 0.0) or 0.0)
+    if km > 0 or litres > 0 or cost > 0:
+      if st not in station_map:
+        station_map[st] = {"station": st, "total_km": 0.0, "total_litres": 0.0, "total_cost": 0.0, "shifts": 0}
+      station_map[st]["total_km"] += km
+      station_map[st]["total_litres"] += litres
+      station_map[st]["total_cost"] += cost
+      station_map[st]["shifts"] += 1
+
+  station_stats = []
+  for st_name, data in station_map.items():
+    eff = round(data["total_km"] / data["total_litres"], 2) if data["total_litres"] > 0 else 0.0
+    station_stats.append({
+        "station": st_name,
+        "total_km": round(data["total_km"], 1),
+        "total_litres": round(data["total_litres"], 1),
+        "total_cost": round(data["total_cost"], 2),
+        "shifts": data["shifts"],
+        "efficiency_km_l": eff,
+    })
+  station_stats.sort(key=lambda x: x["efficiency_km_l"], reverse=True)
+
+  # 5. Daily Shift Target & Performance Gamification
+  daily_target = float(getattr(selected_bike, "daily_target", 2500.0) or 2500.0) if selected_bike else 2500.0
+  target_pct = round((d_earned / daily_target) * 100, 1) if daily_target > 0 else 0.0
+  display_target_pct = min(100.0, target_pct)
+
+  today_trips = sum(int(getattr(l, "trips_completed", 0) or 0) for l in daily_logs)
+  today_km = sum(float(getattr(l, "kilometers", 0.0) or 0.0) for l in daily_logs)
+  today_hours = sum(float(getattr(l, "shift_hours", 8.0) or 8.0) for l in daily_logs) or 8.0
+
+  hourly_rate = round(d_earned / max(1.0, today_hours), 1)
+  earnings_per_km = round(d_earned / max(1.0, today_km), 1) if today_km > 0 else 0.0
+
+  # 6. WhatsApp Daily Shift Summary Generator
+  bike_label = f"{selected_bike.plate_number} ({selected_bike.model_name})" if selected_bike else "KMDN 456Y"
+  wa_lines = [
+      "🏍️ *FINATRACK DAILY SHIFT REPORT*",
+      f"📅 Date: {today_date.strftime('%d %b %Y')}",
+      f"🏍️ Bike: {bike_label}",
+      "----------------------------------",
+      f"💰 *Gross Earned:* Ksh {int(d_earned):,} ({today_trips} trips, {int(today_km)} km)",
+      f"⛽ *Fuel Spent:* Ksh {int(d_exp):,}",
+      "----------------------------------",
+      f"💵 *NET REMITTANCE:* Ksh {int(d_saved):,}",
+      f"🎯 *Shift Goal:* {target_pct}% of Ksh {int(daily_target):,}",
+      "----------------------------------",
+      "✅ Generated via Finatrack Fleet OS",
+  ]
+  whatsapp_text = "\n".join(wa_lines)
+  whatsapp_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(whatsapp_text)}"
+
+  # 7. Chart Data Aggregation: Daily, Weekly, and Monthly
   all_logs_chronological = sorted(logs, key=lambda x: (x.date, x.id))
 
   # Daily (Last 10 shifts)
@@ -1308,11 +1643,25 @@ def rider_dashboard(request: Request, db: Session = Depends(get_db)):
       round(tot_misc, 2),
   ]
 
-  return templates.TemplateResponse(
+  response = templates.TemplateResponse(
       request,
       "rider_dashboard.html",
       {
           **summary_data,
+          "bikes": bikes,
+          "selected_bike": selected_bike,
+          "selected_bike_id": selected_bike_id,
+          "daily_target": daily_target,
+          "target_pct": target_pct,
+          "display_target_pct": display_target_pct,
+          "today_trips": today_trips,
+          "today_km": today_km,
+          "today_hours": today_hours,
+          "hourly_rate": hourly_rate,
+          "earnings_per_km": earnings_per_km,
+          "whatsapp_text": whatsapp_text,
+          "whatsapp_url": whatsapp_url,
+          "station_stats": station_stats,
           "logs": enriched_logs,
           "accounts": accounts,
           "maintenance": maint_data,
@@ -1330,6 +1679,9 @@ def rider_dashboard(request: Request, db: Session = Depends(get_db)):
           "usd_to_kes": get_live_rate(),
       },
   )
+  if selected_bike_id:
+    response.set_cookie(key="finatrack_bike_id", value=str(selected_bike_id), max_age=30 * 24 * 3600)
+  return response
 
 
 @app.get("/rider/export/pdf")
@@ -1510,11 +1862,15 @@ def export_rider_pdf(
 def create_rider_log(
     request: Request,
     log_date: date = Form(...),
+    bike_id: Optional[int] = Form(None),
     trips_completed: int = Form(0),
     kilometers: float = Form(0.00),
     total_earned: float = Form(0.00),
+    fuel_station: Optional[str] = Form("OTHER"),
+    fuel_litres: Optional[float] = Form(None),
     fuel_used_liters: float = Form(0.00),
     fuel_cost: float = Form(0.00),
+    shift_hours: float = Form(8.0),
     food_spent: float = Form(0.00),
     airtime_spent: float = Form(0.00),
     misc_expenses: float = Form(0.00),
@@ -1537,15 +1893,21 @@ def create_rider_log(
   airtime_norm = normalize(airtime_spent)
   misc_norm = normalize(misc_expenses)
 
+  final_litres = fuel_litres if fuel_litres is not None and fuel_litres > 0 else fuel_used_liters
+
   rider_log_model = getattr(models, "RiderLog", None)
   if rider_log_model:
     log = rider_log_model(
+        bike_id=bike_id,
         date=log_date,
         trips_completed=trips_completed,
         kilometers=float(kilometers),
         total_earned=earned_norm,
-        fuel_used_liters=float(fuel_used_liters),
+        fuel_station=fuel_station or "OTHER",
+        fuel_litres=float(final_litres),
+        fuel_used_liters=float(final_litres),
         fuel_cost=fuel_norm,
+        shift_hours=float(shift_hours or 8.0),
         food_spent=food_norm,
         airtime_spent=airtime_norm,
         misc_expenses=misc_norm,
@@ -1585,12 +1947,13 @@ def create_rider_log(
           # Fuel expense
           if fuel_norm > 0:
             exp_acc.balance = float(exp_acc.balance or 0.0) - fuel_norm
+            st_name = fuel_station if fuel_station else "Station"
             tx_fuel = models.Transaction(
                 account_id=expense_account_id,
                 transaction_type="EXPENSE",
                 category="Fuel",
                 amount=fuel_norm,
-                description=f"Motorcycle fuel ({fuel_used_liters}L)",
+                description=f"Motorcycle fuel ({final_litres}L @ {st_name})",
                 date=log_date,
                 rider_log_id=log.id,
             )
@@ -1654,7 +2017,51 @@ def create_rider_log(
 
       db.commit()
 
-  return RedirectResponse(url="/rider?toast=Rider+log+and+finance+transactions+synced+successfully", status_code=303)
+  return RedirectResponse(url="/rider?toast=Rider+shift+log+and+finance+transactions+saved", status_code=303)
+
+
+# --- MULTI-BIKE FLEET ROUTES ---
+
+
+@app.post("/rider/bikes/create")
+def create_bike(
+    plate_number: str = Form(...),
+    model_name: Optional[str] = Form("Bajaj Boxer 150"),
+    owner_name: Optional[str] = Form(""),
+    daily_target: float = Form(2500.0),
+    db: Session = Depends(get_db),
+):
+  if hasattr(models, "Bike"):
+    clean_plate = plate_number.strip().upper()
+    existing = db.query(models.Bike).filter(models.Bike.plate_number == clean_plate).first()
+    if not existing:
+      bike = models.Bike(
+          plate_number=clean_plate,
+          model_name=model_name.strip() if model_name else "Bajaj Boxer 150",
+          owner_name=owner_name.strip() if owner_name else None,
+          daily_target=float(daily_target or 2500.0),
+          is_active=1,
+      )
+      db.add(bike)
+      db.commit()
+  return RedirectResponse(url="/rider?toast=Motorcycle+added+to+fleet", status_code=303)
+
+
+@app.post("/rider/bikes/switch/{bike_id}")
+def switch_bike(bike_id: int):
+  resp = RedirectResponse(url="/rider?toast=Switched+active+motorcycle", status_code=303)
+  resp.set_cookie(key="finatrack_bike_id", value=str(bike_id), max_age=30 * 24 * 3600)
+  return resp
+
+
+@app.post("/rider/bikes/delete/{bike_id}")
+def delete_bike(bike_id: int, db: Session = Depends(get_db)):
+  if hasattr(models, "Bike"):
+    bike = db.query(models.Bike).filter(models.Bike.id == bike_id).first()
+    if bike:
+      db.delete(bike)
+      db.commit()
+  return RedirectResponse(url="/rider?toast=Motorcycle+removed+from+fleet", status_code=303)
 
 
 @app.post("/rider/logs/delete/{log_id}")

@@ -192,17 +192,41 @@
         {% endif %}
 
         <!-- Total Net Balance & Financial Summary Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <!-- Net Balance Gradient Card -->
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-5 rounded-2xl shadow-sm flex flex-col justify-between sm:col-span-2 lg:col-span-1">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            <!-- Net Worth & Emergency Safety Runway Card -->
+            <div class="bg-gradient-to-br from-purple-700 via-indigo-700 to-blue-800 text-white p-5 rounded-2xl shadow-sm flex flex-col justify-between sm:col-span-2 lg:col-span-2">
                 <div>
-                    <p class="text-xs opacity-80 font-medium uppercase tracking-wider">Total Net Balance</p>
-                    <h2 class="text-2xl font-bold mt-1 convertible-amount" data-usd="{{ total_balance }}">{{ total_balance }}</h2>
+                    <div class="flex justify-between items-start">
+                        <p class="text-xs opacity-80 font-medium uppercase tracking-wider">Total Net Worth</p>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {% if emergency_runway_months >= 6 %}bg-emerald-400 text-gray-950{% elif emergency_runway_months >= 3 %}bg-amber-300 text-gray-950{% else %}bg-rose-400 text-white animate-pulse{% endif %}">
+                            🛡️ {{ emergency_runway_months }} Mos Runway
+                        </span>
+                    </div>
+                    <h2 class="text-3xl font-extrabold mt-1 convertible-amount" data-usd="{{ net_worth }}">{{ net_worth }}</h2>
+                    <p class="text-[11px] text-purple-200 mt-1">
+                        Liquid Balance minus active debts. 
+                        {% if emergency_runway_months >= 6 %}
+                        Excellent safety cushion!
+                        {% elif emergency_runway_months >= 3 %}
+                        Healthy 3+ month reserve.
+                        {% else %}
+                        Build emergency fund to 3-6 months.
+                        {% endif %}
+                    </p>
                 </div>
-                <div class="mt-3 pt-3 border-t border-blue-500/30 flex justify-between text-[10px] opacity-90">
-                    <span>Live Rate</span>
-                    <span class="font-semibold">1 USD = {{ usd_to_kes }} KES</span>
+                <div class="mt-3 pt-3 border-t border-purple-400/30 flex justify-between items-center text-[10px] opacity-90">
+                    <span>Liquid Reserves: <strong class="convertible-amount" data-usd="{{ total_balance }}">{{ total_balance }}</strong></span>
+                    <span>Debts: <strong class="text-rose-200 convertible-amount" data-usd="{{ total_i_owe }}">{{ total_i_owe }}</strong></span>
                 </div>
+            </div>
+
+            <!-- Total Liquid Balance -->
+            <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col justify-between">
+                <div>
+                    <p class="text-xs uppercase font-bold tracking-wider text-gray-400 dark:text-gray-500">Liquid Cash</p>
+                    <h2 class="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1 convertible-amount" data-usd="{{ total_balance }}">{{ total_balance }}</h2>
+                </div>
+                <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-2">1 USD = {{ usd_to_kes }} KES</p>
             </div>
 
             <!-- Monthly Income Card -->
@@ -231,18 +255,9 @@
                 </div>
                 <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-2">Active payables</p>
             </div>
-
-            <!-- Total Owed to You (Receivables) -->
-            <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col justify-between">
-                <div>
-                    <p class="text-xs uppercase font-bold tracking-wider text-emerald-500 dark:text-emerald-400">Owed to You</p>
-                    <h2 class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 convertible-amount" data-usd="{{ total_owed_to_me }}">{{ total_owed_to_me }}</h2>
-                </div>
-                <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-2">Active receivables</p>
-            </div>
         </div>
 
-        <!-- Motorcycle Health & Lipa Mdogo Mdogo Fleet Quick Bar -->
+        <!-- Motorcycle Health & Fleet Quick Bar -->
         <div class="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-sm border border-blue-800/60 flex flex-col md:flex-row justify-between items-center gap-4">
             <div class="flex items-center space-x-4">
                 <div class="w-12 h-12 rounded-xl bg-blue-600/30 border border-blue-400/20 flex items-center justify-center text-2xl flex-shrink-0">
@@ -280,6 +295,160 @@
             </div>
         </div>
 
+        <!-- MMF & Savings Compound Interest Engine -->
+        <div class="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 dark:via-amber-950/10 border border-amber-200 dark:border-amber-900/40 p-6 rounded-2xl shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">📈</span>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">MMF & High-Yield Savings Engine</h2>
+                        <span class="bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                            Passive Income
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Track annual percentage yields (APY % e.g. Sanlam 14.5%, Britam 13.8%, CIC 12.2%, Sacco 11.0%) and log monthly interest with 1 tap.</p>
+                </div>
+                <div class="text-right bg-white dark:bg-gray-900 px-4 py-2 rounded-xl border border-amber-200 dark:border-amber-900/60 shadow-xs">
+                    <p class="text-[10px] uppercase font-bold text-gray-400">Total Monthly Passive Yield</p>
+                    <p class="text-lg font-black text-amber-600 dark:text-amber-400 convertible-amount" data-usd="{{ total_monthly_passive_income }}">{{ total_monthly_passive_income }}</p>
+                </div>
+            </div>
+
+            <!-- MMF Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                {% for mmf in mmf_accounts %}
+                <div class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-xs flex flex-col justify-between space-y-3">
+                    <div>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-gray-900 dark:text-white text-base">{{ mmf.name }}</h3>
+                                {% if mmf.account_number %}
+                                <span class="text-[10px] font-mono text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-semibold"># {{ mmf.account_number }}</span>
+                                {% endif %}
+                            </div>
+                            <span class="text-xs font-black px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                                {{ mmf.interest_rate_p_a }}% p.a.
+                            </span>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                            <div class="p-2 bg-gray-50 dark:bg-gray-800/80 rounded-lg">
+                                <p class="text-[10px] text-gray-400">Current Balance</p>
+                                <p class="font-bold text-gray-900 dark:text-white convertible-amount" data-usd="{{ mmf.balance }}">{{ mmf.balance }}</p>
+                            </div>
+                            <div class="p-2 bg-amber-50 dark:bg-amber-950/40 rounded-lg">
+                                <p class="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Monthly Return</p>
+                                <p class="font-bold text-amber-700 dark:text-amber-400 convertible-amount" data-usd="{{ mmf.monthly_return }}">{{ mmf.monthly_return }}</p>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-2">
+                            Daily growth: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400" data-usd="{{ mmf.daily_return }}">{{ mmf.daily_return }}</strong> / day &nbsp;•&nbsp; Annual: <strong class="convertible-amount" data-usd="{{ mmf.annual_return }}">{{ mmf.annual_return }}</strong>
+                        </p>
+                    </div>
+                    <form action="/accounts/interest/log/{{ mmf.id }}" method="POST">
+                        <button type="submit" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-2 rounded-lg text-xs transition shadow-xs flex items-center justify-center space-x-1.5">
+                            <span>💰</span>
+                            <span>Deposit Monthly Yield (<span class="convertible-amount" data-usd="{{ mmf.monthly_return }}">{{ mmf.monthly_return }}</span>)</span>
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="md:col-span-3 p-4 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
+                    <p class="text-sm text-gray-500">No MMF or High-Yield accounts setup yet. Add Britam, Sanlam, CIC, or Sacco savings below with an APY rate!</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Recurring Bills & Utilities Section -->
+        <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b dark:border-gray-800 pb-3">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">⚡</span>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Recurring Bills & Utilities</h2>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">KPLC Prepaid Tokens, Nairobi Water, Home Wi-Fi, House Rent, and Subscriptions.</p>
+                </div>
+                <div class="flex items-center space-x-3 text-xs">
+                    <div class="bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border dark:border-gray-700">
+                        <span class="text-gray-400">Total Monthly:</span>
+                        <strong class="text-gray-800 dark:text-gray-200 ml-1 convertible-amount" data-usd="{{ total_monthly_bills }}">{{ total_monthly_bills }}</strong>
+                    </div>
+                    <div class="bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50">
+                        <span class="text-rose-600 dark:text-rose-400 font-medium">Pending This Month:</span>
+                        <strong class="text-rose-700 dark:text-rose-300 ml-1 convertible-amount" data-usd="{{ total_pending_bills }}">{{ total_pending_bills }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bills Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for b in bills %}
+                <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border dark:border-gray-700 flex flex-col justify-between space-y-3">
+                    <div>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-gray-900 dark:text-white text-sm">{{ b.title }}</h3>
+                                <div class="flex items-center space-x-1 mt-1">
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                                        {{ b.category }}
+                                    </span>
+                                    {% if b.notes %}
+                                    <span class="text-[10px] text-gray-400 italic">({{ b.notes }})</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <form action="/bills/delete/{{ b.id }}" method="POST" onsubmit="return confirm('Remove bill?');">
+                                <button type="submit" class="text-gray-400 hover:text-rose-500 text-xs">✕</button>
+                            </form>
+                        </div>
+                        <div class="mt-3 flex justify-between items-baseline">
+                            <span class="text-xl font-bold text-gray-900 dark:text-white convertible-amount" data-usd="{{ b.amount }}">{{ b.amount }}</span>
+                            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full 
+                                {% if b.status_badge == 'emerald' %}bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300
+                                {% elif b.status_badge == 'rose' %}bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 animate-pulse
+                                {% elif b.status_badge == 'amber' %}bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300
+                                {% else %}bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300{% endif %}">
+                                {{ b.status_label }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <form action="/bills/pay/{{ b.id }}" method="POST" class="pt-2 border-t dark:border-gray-700 flex items-center space-x-2">
+                        <select name="payment_account_id" class="flex-1 p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
+                            {% for acc in accounts %}
+                            <option value="{{ acc.id }}" {% if b.payment_account_id == acc.id %}selected{% endif %}>{{ acc.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded text-xs transition flex-shrink-0">
+                            ✓ Pay Bill
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <p class="text-gray-400 text-sm md:col-span-3">No recurring bills added yet.</p>
+                {% endfor %}
+            </div>
+
+            <!-- Add Bill Form -->
+            <form action="/bills/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <input type="text" name="title" placeholder="Bill Title (e.g. KPLC Tokens)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs" required>
+                <select name="category" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs">
+                    <option value="KPLC">Electricity / KPLC</option>
+                    <option value="WATER">Nairobi Water</option>
+                    <option value="INTERNET">Home Wi-Fi Fiber</option>
+                    <option value="RENT">House Rent</option>
+                    <option value="SUBSCRIPTION">Subscription / Netflix</option>
+                    <option value="UTILITY">Other Utility</option>
+                </select>
+                <input type="number" step="0.01" name="amount" placeholder="Amount (Ksh)" data-placeholder-base="Amount" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs convertible-placeholder" required>
+                <input type="number" min="1" max="31" name="due_day" placeholder="Due Day of Month (1-31)" value="5" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs" required>
+                <button type="submit" class="bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-lg transition">
+                    Add Recurring Bill
+                </button>
+            </form>
+        </div>
+
         <!-- Accounts Section & Quick Transfer Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Your Accounts (2 columns wide) -->
@@ -294,7 +463,7 @@
                                     <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg">{{ acc.name }}</h3>
                                     <div class="flex flex-wrap items-center gap-1.5 mt-1">
                                         {% if acc.account_type == 'MOBILE' %}
-                                        <span class="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-full font-medium">📱 Mobile Money</span>
+                                         <span class="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-full font-medium">📱 Mobile Money</span>
                                         {% elif acc.account_type == 'BANK' %}
                                         <span class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-full font-medium">🏦 Bank</span>
                                         {% elif acc.account_type == 'SAVINGS' %}
@@ -308,6 +477,9 @@
                                         {% endif %}
                                         {% if acc.account_number %}
                                         <span class="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-200/70 dark:bg-gray-700 px-2 py-0.5 rounded-md font-semibold"># {{ acc.account_number }}</span>
+                                        {% endif %}
+                                        {% if acc.interest_rate_p_a %}
+                                        <span class="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded-md">📈 {{ acc.interest_rate_p_a }}% APY</span>
                                         {% endif %}
                                     </div>
                                 </div>
@@ -344,6 +516,10 @@
                                     </select>
                                 </div>
                                 <div>
+                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Annual Interest / APY % (for MMF / Savings)</label>
+                                    <input type="number" step="0.1" name="interest_rate_p_a" value="{{ acc.interest_rate_p_a or 0.0 }}" placeholder="e.g. 14.5" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
+                                </div>
+                                <div>
                                     <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance</label>
                                     <input type="number" step="0.01" name="balance" value="{{ acc.balance }}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs" required>
                                 </div>
@@ -359,8 +535,8 @@
                     {% endfor %}
                 </div>
 
-                <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, KCB, Britam MMF)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
+                <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <input type="text" name="name" placeholder="Account Name (e.g. Sanlam MMF, M-Pesa)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
                     <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
                     <select name="account_type" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
                         <option value="MOBILE">Mobile Money (M-Pesa, Airtel)</option>
@@ -370,8 +546,9 @@
                         <option value="LOOP">Loop Business</option>
                         <option value="CASH">Cash / Petty Cash</option>
                     </select>
+                    <input type="number" step="0.1" name="interest_rate_p_a" placeholder="APY % (e.g. 14.5)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
                     <input type="number" step="0.01" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
-                    <div class="sm:col-span-2 lg:col-span-4">
+                    <div class="sm:col-span-2 lg:col-span-5">
                         <button type="submit" class="w-full bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-sm font-semibold py-2 rounded-lg transition">Add Account</button>
                     </div>
                 </form>
