@@ -86,6 +86,25 @@ try:
         ('Motorbike Commercial Insurance', 6, '{t_now}', '{ins_exp}', 'PSV Passenger / Boda Insurance Cover');
       """))
       conn.commit()
+
+    # Seed default allocation rules if empty
+    res_alloc = conn.execute(text("SELECT COUNT(*) FROM allocation_rules;")).scalar()
+    if res_alloc == 0:
+      ziidi_id = conn.execute(text("SELECT id FROM accounts WHERE name ILIKE '%Ziidi%' LIMIT 1;")).scalar() or conn.execute(text("SELECT id FROM accounts WHERE account_type = 'MMF' LIMIT 1;")).scalar()
+      sacco_id = conn.execute(text("SELECT id FROM accounts WHERE account_type = 'SAVINGS' LIMIT 1;")).scalar()
+      goal_id = conn.execute(text("SELECT id FROM goals LIMIT 1;")).scalar()
+      mpesa_id = conn.execute(text("SELECT id FROM accounts WHERE account_type = 'MOBILE' LIMIT 1;")).scalar()
+
+      conn.execute(text(f"""
+        INSERT INTO allocation_rules (bucket_name, target_type, target_id, percentage, icon, is_active)
+        VALUES 
+        ('Ziidi MMF (Safaricom)', 'ACCOUNT', {ziidi_id if ziidi_id else 'NULL'}, 20.0, '📈', 1),
+        ('Lock / Sacco Savings', 'ACCOUNT', {sacco_id if sacco_id else 'NULL'}, 20.0, '🔒', 1),
+        ('Savings Goals', 'GOAL', {goal_id if goal_id else 'NULL'}, 15.0, '🎯', 1),
+        ('Recurring Bills Reserve', 'ACCOUNT', {mpesa_id if mpesa_id else 'NULL'}, 15.0, '⚡', 1),
+        ('Daily Living Expenses', 'CASH', NULL, 30.0, '💵', 1);
+      """))
+      conn.commit()
 except Exception as err:
   print(f"Schema migration/seed note: {err}")
 
@@ -471,10 +490,43 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
         "display_percentage": min(100.0, pct),
     })
 
+  # Allocation Waterfall Rules (Ziidi MMF, Lock Savings, Goals, Bills, Cash)
+  raw_rules = (
+      db.query(models.AllocationRule)
+      .order_by(models.AllocationRule.id.asc())
+      .all()
+      if hasattr(models, "AllocationRule")
+      else []
+  )
+  goals_map = {g["id"]: g["title"] for g in goals}
+  allocation_rules = []
+  total_allocation_pct = 0.0
+  for r in raw_rules:
+    t_name = "Daily Living Pocket / Cash"
+    if r.target_type == "ACCOUNT":
+      t_name = accounts_map.get(r.target_id, "Account")
+    elif r.target_type == "GOAL":
+      t_name = goals_map.get(r.target_id, "Goal")
+
+    pct = float(r.percentage or 0.0)
+    if r.is_active:
+      total_allocation_pct += pct
+
+    allocation_rules.append({
+        "id": r.id,
+        "bucket_name": r.bucket_name,
+        "target_type": r.target_type,
+        "target_id": r.target_id,
+        "target_name": t_name,
+        "percentage": pct,
+        "icon": r.icon or "💰",
+        "is_active": r.is_active,
+    })
+
   return templates.TemplateResponse(
-      request,
-      "finance_dashboard.html",
-      {
+      request=request,
+      name="finance_dashboard.html",
+      context={
           "accounts": accounts,
           "transactions": transactions,
           "unique_categories": unique_categories,
@@ -501,6 +553,8 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
           "maintenance": maint_data,
           "compliances": compliance_data,
           "financings": financing_data,
+          "allocation_rules": allocation_rules,
+          "total_allocation_pct": round(total_allocation_pct, 1),
       },
   )
 
@@ -912,6 +966,215 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     db.delete(goal)
     db.commit()
   return RedirectResponse(url="/", status_code=303)
+
+
+# --- SMART INCOME SPLITTER & MULTI-BUCKET ALLOCATION ROUTES ---
+
+
+@app.post("/allocation-rules/distribute")
+def distribute_income(
+    request: Request,
+    amount: float = Form(...),
+    source_account_id: Optional[str] = Form(None),
+    notes: Optional[str] = Form(""),
+    redirect_url: Optional[str] = Form("/"),
+    db: Session = Depends(get_db),
+):
+  currency_pref = request.cookies.get("finatrack_currency", "Ksh")
+  rate = get_live_rate()
+  amount_usd = Decimal(str(amount / rate if currency_pref == "Ksh" else amount))
+  today_date = date.today()
+
+  rules = (
+      db.query(models.AllocationRule)
+      .filter(models.AllocationRule.is_active == 1)
+      .order_by(models.AllocationRule.id.asc())
+      .all()
+      if hasattr(models, "AllocationRule")
+      else []
+  )
+
+  if not rules or amount <= 0:
+    sep = "&" if "?" in (redirect_url or "/") else "?"
+    return RedirectResponse(
+        url=f"{redirect_url or '/'}{sep}toast=Invalid+amount+or+no+active+allocation+rules",
+        status_code=303,
+    )
+
+  account_model = getattr(models, "FinanceAccount", getattr(models, "Account", None))
+  goal_model = getattr(models, "SavingsGoal", getattr(models, "Goal", None))
+
+  # Parse source account if provided (e.g. if transferring out of M-Pesa to distribute)
+  parsed_source_id = None
+  if source_account_id and str(source_account_id).strip() and str(source_account_id).isdigit():
+    parsed_source_id = int(source_account_id)
+
+  if parsed_source_id and account_model:
+    src_acc = db.query(account_model).filter(account_model.id == parsed_source_id).first()
+    if src_acc:
+      src_acc.balance = Decimal(str(src_acc.balance or 0.0)) - amount_usd
+      if hasattr(models, "Transaction"):
+        db.add(
+            models.Transaction(
+                account_id=src_acc.id,
+                transaction_type="EXPENSE",
+                category="Income Split Waterfall",
+                amount=amount_usd,
+                description=f"Auto-split {currency_pref} {amount:,.2f} into {len(rules)} buckets ({notes or 'Daily Earnings'})",
+                date=today_date,
+            )
+        )
+
+  for r in rules:
+    pct = Decimal(str(r.percentage or 0.0))
+    split_amt_usd = amount_usd * (pct / Decimal("100.0"))
+    if split_amt_usd <= 0:
+      continue
+
+    if r.target_type == "ACCOUNT" and r.target_id and account_model:
+      acc = db.query(account_model).filter(account_model.id == r.target_id).first()
+      if acc:
+        acc.balance = Decimal(str(acc.balance or 0.0)) + split_amt_usd
+        if hasattr(models, "Transaction"):
+          db.add(
+              models.Transaction(
+                  account_id=acc.id,
+                  transaction_type="INCOME",
+                  category=f"Income Split: {r.bucket_name}",
+                  amount=split_amt_usd,
+                  description=f"Auto-Split {pct}% ({r.bucket_name}) - {notes or 'Daily Shift'}",
+                  date=today_date,
+              )
+          )
+    elif r.target_type == "GOAL" and r.target_id and goal_model:
+      goal = db.query(goal_model).filter(goal_model.id == r.target_id).first()
+      if goal:
+        goal.current_amount = Decimal(str(goal.current_amount or 0.0)) + split_amt_usd
+    elif r.target_type == "CASH":
+      if not parsed_source_id and account_model and hasattr(models, "Transaction"):
+        cash_acc = db.query(account_model).filter(account_model.account_type == "CASH").first()
+        if cash_acc:
+          cash_acc.balance = Decimal(str(cash_acc.balance or 0.0)) + split_amt_usd
+          db.add(
+              models.Transaction(
+                  account_id=cash_acc.id,
+                  transaction_type="INCOME",
+                  category=f"Cash Pocket: {r.bucket_name}",
+                  amount=split_amt_usd,
+                  description=f"Auto-Split {pct}% ({r.bucket_name}) - Living Cash",
+                  date=today_date,
+              )
+          )
+
+  db.commit()
+  toast_text = urllib.parse.quote(f"⚡ Successfully distributed {currency_pref} {amount:,.2f} into {len(rules)} buckets!")
+  target_url = redirect_url or "/"
+  sep = "&" if "?" in target_url else "?"
+  return RedirectResponse(url=f"{target_url}{sep}toast={toast_text}", status_code=303)
+
+
+@app.post("/allocation-rules/create")
+def create_allocation_rule(
+    request: Request,
+    bucket_name: str = Form(...),
+    target_type: str = Form("ACCOUNT"),
+    target_id: Optional[str] = Form(None),
+    percentage: float = Form(20.0),
+    icon: Optional[str] = Form("💰"),
+    redirect_url: Optional[str] = Form("/"),
+    db: Session = Depends(get_db),
+):
+  parsed_target_id = None
+  if target_id and str(target_id).strip() and str(target_id).isdigit():
+    parsed_target_id = int(target_id)
+
+  rule = models.AllocationRule(
+      bucket_name=bucket_name.strip(),
+      target_type=target_type,
+      target_id=parsed_target_id if target_type in ["ACCOUNT", "GOAL"] else None,
+      percentage=float(percentage or 0.0),
+      icon=icon.strip() if icon else "💰",
+      is_active=1,
+  )
+  db.add(rule)
+  db.commit()
+  target_url = redirect_url or "/"
+  sep = "&" if "?" in target_url else "?"
+  return RedirectResponse(url=f"{target_url}{sep}toast=New+allocation+rule+created", status_code=303)
+
+
+@app.post("/allocation-rules/bulk-update")
+async def bulk_update_allocation_rules(
+    request: Request, db: Session = Depends(get_db)
+):
+  form = await request.form()
+  rule_ids = form.getlist("rule_id")
+  redirect_url = form.get("redirect_url", "/")
+
+  for rid_str in rule_ids:
+    try:
+      rid = int(rid_str)
+      rule = (
+          db.query(models.AllocationRule)
+          .filter(models.AllocationRule.id == rid)
+          .first()
+      )
+      if rule:
+        b_name = form.get(f"bucket_name_{rid}")
+        if b_name:
+          rule.bucket_name = b_name.strip()
+
+        pct_val = form.get(f"percentage_{rid}")
+        if pct_val is not None:
+          rule.percentage = float(pct_val)
+
+        t_type = form.get(f"target_type_{rid}")
+        if t_type:
+          rule.target_type = t_type
+
+        t_id = form.get(f"target_id_{rid}")
+        if t_id and str(t_id).strip().isdigit():
+          rule.target_id = int(t_id)
+        else:
+          rule.target_id = None
+
+        icon_val = form.get(f"icon_{rid}")
+        if icon_val:
+          rule.icon = icon_val.strip()
+
+        is_act = form.get(f"is_active_{rid}")
+        rule.is_active = 1 if is_act in ["1", "true", "on", "yes"] else 0
+    except Exception as e:
+      print(f"Error updating rule {rid_str}: {e}")
+
+  db.commit()
+  sep = "&" if "?" in redirect_url else "?"
+  return RedirectResponse(
+      url=f"{redirect_url}{sep}toast=Allocation+rules+updated+successfully",
+      status_code=303,
+  )
+
+
+@app.post("/allocation-rules/delete/{rule_id}")
+def delete_allocation_rule(
+    request: Request,
+    rule_id: int,
+    redirect_url: Optional[str] = Form("/"),
+    db: Session = Depends(get_db),
+):
+  rule = (
+      db.query(models.AllocationRule)
+      .filter(models.AllocationRule.id == rule_id)
+      .first()
+  )
+  if rule:
+    db.delete(rule)
+    db.commit()
+  target_url = redirect_url or "/"
+  sep = "&" if "?" in target_url else "?"
+  return RedirectResponse(
+      url=f"{target_url}{sep}toast=Allocation+rule+deleted", status_code=303
+  )
 
 
 # --- DEBT & LOAN ROUTES ---
@@ -1674,10 +1937,45 @@ def rider_dashboard(
       round(tot_misc, 2),
   ]
 
+  # Allocation Rules for Rider Shift Auto-Split
+  goal_model = getattr(models, "SavingsGoal", getattr(models, "Goal", None))
+  raw_goals = db.query(goal_model).all() if goal_model else []
+  goals_map = {g.id: getattr(g, "title", "Goal") for g in raw_goals}
+  raw_rules = (
+      db.query(models.AllocationRule)
+      .order_by(models.AllocationRule.id.asc())
+      .all()
+      if hasattr(models, "AllocationRule")
+      else []
+  )
+  allocation_rules = []
+  total_allocation_pct = 0.0
+  for r in raw_rules:
+    t_name = "Daily Living Pocket / Cash"
+    if r.target_type == "ACCOUNT":
+      t_name = accounts_map.get(r.target_id, "Account")
+    elif r.target_type == "GOAL":
+      t_name = goals_map.get(r.target_id, "Goal")
+
+    pct = float(r.percentage or 0.0)
+    if r.is_active:
+      total_allocation_pct += pct
+
+    allocation_rules.append({
+        "id": r.id,
+        "bucket_name": r.bucket_name,
+        "target_type": r.target_type,
+        "target_id": r.target_id,
+        "target_name": t_name,
+        "percentage": pct,
+        "icon": r.icon or "💰",
+        "is_active": r.is_active,
+    })
+
   response = templates.TemplateResponse(
-      request,
-      "rider_dashboard.html",
-      {
+      request=request,
+      name="rider_dashboard.html",
+      context={
           **summary_data,
           "bikes": bikes,
           "selected_bike": selected_bike,
@@ -1695,6 +1993,9 @@ def rider_dashboard(
           "station_stats": station_stats,
           "logs": enriched_logs,
           "accounts": accounts,
+          "goals": raw_goals,
+          "allocation_rules": allocation_rules,
+          "total_allocation_pct": round(total_allocation_pct, 1),
           "maintenance": maint_data,
           "compliances": compliance_data,
           "financings": financing_data,

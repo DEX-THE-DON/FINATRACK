@@ -147,6 +147,18 @@ class BikeFinancing(Base):
   notes = Column(Text, nullable=True)
 
 
+class AllocationRule(Base):
+  __tablename__ = 'allocation_rules'
+
+  id = Column(Integer, primary_key=True, index=True)
+  bucket_name = Column(String, nullable=False)  # e.g. 'Ziidi MMF', 'Lock Savings', 'Emergency Goal', 'Bills Reserve', 'Daily Expenses'
+  target_type = Column(String, default='ACCOUNT')  # 'ACCOUNT', 'GOAL', 'CASH'
+  target_id = Column(Integer, nullable=True)  # Account ID or Goal ID
+  percentage = Column(Float, default=20.0)  # e.g. 20.0%
+  icon = Column(String, default='💰')  # 📈, 🔒, 🎯, ⚡, 💵
+  is_active = Column(Integer, default=1)
+
+
 # Aliases for backward compatibility
 FinanceAccount = Account
 SavingsGoal = Goal

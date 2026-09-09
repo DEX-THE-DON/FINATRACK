@@ -127,8 +127,69 @@
             });
         }
 
+        let allocationRulesData = {{ allocation_rules | tojson }};
+
+        function updateSplitBreakdown() {
+            const inputEl = document.getElementById('split-amount-input');
+            const amt = parseFloat(inputEl ? inputEl.value : 0) || 0;
+            const curr = getCurrency();
+            const btnLabel = document.getElementById('split-btn-amount-label');
+            if (btnLabel) {
+                btnLabel.innerText = curr + ' ' + amt.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+
+            allocationRulesData.forEach(rule => {
+                const cardAmtEl = document.getElementById('rule-amt-' + rule.id);
+                if (cardAmtEl) {
+                    const splitVal = amt * (rule.percentage / 100.0);
+                    cardAmtEl.innerText = curr + ' ' + splitVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                }
+            });
+        }
+
+        function setSplitPreset(val) {
+            const inputEl = document.getElementById('split-amount-input');
+            if (inputEl) {
+                inputEl.value = val;
+                updateSplitBreakdown();
+            }
+        }
+
+        function checkRulesSum() {
+            let total = 0;
+            document.querySelectorAll('.rule-pct-input').forEach(input => {
+                const isActEl = document.getElementById('active-toggle-' + input.getAttribute('data-rule-id'));
+                if (!isActEl || isActEl.checked) {
+                    total += parseFloat(input.value) || 0;
+                }
+            });
+            const sumEl = document.getElementById('rules-pct-sum');
+            const sumBadge = document.getElementById('rules-pct-badge');
+            const saveBtn = document.getElementById('save-rules-btn');
+            if (sumEl) sumEl.innerText = total.toFixed(1) + '%';
+            if (sumBadge) {
+                if (Math.abs(total - 100) < 0.1) {
+                    sumBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300';
+                    sumBadge.innerText = '✓ 100.0% (Balanced)';
+                    if (saveBtn) saveBtn.disabled = false;
+                } else {
+                    sumBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300';
+                    sumBadge.innerText = `⚠️ ${total.toFixed(1)}% (Must equal 100%)`;
+                }
+            }
+        }
+
+        function toggleAllocationModal() {
+            const modal = document.getElementById('allocation-rules-modal');
+            if (modal) {
+                modal.classList.toggle('hidden');
+                checkRulesSum();
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             applyConversion();
+            updateSplitBreakdown();
         });
     </script>
 </head>
@@ -292,6 +353,189 @@
                 <a href="/rider" class="w-full md:w-auto text-center bg-blue-500 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-xl text-xs transition shadow">
                     Open Rider Operations &rarr;
                 </a>
+            </div>
+        </div>
+
+        <!-- Smart Income Splitter & Multi-Bucket Waterfall Engine -->
+        <div class="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-950 text-white p-6 rounded-2xl shadow-lg border border-indigo-800/60 space-y-5">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                    <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                        <span class="text-2xl">⚡</span>
+                        <h2 class="text-xl font-black tracking-tight text-white">Smart Income Splitter & Waterfall Engine</h2>
+                        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full {% if total_allocation_pct == 100.0 %}bg-emerald-400 text-gray-950{% else %}bg-amber-400 text-gray-950{% endif %}">
+                            {{ total_allocation_pct }}% Target Allocation
+                        </span>
+                    </div>
+                    <p class="text-xs text-indigo-200 mt-1">
+                        Enter any shift income, boda remittance, or salary. Finatrack automatically routes your funds into Ziidi MMF, Lock/Sacco Savings, Goals, Bills Reserve, and Daily Cash with 1 tap.
+                    </p>
+                </div>
+                <button type="button" onclick="toggleAllocationModal()" class="flex items-center space-x-1.5 bg-indigo-800/80 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold border border-indigo-600/50 transition shadow-xs flex-shrink-0">
+                    <span>⚙️</span>
+                    <span>Customize Split Rules ({{ allocation_rules|length }} Buckets)</span>
+                </button>
+            </div>
+
+            <!-- Calculator Input and Quick Presets -->
+            <form action="/allocation-rules/distribute" method="POST" class="space-y-4">
+                <input type="hidden" name="redirect_url" value="/">
+                
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center bg-indigo-950/70 p-4 rounded-xl border border-indigo-800/50">
+                    <div class="lg:col-span-4">
+                        <label class="block text-xs font-bold text-indigo-200 mb-1">Enter Earnings to Split (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-sm font-bold text-indigo-400 curr-symbol-label">Ksh</span>
+                            <input type="number" step="10" name="amount" id="split-amount-input" value="500" oninput="updateSplitBreakdown()" class="w-full pl-14 pr-4 py-2.5 rounded-xl bg-slate-900 border border-indigo-700 text-white text-lg font-black focus:ring-2 focus:ring-emerald-400 focus:outline-none" required>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-5 flex flex-col justify-center space-y-1">
+                        <span class="text-[11px] font-semibold text-indigo-300">Quick Shift Presets:</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button type="button" onclick="setSplitPreset(300)" class="px-2.5 py-1 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-xs font-bold text-indigo-100 border border-indigo-700 transition">300</button>
+                            <button type="button" onclick="setSplitPreset(500)" class="px-2.5 py-1 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-xs font-bold text-indigo-100 border border-indigo-700 transition">500</button>
+                            <button type="button" onclick="setSplitPreset(1000)" class="px-2.5 py-1 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-xs font-bold text-indigo-100 border border-indigo-700 transition">1,000</button>
+                            <button type="button" onclick="setSplitPreset(1500)" class="px-2.5 py-1 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-xs font-bold text-indigo-100 border border-indigo-700 transition">1,500</button>
+                            <button type="button" onclick="setSplitPreset(2500)" class="px-2.5 py-1 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-xs font-bold text-indigo-100 border border-indigo-700 transition">2,500</button>
+                            <button type="button" onclick="setSplitPreset(5000)" class="px-2.5 py-1 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-xs font-bold text-indigo-100 border border-indigo-700 transition">5,000</button>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-3">
+                        <label class="block text-xs font-semibold text-indigo-300 mb-1">Source Account (Optional)</label>
+                        <select name="source_account_id" class="w-full p-2.5 rounded-xl bg-slate-900 border border-indigo-700 text-white text-xs font-medium focus:ring-2 focus:ring-emerald-400 focus:outline-none">
+                            <option value="">Fresh External Earnings (Direct Credit)</option>
+                            {% for acc in accounts %}
+                            <option value="{{ acc.id }}">Transfer from {{ acc.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Live Allocation Waterfall Breakdown Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
+                    {% for rule in allocation_rules %}
+                    <div class="bg-indigo-950/60 p-3.5 rounded-xl border border-indigo-800/50 flex flex-col justify-between space-y-2 {% if not rule.is_active %}opacity-50{% endif %}">
+                        <div>
+                            <div class="flex justify-between items-start">
+                                <span class="text-xl">{{ rule.icon }}</span>
+                                <span class="text-xs font-black px-2 py-0.5 rounded-md bg-indigo-800/90 text-emerald-300 border border-indigo-700">
+                                    {{ rule.percentage }}%
+                                </span>
+                            </div>
+                            <h4 class="font-bold text-sm text-white mt-1.5 line-clamp-1">{{ rule.bucket_name }}</h4>
+                            <p class="text-[11px] text-indigo-300 truncate">
+                                {% if rule.target_type == 'ACCOUNT' %}
+                                🏦 {{ rule.target_name }}
+                                {% elif rule.target_type == 'GOAL' %}
+                                🎯 Goal: {{ rule.target_name }}
+                                {% else %}
+                                💵 Cash / Pocket
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="pt-2 border-t border-indigo-800/40 flex justify-between items-baseline">
+                            <span class="text-[10px] uppercase font-bold text-indigo-400">Split Amount</span>
+                            <span id="rule-amt-{{ rule.id }}" class="text-base font-black text-emerald-400">Ksh 0.00</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- 1-Tap Execute Distribution Button -->
+                <div class="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <p class="text-xs text-indigo-200">
+                        ⚡ Clicking distribute executes the split, credits all target accounts and goals, and logs the transactions automatically.
+                    </p>
+                    <button type="submit" class="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-gray-950 font-black px-6 py-3 rounded-xl text-sm transition shadow-lg flex items-center justify-center space-x-2 flex-shrink-0">
+                        <span>⚡</span>
+                        <span>Auto-Distribute Earnings (<span id="split-btn-amount-label">Ksh 500.00</span>)</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Allocation Rules Customization Modal -->
+        <div id="allocation-rules-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 text-gray-900 dark:text-gray-100">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col border dark:border-gray-700">
+                <div class="p-5 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">⚙️</span>
+                        <div>
+                            <h3 class="font-bold text-lg text-gray-900 dark:text-white">Customize Income Split Waterfall Rules</h3>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Set custom percentages for each destination bucket. Total must equal 100%.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span id="rules-pct-badge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                            {{ total_allocation_pct }}%
+                        </span>
+                        <button type="button" onclick="toggleAllocationModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl font-bold">✕</button>
+                    </div>
+                </div>
+
+                <form action="/allocation-rules/bulk-update" method="POST" class="p-5 space-y-4 overflow-y-auto flex-1">
+                    <input type="hidden" name="redirect_url" value="/">
+
+                    <div class="space-y-3">
+                        {% for r in allocation_rules %}
+                        <input type="hidden" name="rule_id" value="{{ r.id }}">
+                        <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-700 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                            <div class="sm:col-span-1 text-center">
+                                <input type="text" name="icon_{{ r.id }}" value="{{ r.icon }}" class="w-10 text-center p-1.5 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-base">
+                            </div>
+                            <div class="sm:col-span-4">
+                                <label class="block text-[10px] uppercase font-bold text-gray-400">Bucket Name</label>
+                                <input type="text" name="bucket_name_{{ r.id }}" value="{{ r.bucket_name }}" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs font-bold" required>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-[10px] uppercase font-bold text-gray-400">Percentage %</label>
+                                <input type="number" step="0.5" min="0" max="100" name="percentage_{{ r.id }}" value="{{ r.percentage }}" data-rule-id="{{ r.id }}" oninput="checkRulesSum()" class="rule-pct-input w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs font-black text-emerald-600 dark:text-emerald-400" required>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-[10px] uppercase font-bold text-gray-400">Target Type</label>
+                                <select name="target_type_{{ r.id }}" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
+                                    <option value="ACCOUNT" {% if r.target_type == 'ACCOUNT' %}selected{% endif %}>Account / MMF</option>
+                                    <option value="GOAL" {% if r.target_type == 'GOAL' %}selected{% endif %}>Savings Goal</option>
+                                    <option value="CASH" {% if r.target_type == 'CASH' %}selected{% endif %}>Cash / Pocket</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-[10px] uppercase font-bold text-gray-400">Destination</label>
+                                <select name="target_id_{{ r.id }}" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
+                                    <option value="">Default / N/A</option>
+                                    <optgroup label="Accounts">
+                                        {% for acc in accounts %}
+                                        <option value="{{ acc.id }}" {% if r.target_type == 'ACCOUNT' and r.target_id == acc.id %}selected{% endif %}>{{ acc.name }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="Savings Goals">
+                                        {% for g in goals %}
+                                        <option value="{{ g.id }}" {% if r.target_type == 'GOAL' and r.target_id == g.id %}selected{% endif %}>{{ g.title }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-1 flex items-center justify-center">
+                                <label class="flex items-center cursor-pointer" title="Toggle active/inactive">
+                                    <input type="checkbox" id="active-toggle-{{ r.id }}" name="is_active_{{ r.id }}" value="1" {% if r.is_active %}checked{% endif %} onchange="checkRulesSum()" class="w-4 h-4 text-emerald-600 rounded">
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="pt-3 border-t dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-3">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                            Total Percentage: <strong id="rules-pct-sum" class="text-gray-900 dark:text-white font-bold">{{ total_allocation_pct }}%</strong> (Must equal 100%)
+                        </div>
+                        <div class="flex space-x-2">
+                            <button type="button" onclick="toggleAllocationModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">Cancel</button>
+                            <button type="submit" id="save-rules-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-xl text-xs transition shadow">Save Allocation Rules</button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
 
