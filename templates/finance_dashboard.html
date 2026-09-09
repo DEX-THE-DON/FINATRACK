@@ -293,7 +293,19 @@
                                 <div>
                                     <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg">{{ acc.name }}</h3>
                                     <div class="flex flex-wrap items-center gap-1.5 mt-1">
-                                        <span class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full font-medium">{{ acc.account_type }}</span>
+                                        {% if acc.account_type == 'MOBILE' %}
+                                        <span class="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-full font-medium">📱 Mobile Money</span>
+                                        {% elif acc.account_type == 'BANK' %}
+                                        <span class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-full font-medium">🏦 Bank</span>
+                                        {% elif acc.account_type == 'SAVINGS' %}
+                                        <span class="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 rounded-full font-medium">💰 Savings Account</span>
+                                        {% elif acc.account_type == 'MMF' %}
+                                        <span class="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 rounded-full font-medium">📈 Money Market Fund</span>
+                                        {% elif acc.account_type == 'LOOP' %}
+                                        <span class="text-xs px-2 py-0.5 bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 rounded-full font-medium">🔄 Loop Business</span>
+                                        {% else %}
+                                        <span class="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full font-medium">💵 {{ acc.account_type }}</span>
+                                        {% endif %}
                                         {% if acc.account_number %}
                                         <span class="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-200/70 dark:bg-gray-700 px-2 py-0.5 rounded-md font-semibold"># {{ acc.account_number }}</span>
                                         {% endif %}
@@ -323,9 +335,12 @@
                                 <div>
                                     <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
                                     <select name="account_type" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
-                                        <option value="MOBILE" {% if acc.account_type == 'MOBILE' %}selected{% endif %}>Mobile Money</option>
-                                        <option value="BANK" {% if acc.account_type == 'BANK' %}selected{% endif %}>Bank</option>
-                                        <option value="CASH" {% if acc.account_type == 'CASH' %}selected{% endif %}>Cash</option>
+                                        <option value="MOBILE" {% if acc.account_type == 'MOBILE' %}selected{% endif %}>Mobile Money (M-Pesa, Airtel)</option>
+                                        <option value="BANK" {% if acc.account_type == 'BANK' %}selected{% endif %}>Bank Account</option>
+                                        <option value="SAVINGS" {% if acc.account_type == 'SAVINGS' %}selected{% endif %}>Savings Account (Sacco / Fixed)</option>
+                                        <option value="MMF" {% if acc.account_type == 'MMF' %}selected{% endif %}>Money Market Fund (MMF)</option>
+                                        <option value="LOOP" {% if acc.account_type == 'LOOP' %}selected{% endif %}>Loop Business</option>
+                                        <option value="CASH" {% if acc.account_type == 'CASH' %}selected{% endif %}>Cash / Petty Cash</option>
                                     </select>
                                 </div>
                                 <div>
@@ -345,12 +360,15 @@
                 </div>
 
                 <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, KCB)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
+                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, KCB, Britam MMF)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
                     <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
                     <select name="account_type" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
-                        <option value="MOBILE">Mobile Money</option>
-                        <option value="BANK">Bank</option>
-                        <option value="CASH">Cash</option>
+                        <option value="MOBILE">Mobile Money (M-Pesa, Airtel)</option>
+                        <option value="BANK">Bank Account</option>
+                        <option value="SAVINGS">Savings Account (Sacco / Fixed)</option>
+                        <option value="MMF">Money Market Fund (MMF)</option>
+                        <option value="LOOP">Loop Business</option>
+                        <option value="CASH">Cash / Petty Cash</option>
                     </select>
                     <input type="number" step="0.01" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
                     <div class="sm:col-span-2 lg:col-span-4">
