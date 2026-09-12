@@ -58,6 +58,15 @@
                 }
             });
 
+            document.querySelectorAll('.convertible-input').forEach(el => {
+                const usdValue = parseFloat(el.getAttribute('data-usd')) || 0;
+                if (curr === 'Ksh') {
+                    el.value = (usdValue * USD_TO_KES).toFixed(2);
+                } else {
+                    el.value = usdValue.toFixed(2);
+                }
+            });
+
             document.querySelectorAll('.curr-symbol-label').forEach(el => {
                 el.innerText = curr === 'Ksh' ? 'Ksh' : '$';
             });
@@ -72,6 +81,12 @@
             const displayDiv = document.getElementById('acc-display-' + id);
             const editDiv = document.getElementById('acc-edit-' + id);
             if (editDiv.classList.contains('hidden')) {
+                const curr = getCurrency();
+                const balInput = editDiv.querySelector('input[name="balance"]');
+                if (balInput && balInput.hasAttribute('data-usd')) {
+                    const usd = parseFloat(balInput.getAttribute('data-usd')) || 0;
+                    balInput.value = curr === 'Ksh' ? (usd * USD_TO_KES).toFixed(2) : usd.toFixed(2);
+                }
                 editDiv.classList.remove('hidden');
                 displayDiv.classList.add('hidden');
             } else {
@@ -187,6 +202,93 @@
             }
         }
 
+        function addDynamicBucketRow() {
+            const container = document.getElementById('rules-list-container');
+            const newId = 'new_' + Date.now();
+            
+            let accountsOptions = `{% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.name }}</option>{% endfor %}`;
+            let goalsOptions = `{% for g in goals %}<option value="{{ g.id }}">{{ g.title }}</option>{% endfor %}`;
+
+            const html = `
+            <div id="rule-row-${newId}" class="p-3 bg-emerald-50/60 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                <div class="sm:col-span-1 text-center">
+                    <input type="text" name="new_icon" value="🎯" class="w-10 text-center p-1.5 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-base">
+                </div>
+                <div class="sm:col-span-4">
+                    <label class="block text-[10px] uppercase font-bold text-gray-400">New Destination Bucket</label>
+                    <input type="text" name="new_bucket_name" placeholder="e.g. Goal: Motorbike Deposit" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs font-bold" required>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-[10px] uppercase font-bold text-gray-400">Percentage %</label>
+                    <input type="number" step="0.5" min="0" max="100" name="new_percentage" value="10.0" oninput="checkRulesSum()" class="rule-pct-input w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs font-black text-emerald-600 dark:text-emerald-400" required>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-[10px] uppercase font-bold text-gray-400">Target Type</label>
+                    <select name="new_target_type" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
+                        <option value="GOAL" selected>🎯 Savings Goal</option>
+                        <option value="ACCOUNT">🏦 Account / MMF</option>
+                        <option value="CASH">💵 Cash / Pocket</option>
+                    </select>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-[10px] uppercase font-bold text-gray-400">Destination</label>
+                    <select name="new_target_id" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
+                        <optgroup label="Savings Goals">
+                            ${goalsOptions}
+                        </optgroup>
+                        <optgroup label="Accounts & MMFs">
+                            ${accountsOptions}
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="sm:col-span-1 flex items-center justify-center">
+                    <button type="button" onclick="removeRuleRow('${newId}')" class="p-1.5 text-rose-500 hover:text-rose-700 font-bold text-sm bg-rose-50 dark:bg-rose-950/60 rounded-lg border border-rose-200 dark:border-rose-900" title="Remove bucket">🗑️</button>
+                </div>
+            </div>`;
+
+            container.insertAdjacentHTML('beforeend', html);
+            checkRulesSum();
+        }
+
+        function removeRuleRow(rowId, ruleId) {
+            const row = document.getElementById('rule-row-' + rowId);
+            if (row) {
+                if (ruleId) {
+                    const form = document.getElementById('allocation-bulk-form');
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'delete_rule_id';
+                    input.value = ruleId;
+                    form.appendChild(input);
+                }
+                row.remove();
+                checkRulesSum();
+            }
+        }
+
+        function autoBalanceRules() {
+            const inputs = Array.from(document.querySelectorAll('.rule-pct-input')).filter(input => {
+                const ruleId = input.getAttribute('data-rule-id');
+                if (!ruleId) return true;
+                const isActEl = document.getElementById('active-toggle-' + ruleId);
+                return !isActEl || isActEl.checked;
+            });
+
+            if (inputs.length === 0) return;
+
+            let currentSum = inputs.reduce((acc, el) => acc + (parseFloat(el.value) || 0), 0);
+            if (currentSum === 0) {
+                const equalPct = (100.0 / inputs.length).toFixed(1);
+                inputs.forEach(el => el.value = equalPct);
+            } else {
+                inputs.forEach(el => {
+                    const val = parseFloat(el.value) || 0;
+                    el.value = ((val / currentSum) * 100.0).toFixed(1);
+                });
+            }
+            checkRulesSum();
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             applyConversion();
             updateSplitBreakdown();
@@ -213,6 +315,9 @@
                         <option value="$" class="dark:bg-gray-800">Dollars (USD)</option>
                     </select>
                 </div>
+                <a href="/finance/export/csv" class="inline-flex items-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-semibold py-2.5 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700 transition text-xs shadow-sm" title="Export full transaction ledger to CSV">
+                    📥 Export CSV
+                </a>
                 <a href="/rider" class="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-xl shadow transition text-sm">
                     View My Rider Dashboard &rarr;
                 </a>
@@ -464,7 +569,7 @@
                         <span class="text-2xl">⚙️</span>
                         <div>
                             <h3 class="font-bold text-lg text-gray-900 dark:text-white">Customize Income Split Waterfall Rules</h3>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Set custom percentages for each destination bucket. Total must equal 100%.</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Add multiple goals (Goal 1, Goal 2, Goal 3...) or accounts as destination buckets. Total must equal 100%.</p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-3">
@@ -475,13 +580,28 @@
                     </div>
                 </div>
 
-                <form action="/allocation-rules/bulk-update" method="POST" class="p-5 space-y-4 overflow-y-auto flex-1">
+                <form id="allocation-bulk-form" action="/allocation-rules/bulk-update" method="POST" class="p-5 space-y-4 overflow-y-auto flex-1">
                     <input type="hidden" name="redirect_url" value="/">
 
-                    <div class="space-y-3">
+                    <!-- Action Bar inside Modal: Add Bucket & Auto-Balance -->
+                    <div class="flex flex-wrap items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                        <span class="text-xs font-semibold text-indigo-800 dark:text-indigo-200">
+                            🎯 Manage Goals & Account Destinations
+                        </span>
+                        <div class="flex items-center space-x-2">
+                            <button type="button" onclick="autoBalanceRules()" class="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-gray-600 border border-indigo-200 dark:border-indigo-800 text-xs font-bold transition shadow-xs">
+                                ⚖️ Auto-Balance to 100%
+                            </button>
+                            <button type="button" onclick="addDynamicBucketRow()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs flex items-center space-x-1">
+                                <span>+ Add Destination Bucket</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="rules-list-container" class="space-y-3">
                         {% for r in allocation_rules %}
                         <input type="hidden" name="rule_id" value="{{ r.id }}">
-                        <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-700 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                        <div id="rule-row-{{ r.id }}" class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-700 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
                             <div class="sm:col-span-1 text-center">
                                 <input type="text" name="icon_{{ r.id }}" value="{{ r.icon }}" class="w-10 text-center p-1.5 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-base">
                             </div>
@@ -496,31 +616,32 @@
                             <div class="sm:col-span-2">
                                 <label class="block text-[10px] uppercase font-bold text-gray-400">Target Type</label>
                                 <select name="target_type_{{ r.id }}" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
-                                    <option value="ACCOUNT" {% if r.target_type == 'ACCOUNT' %}selected{% endif %}>Account / MMF</option>
-                                    <option value="GOAL" {% if r.target_type == 'GOAL' %}selected{% endif %}>Savings Goal</option>
-                                    <option value="CASH" {% if r.target_type == 'CASH' %}selected{% endif %}>Cash / Pocket</option>
+                                    <option value="GOAL" {% if r.target_type == 'GOAL' %}selected{% endif %}>🎯 Savings Goal</option>
+                                    <option value="ACCOUNT" {% if r.target_type == 'ACCOUNT' %}selected{% endif %}>🏦 Account / MMF</option>
+                                    <option value="CASH" {% if r.target_type == 'CASH' %}selected{% endif %}>💵 Cash / Pocket</option>
                                 </select>
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="block text-[10px] uppercase font-bold text-gray-400">Destination</label>
                                 <select name="target_id_{{ r.id }}" class="w-full p-2 border dark:border-gray-600 dark:bg-gray-800 rounded-lg text-xs">
                                     <option value="">Default / N/A</option>
-                                    <optgroup label="Accounts">
-                                        {% for acc in accounts %}
-                                        <option value="{{ acc.id }}" {% if r.target_type == 'ACCOUNT' and r.target_id == acc.id %}selected{% endif %}>{{ acc.name }}</option>
-                                        {% endfor %}
-                                    </optgroup>
                                     <optgroup label="Savings Goals">
                                         {% for g in goals %}
-                                        <option value="{{ g.id }}" {% if r.target_type == 'GOAL' and r.target_id == g.id %}selected{% endif %}>{{ g.title }}</option>
+                                        <option value="{{ g.id }}" {% if r.target_type == 'GOAL' and r.target_id == g.id %}selected{% endif %}>🎯 {{ g.title }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="Accounts & MMFs">
+                                        {% for acc in accounts %}
+                                        <option value="{{ acc.id }}" {% if r.target_type == 'ACCOUNT' and r.target_id == acc.id %}selected{% endif %}>🏦 {{ acc.name }}</option>
                                         {% endfor %}
                                     </optgroup>
                                 </select>
                             </div>
-                            <div class="sm:col-span-1 flex items-center justify-center">
+                            <div class="sm:col-span-1 flex items-center justify-center space-x-2">
                                 <label class="flex items-center cursor-pointer" title="Toggle active/inactive">
                                     <input type="checkbox" id="active-toggle-{{ r.id }}" name="is_active_{{ r.id }}" value="1" {% if r.is_active %}checked{% endif %} onchange="checkRulesSum()" class="w-4 h-4 text-emerald-600 rounded">
                                 </label>
+                                <button type="button" onclick="removeRuleRow('{{ r.id }}', '{{ r.id }}')" class="p-1 text-rose-500 hover:text-rose-700 text-xs font-bold" title="Delete bucket">🗑️</button>
                             </div>
                         </div>
                         {% endfor %}
@@ -691,7 +812,7 @@
                     <option value="SUBSCRIPTION">Subscription / Netflix</option>
                     <option value="UTILITY">Other Utility</option>
                 </select>
-                <input type="number" step="0.01" name="amount" placeholder="Amount (Ksh)" data-placeholder-base="Amount" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs convertible-placeholder" required>
+                <input type="number" step="any" name="amount" placeholder="Amount (Ksh)" data-placeholder-base="Amount" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs convertible-placeholder" required>
                 <input type="number" min="1" max="31" name="due_day" placeholder="Due Day of Month (1-31)" value="5" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs" required>
                 <button type="submit" class="bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-lg transition">
                     Add Recurring Bill
@@ -767,11 +888,11 @@
                                 </div>
                                 <div>
                                     <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Annual Interest / APY % (for MMF / Savings)</label>
-                                    <input type="number" step="0.1" name="interest_rate_p_a" value="{{ acc.interest_rate_p_a or 0.0 }}" placeholder="e.g. 14.5" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
+                                    <input type="number" step="any" name="interest_rate_p_a" value="{{ acc.interest_rate_p_a or 0.0 }}" placeholder="e.g. 13.45" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
                                 </div>
                                 <div>
                                     <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance</label>
-                                    <input type="number" step="0.01" name="balance" value="{{ acc.balance }}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs" required>
+                                    <input type="number" step="any" name="balance" value="{{ acc.balance }}" data-usd="{{ acc.balance }}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-input" required>
                                 </div>
                                 <div class="flex space-x-2 pt-1">
                                     <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1 rounded text-xs font-semibold">Save</button>
@@ -781,7 +902,11 @@
                         </div>
                     </div>
                     {% else %}
-                    <p class="text-gray-400 text-sm md:col-span-2">No accounts added yet.</p>
+                    <div class="md:col-span-2 p-6 bg-gray-50 dark:bg-gray-800/60 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-center space-y-2">
+                        <div class="text-3xl">💳</div>
+                        <h4 class="font-bold text-gray-700 dark:text-gray-200">No accounts added yet</h4>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">Add your real accounts below (e.g. M-Pesa, KCB/Equity Bank, Sacco, Ziidi/Sanlam MMF, or Cash) to start tracking your real funds!</p>
+                    </div>
                     {% endfor %}
                 </div>
 
@@ -796,8 +921,8 @@
                         <option value="LOOP">Loop Business</option>
                         <option value="CASH">Cash / Petty Cash</option>
                     </select>
-                    <input type="number" step="0.1" name="interest_rate_p_a" placeholder="APY % (e.g. 14.5)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
-                    <input type="number" step="0.01" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
+                    <input type="number" step="any" name="interest_rate_p_a" placeholder="APY % (e.g. 13.45)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
+                    <input type="number" step="any" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
                     <div class="sm:col-span-2 lg:col-span-5">
                         <button type="submit" class="w-full bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-sm font-semibold py-2 rounded-lg transition">Add Account</button>
                     </div>
@@ -828,7 +953,7 @@
                         </div>
                         <div>
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                            <input type="number" step="0.01" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
+                            <input type="number" step="any" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
                         </div>
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg text-sm transition mt-2">Transfer Funds</button>
                     </form>
@@ -863,7 +988,7 @@
                     </div>
                     <div>
                         <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="0.01" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
+                        <input type="number" step="any" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Date</label>
@@ -885,17 +1010,28 @@
                     <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-3">Monthly Budget Limits</h2>
                     <div class="space-y-3 max-h-56 overflow-y-auto pr-1">
                         {% for budget in budgets %}
-                        <div class="p-3 bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 rounded-xl space-y-1.5">
+                        <div class="p-3 bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 rounded-xl space-y-2">
                             <div class="flex justify-between items-center text-xs">
-                                <span class="font-bold text-gray-800 dark:text-gray-200">{{ budget.category }}</span>
-                                <span class="text-gray-500 dark:text-gray-400">Spent: <span class="font-semibold text-gray-900 dark:text-gray-100 convertible-amount" data-usd="{{ budget.spent }}">{{ budget.spent }}</span> / <span class="convertible-amount" data-usd="{{ budget.limit_amount }}">{{ budget.limit_amount }}</span></span>
+                                <div class="flex items-center space-x-1.5">
+                                    <span class="font-bold text-gray-800 dark:text-gray-200">{{ budget.category }}</span>
+                                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full {% if budget.burn_badge == 'rose' %}bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300{% elif budget.burn_badge == 'amber' %}bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300{% elif budget.burn_badge == 'emerald' %}bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300{% else %}bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300{% endif %}">
+                                        {{ budget.burn_label }}
+                                    </span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-gray-500 dark:text-gray-400"><span class="font-semibold text-gray-900 dark:text-gray-100 convertible-amount" data-usd="{{ budget.spent }}">{{ budget.spent }}</span> / <span class="convertible-amount" data-usd="{{ budget.limit_amount }}">{{ budget.limit_amount }}</span></span>
+                                    <form action="/budgets/delete/{{ budget.id }}" method="POST" onsubmit="return confirm('Remove budget for {{ budget.category }}?');">
+                                        <button type="submit" class="text-gray-400 hover:text-rose-600 text-xs transition">✕</button>
+                                    </form>
+                                </div>
                             </div>
                             <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
                                 <div class="h-full {% if budget.percentage > 90 %}bg-rose-500{% elif budget.percentage > 75 %}bg-amber-500{% else %}bg-emerald-500{% endif %}" style="width: {{ budget.display_percentage }}%"></div>
                             </div>
-                            {% if budget.percentage > 90 %}
-                            <p class="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">⚠️ Budget limit nearly reached or exceeded!</p>
-                            {% endif %}
+                            <div class="flex justify-between items-center text-[10px] text-gray-500 dark:text-gray-400">
+                                <span>Rem: <strong class="text-gray-700 dark:text-gray-300"><span class="convertible-amount" data-usd="{{ budget.remaining }}"></span></strong></span>
+                                <span>Safe daily pace: <strong class="text-emerald-600 dark:text-emerald-400"><span class="convertible-amount" data-usd="{{ budget.safe_daily_spend }}"></span>/day</strong></span>
+                            </div>
                         </div>
                         {% else %}
                         <p class="text-gray-400 text-sm">No monthly budgets configured yet.</p>
@@ -905,7 +1041,7 @@
 
                 <form action="/budgets/create" method="POST" class="pt-3 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                     <input type="text" name="category" placeholder="Category Name" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs" required>
-                    <input type="number" step="0.01" name="limit_amount" placeholder="Monthly Limit" data-placeholder-base="Monthly Limit" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs convertible-placeholder" required>
+                    <input type="number" step="any" name="limit_amount" placeholder="Monthly Limit" data-placeholder-base="Monthly Limit" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs convertible-placeholder" required>
                     <button type="submit" class="bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-lg transition">Set Budget</button>
                 </form>
             </div>
@@ -913,38 +1049,84 @@
 
         <!-- Savings Goals Tracker Section -->
         <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
-            <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">Savings Goals Tracker</h2>
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b dark:border-gray-800 pb-3">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">🎯</span>
+                        <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">Savings Goals Tracker</h2>
+                        <span class="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                            {{ goals|length }} Active Goals
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Track individual milestones to finish by this year, auto-funded via daily shift allocations.</p>
+                </div>
+                <button type="button" onclick="toggleAllocationModal()" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                    ⚙️ Configure Goal Split % &rarr;
+                </button>
+            </div>
+
+            <!-- Goals Grid -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {% for goal in goals %}
-                <div class="p-4 bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 rounded-xl space-y-3">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <div class="flex items-center space-x-2">
-                                <h3 class="font-bold text-gray-800 dark:text-gray-100">{{ goal.title }}</h3>
-                                <span class="bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2 py-0.5 rounded-full">
-                                    {{ goal.percentage }}%
-                                </span>
+                <div class="p-4 bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 rounded-xl space-y-3 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="font-bold text-gray-800 dark:text-gray-100 text-base">{{ goal.title }}</h3>
+                                    <span class="bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2 py-0.5 rounded-full">
+                                        {{ goal.percentage }}%
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                                    {% if goal.target_date %}
+                                    <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md {% if goal.is_overdue %}bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300{% elif goal.is_due_soon %}bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300{% else %}bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300{% endif %}">
+                                        📅 Due {{ goal.target_date }} {% if goal.days_left is not none %}({{ goal.days_left }}d left){% endif %}
+                                    </span>
+                                    {% endif %}
+                                    {% if goal.is_linked_to_split %}
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center space-x-1">
+                                        <span>⚡</span> <span>Auto-Split: {{ goal.linked_split_pct }}%</span>
+                                    </span>
+                                    {% else %}
+                                    <form action="/goals/link-split/{{ goal.id }}" method="POST" class="inline">
+                                        <input type="hidden" name="percentage" value="10.0">
+                                        <button type="submit" class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 transition">
+                                            + Link to Auto-Split
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                             </div>
-                            <p class="text-xs text-gray-400 dark:text-gray-400 mt-0.5">Target Date: {{ goal.target_date or 'No deadline' }}</p>
+                            <form action="/goals/delete/{{ goal.id }}" method="POST" onsubmit="return confirm('Delete goal and associated split rules?');">
+                                <button type="submit" class="text-rose-500 text-xs font-semibold hover:text-rose-700">Delete</button>
+                            </form>
                         </div>
-                        <form action="/goals/delete/{{ goal.id }}" method="POST" onsubmit="return confirm('Delete goal?');">
-                            <button type="submit" class="text-rose-500 text-xs font-semibold">Delete</button>
-                        </form>
-                    </div>
-                    <div class="space-y-1">
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Progress: <span class="font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-usd="{{ goal.current_amount }}">{{ goal.current_amount }}</span> / <span class="convertible-amount" data-usd="{{ goal.target_amount }}">{{ goal.target_amount }}</span></p>
-                        <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-full transition-all duration-500" style="width: {{ goal.display_percentage }}%"></div>
+
+                        <!-- Progress Bar & Remaining -->
+                        <div class="space-y-1.5 mt-3">
+                            <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                                <span>Saved: <strong class="text-emerald-600 dark:text-emerald-400 convertible-amount" data-usd="{{ goal.current_amount }}">{{ goal.current_amount }}</strong></span>
+                                <span>Target: <strong class="convertible-amount" data-usd="{{ goal.target_amount }}">{{ goal.target_amount }}</strong></span>
+                            </div>
+                            <div class="w-full bg-gray-200 dark:bg-gray-700 h-2.5 rounded-full overflow-hidden">
+                                <div class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-500" style="width: {{ goal.display_percentage }}%"></div>
+                            </div>
+                            <p class="text-[11px] text-gray-400">
+                                Remaining: <strong class="text-gray-700 dark:text-gray-200 convertible-amount" data-usd="{{ goal.remaining_amount }}">{{ goal.remaining_amount }}</strong>
+                            </p>
                         </div>
                     </div>
+
+                    <!-- Deposit / Withdraw Controls -->
                     <div class="grid grid-cols-2 gap-2 pt-2 border-t dark:border-gray-700">
                         <form action="/goals/fund/{{ goal.id }}" method="POST" class="flex flex-col space-y-1">
-                            <input type="number" step="0.01" name="amount" placeholder="Deposit" data-placeholder-base="Deposit" class="p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-placeholder" required>
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 rounded">Deposit</button>
+                            <input type="number" step="any" name="amount" placeholder="Deposit" data-placeholder-base="Deposit" class="p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-placeholder" required>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 rounded transition">Deposit</button>
                         </form>
                         <form action="/goals/withdraw/{{ goal.id }}" method="POST" class="flex flex-col space-y-1">
-                            <input type="number" step="0.01" name="amount" placeholder="Withdraw" data-placeholder-base="Withdraw" class="p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-placeholder" required>
-                            <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs py-1 rounded">Withdraw</button>
+                            <input type="number" step="any" name="amount" placeholder="Withdraw" data-placeholder-base="Withdraw" class="p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-placeholder" required>
+                            <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1 rounded transition">Withdraw</button>
                         </form>
                     </div>
                 </div>
@@ -953,11 +1135,20 @@
                 {% endfor %}
             </div>
 
-            <form action="/goals/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <input type="text" name="title" placeholder="Goal Title (e.g. Emergency Fund)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
-                <input type="number" step="0.01" name="target_amount" placeholder="Target Amount" data-placeholder-base="Target Amount" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
-                <input type="date" name="target_date" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
-                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 rounded-lg transition">Create Goal</button>
+            <!-- Create Goal Form with Auto-Split Bucket Option -->
+            <form action="/goals/create" method="POST" class="pt-4 border-t dark:border-gray-800 space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <input type="text" name="title" placeholder="Goal Title (e.g. New Motorbike Deposit, Land Deposit)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
+                    <input type="number" step="any" name="target_amount" placeholder="Target Amount" data-placeholder-base="Target Amount" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
+                    <input type="date" name="target_date" value="2026-12-31" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" title="Target completion date">
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 rounded-lg transition">Create Goal</button>
+                </div>
+                <div class="flex items-center space-x-2 text-xs text-gray-600 dark:text-gray-300">
+                    <input type="checkbox" id="add-to-split-checkbox" name="add_to_split" value="1" checked class="w-4 h-4 text-indigo-600 rounded">
+                    <label for="add-to-split-checkbox" class="cursor-pointer">
+                        ⚡ Automatically create a dedicated Waterfall Auto-Split destination bucket for this goal (Default: 10%)
+                    </label>
+                </div>
             </form>
         </div>
 
@@ -1051,12 +1242,19 @@
 
                     <!-- Repayment Form (if not settled) -->
                     {% if not debt.is_settled %}
-                    <form action="/debts/repay/{{ debt.id }}" method="POST" class="pt-2 border-t dark:border-gray-700 flex space-x-2">
-                        <input type="number" step="0.01" name="amount" placeholder="Payment Amount" data-placeholder-base="Payment" class="flex-1 p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded-lg text-xs convertible-placeholder" required>
-                        <button type="submit" class="bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition whitespace-nowrap">
-                            {% if debt.debt_type == 'I_OWE' %}Pay Down{% else %}Record Received{% endif %}
-                        </button>
-                    </form>
+                    <div class="space-y-2 pt-2 border-t dark:border-gray-700">
+                        <form action="/debts/repay/{{ debt.id }}" method="POST" class="flex space-x-2">
+                            <input type="number" step="any" name="amount" placeholder="Payment Amount" data-placeholder-base="Payment" class="flex-1 p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded-lg text-xs convertible-placeholder" required>
+                            <button type="submit" class="bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition whitespace-nowrap">
+                                {% if debt.debt_type == 'I_OWE' %}Pay Down{% else %}Record Received{% endif %}
+                            </button>
+                        </form>
+                        {% if debt.whatsapp_reminder_url %}
+                        <a href="{{ debt.whatsapp_reminder_url }}" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition flex items-center justify-center space-x-1.5 shadow-sm">
+                            <span>💬 Send WhatsApp Reminder</span>
+                        </a>
+                        {% endif %}
+                    </div>
                     {% else %}
                     <div class="pt-2 border-t dark:border-gray-700 text-center">
                         <span class="text-xs text-emerald-600 dark:text-emerald-400 font-bold">✓ Fully Settled</span>
@@ -1085,7 +1283,7 @@
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="0.01" name="total_amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs convertible-placeholder" required>
+                        <input type="number" step="any" name="total_amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-xs convertible-placeholder" required>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date & Time Issued</label>
@@ -1163,6 +1361,26 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- ⚙️ Data Management & Danger Zone -->
+        <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="space-y-1 text-center md:text-left">
+                <h3 class="text-base font-bold text-gray-800 dark:text-gray-100 flex items-center justify-center md:justify-start gap-2">
+                    <span>⚙️ Database & Data Management</span>
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Manage real financial data. You can wipe all demo records anytime to restart with a clean slate.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <a href="/finance/export/csv" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+                    <span>📥 Backup CSV</span>
+                </a>
+                <form action="/system/reset-data" method="POST" onsubmit="return confirm('⚠️ WARNING: This will permanently wipe ALL transactions, accounts, debts, budgets, bills, and rider logs so you can start completely clean. Are you sure you want to proceed?');">
+                    <button type="submit" class="px-4 py-2 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+                        <span>🗑️ Reset & Clear All Data</span>
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </body>

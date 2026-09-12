@@ -4,12 +4,17 @@ __pycache__/
 *$py.class
 venv/
 .env
+*.db
+*.sqlite
+*.sqlite3
 
 # Node & Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+dist/
+.wrangler/
 
 # Gradle & Android build artifacts
 .gradle/

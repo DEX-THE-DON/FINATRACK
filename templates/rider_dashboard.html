@@ -42,6 +42,50 @@
             renderCharts();
         }
 
+        function setShiftPreset(start, end) {
+            const sEl = document.getElementById('input_start_time');
+            const eEl = document.getElementById('input_end_time');
+            if (sEl && eEl) {
+                sEl.value = start;
+                eEl.value = end;
+                calcShiftDuration();
+            }
+        }
+
+        function calcShiftDuration() {
+            const sEl = document.getElementById('input_start_time');
+            const eEl = document.getElementById('input_end_time');
+            if (!sEl || !eEl || !sEl.value || !eEl.value) return;
+            const [sh, sm] = sEl.value.split(':').map(Number);
+            const [eh, em] = eEl.value.split(':').map(Number);
+            let sMin = sh * 60 + (sm || 0);
+            let eMin = eh * 60 + (em || 0);
+            if (eMin <= sMin) eMin += 24 * 60; // handles overnight shifts (e.g. 20:00 to 04:00)
+            const diffHours = (eMin - sMin) / 60.0;
+            const hrsEl = document.getElementById('input_shift_hours');
+            if (hrsEl) hrsEl.value = diffHours.toFixed(1);
+            const badgeEl = document.getElementById('shift-duration-badge');
+            if (badgeEl) {
+                badgeEl.innerText = '⏱️ ' + diffHours.toFixed(1) + ' hrs shift';
+            }
+        }
+
+        function switchTimeTab(tabKey) {
+            ['windows', 'days', 'weekly', 'monthly'].forEach(k => {
+                const btn = document.getElementById('btn-time-tab-' + k);
+                const panel = document.getElementById('panel-time-tab-' + k);
+                if (btn && panel) {
+                    if (k === tabKey) {
+                        btn.className = 'px-3.5 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-sm transition';
+                        panel.classList.remove('hidden');
+                    } else {
+                        btn.className = 'px-3.5 py-1.5 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold text-xs transition';
+                        panel.classList.add('hidden');
+                    }
+                }
+            });
+        }
+
         let riderAllocationRules = {{ allocation_rules | tojson }};
 
         function updateRiderSplit() {
@@ -738,6 +782,9 @@
                 <button onclick="togglePdfExportModal()" class="flex items-center space-x-1.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition shadow-sm">
                     <span>📄 Export PDF</span>
                 </button>
+                <a href="/rider/export/csv" class="flex items-center space-x-1.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border dark:border-gray-600 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition shadow-sm" title="Export all shift logs to CSV">
+                    <span>📥 Export CSV</span>
+                </a>
                 <button onclick="toggleDarkMode()" class="p-2.5 rounded-xl border dark:border-gray-700 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 transition text-sm">🌓</button>
                 <div class="flex items-center space-x-2 bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded-xl border dark:border-gray-700">
                     <span class="text-xs font-semibold">Currency:</span>
@@ -1440,17 +1487,47 @@
                 <label class="block text-xs font-medium text-gray-500 mb-1">Trips Completed</label>
                 <input type="number" name="trips_completed" value="0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
             </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Shift Hours Worked</label>
-                <input type="number" step="0.5" name="shift_hours" value="8.0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm" required>
+            <!-- Shift Working Hours (Start & End Time) -->
+            <div class="sm:col-span-2 lg:col-span-2 p-3.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800/60 space-y-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center space-x-1.5">
+                        <span>⏰</span>
+                        <span>Shift Working Hours (Start – End)</span>
+                    </label>
+                    <span id="shift-duration-badge" class="text-[10px] font-black bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 px-2 py-0.5 rounded-full">
+                        ⏱️ 11.0 hrs shift
+                    </span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[11px] font-medium text-gray-600 dark:text-gray-300 mb-0.5">Start Time</label>
+                        <input type="time" name="start_time" id="input_start_time" value="11:00" onchange="calcShiftDuration()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-gray-600 dark:text-gray-300 mb-0.5">End Time</label>
+                        <input type="time" name="end_time" id="input_end_time" value="22:00" onchange="calcShiftDuration()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold">
+                    </div>
+                    <div class="col-span-2 sm:col-span-1">
+                        <label class="block text-[11px] font-medium text-gray-600 dark:text-gray-300 mb-0.5">Total Hours</label>
+                        <input type="number" step="0.5" name="shift_hours" id="input_shift_hours" value="11.0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>
+                    </div>
+                </div>
+                <!-- Quick Shift Presets -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold">Quick Presets:</span>
+                    <button type="button" onclick="setShiftPreset('11:00', '22:00')" class="text-[10px] bg-white dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-700 px-2 py-0.5 rounded-lg font-semibold transition">☀️ 11am – 10pm (11h)</button>
+                    <button type="button" onclick="setShiftPreset('06:00', '14:00')" class="text-[10px] bg-white dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-700 px-2 py-0.5 rounded-lg font-semibold transition">🌅 6am – 2pm (8h)</button>
+                    <button type="button" onclick="setShiftPreset('14:00', '23:00')" class="text-[10px] bg-white dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-700 px-2 py-0.5 rounded-lg font-semibold transition">🌆 2pm – 11pm (9h)</button>
+                    <button type="button" onclick="setShiftPreset('20:00', '04:00')" class="text-[10px] bg-white dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-700 px-2 py-0.5 rounded-lg font-semibold transition">🌙 8pm – 4am (8h)</button>
+                </div>
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Distance Covered (Km)</label>
-                <input type="number" step="0.1" name="kilometers" value="0.0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+                <input type="number" step="any" name="kilometers" value="0.0" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Total Earned (<span class="curr-symbol-label">Ksh</span>)</label>
-                <input type="number" step="0.01" id="input_total_earned" name="total_earned" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300" required>
+                <input type="number" step="any" id="input_total_earned" name="total_earned" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300" required>
             </div>
             <div>
                 <label class="block text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Petrol Station Brand</label>
@@ -1466,27 +1543,27 @@
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Fuel Pumped (Litres)</label>
-                <input type="number" step="0.01" id="input_fuel_litres" name="fuel_litres" value="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
+                <input type="number" step="any" id="input_fuel_litres" name="fuel_litres" value="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Fuel Cost (<span class="curr-symbol-label">Ksh</span>)</label>
-                <input type="number" step="0.01" id="input_fuel_cost" name="fuel_cost" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
+                <input type="number" step="any" id="input_fuel_cost" name="fuel_cost" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
             </div>
             <div>
                 <label class="block text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">Food & Lunch (<span class="curr-symbol-label">Ksh</span>)</label>
-                <input type="number" step="0.01" id="input_food_spent" name="food_spent" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
+                <input type="number" step="any" id="input_food_spent" name="food_spent" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Maintenance / Repair (<span class="curr-symbol-label">Ksh</span>)</label>
-                <input type="number" step="0.01" id="input_maintenance_cost" name="maintenance_cost" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
+                <input type="number" step="any" id="input_maintenance_cost" name="maintenance_cost" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Airtime / Bundles (<span class="curr-symbol-label">Ksh</span>)</label>
-                <input type="number" step="0.01" id="input_airtime_spent" name="airtime_spent" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
+                <input type="number" step="any" id="input_airtime_spent" name="airtime_spent" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Misc Expenses (<span class="curr-symbol-label">Ksh</span>)</label>
-                <input type="number" step="0.01" id="input_misc_expenses" name="misc_expenses" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
+                <input type="number" step="any" id="input_misc_expenses" name="misc_expenses" placeholder="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-700 rounded-lg text-sm transition duration-300">
             </div>
 
             <!-- Connected Finance Accounts Selection -->
@@ -1550,6 +1627,224 @@
         </div>
         {% endif %}
 
+        <!-- Shift & Time Intelligence (Peak Hours, Best Days, Weekly & Monthly Trends) -->
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-5">
+            <div class="flex flex-col md:flex-row justify-between md:items-center gap-3">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">⏰</span>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Shift & Time Intelligence</h2>
+                        <span class="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 font-bold px-2 py-0.5 rounded-full">Yield Analytics</span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Analyze your peak earning shift windows (e.g. 11am – 10pm), most lucrative days of the week, and week-over-week trends.</p>
+                </div>
+
+                <!-- Tab Buttons -->
+                <div class="flex flex-wrap items-center bg-gray-100 dark:bg-gray-700/60 p-1 rounded-2xl text-xs font-semibold self-start md:self-auto gap-1">
+                    <button type="button" onclick="switchTimeTab('windows')" id="btn-time-tab-windows" class="px-3.5 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-sm transition">🕒 Peak Windows</button>
+                    <button type="button" onclick="switchTimeTab('days')" id="btn-time-tab-days" class="px-3.5 py-1.5 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold text-xs transition">📅 Best Days</button>
+                    <button type="button" onclick="switchTimeTab('weekly')" id="btn-time-tab-weekly" class="px-3.5 py-1.5 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold text-xs transition">🗓️ Weekly Breakdown</button>
+                    <button type="button" onclick="switchTimeTab('monthly')" id="btn-time-tab-monthly" class="px-3.5 py-1.5 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold text-xs transition">📈 Monthly Trends</button>
+                </div>
+            </div>
+
+            <!-- 4 Quick KPI Highlight Cards -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/5 dark:from-blue-900/30 dark:to-indigo-900/10 border border-blue-200/60 dark:border-blue-800/40">
+                    <span class="text-xs text-blue-600 dark:text-blue-400 font-semibold block">Average Gross Hourly</span>
+                    <div class="text-lg font-black text-gray-900 dark:text-white mt-1">
+                        <span class="convertible-amount" data-usd="{{ time_intelligence.overall_avg_gross_hourly }}"></span> <span class="text-xs font-medium text-gray-500">/ hr</span>
+                    </div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 block mt-0.5">Across {{ time_intelligence.total_hours_all }} total logged hours</span>
+                </div>
+
+                <div class="p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-teal-500/5 dark:from-emerald-900/30 dark:to-teal-900/10 border border-emerald-200/60 dark:border-emerald-800/40">
+                    <span class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold block">Net Hourly Take-Home</span>
+                    <div class="text-lg font-black text-gray-900 dark:text-white mt-1">
+                        <span class="convertible-amount" data-usd="{{ time_intelligence.overall_avg_net_hourly }}"></span> <span class="text-xs font-medium text-gray-500">/ hr</span>
+                    </div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 block mt-0.5">After fuel & shift expenses</span>
+                </div>
+
+                <div class="p-4 rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-500/5 dark:from-amber-900/30 dark:to-orange-900/10 border border-amber-200/60 dark:border-amber-800/40">
+                    <span class="text-xs text-amber-600 dark:text-amber-400 font-semibold block">🏆 Best Day of Week</span>
+                    <div class="text-lg font-black text-gray-900 dark:text-white mt-1 truncate">
+                        {% if time_intelligence.best_day %}
+                        {{ time_intelligence.best_day.day_name }}
+                        {% else %}
+                        Friday
+                        {% endif %}
+                    </div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 block mt-0.5">
+                        {% if time_intelligence.best_day %}
+                        Avg <span class="convertible-amount" data-usd="{{ time_intelligence.best_day.avg_daily_earned }}"></span> / shift
+                        {% else %}
+                        Highest average daily yield
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div class="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-fuchsia-500/5 dark:from-purple-900/30 dark:to-fuchsia-900/10 border border-purple-200/60 dark:border-purple-800/40">
+                    <span class="text-xs text-purple-600 dark:text-purple-400 font-semibold block">🔥 Peak Shift Window</span>
+                    <div class="text-sm font-black text-gray-900 dark:text-white mt-1.5 truncate">
+                        {% if time_intelligence.best_time_window %}
+                        {{ time_intelligence.best_time_window.name }}
+                        {% else %}
+                        Midday (11:00 – 16:00)
+                        {% endif %}
+                    </div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 block mt-0.5">
+                        {% if time_intelligence.best_time_window %}
+                        ⚡ <span class="convertible-amount" data-usd="{{ time_intelligence.best_time_window.hourly_gross }}"></span> / hr
+                        {% else %}
+                        Top earning rate per hour
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Tab 1: Peak Time Windows -->
+            <div id="panel-time-tab-windows" class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {% for tw in time_intelligence.time_window_analysis %}
+                    <div class="p-4 rounded-xl border dark:border-gray-700 {% if loop.first and tw.shifts_count > 0 %}bg-blue-50/60 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 ring-1 ring-blue-400/40{% else %}bg-gray-50/70 dark:bg-gray-700/40{% endif %} space-y-3">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-sm text-gray-900 dark:text-white">{{ tw.name }}</h3>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400">{{ tw.desc }}</p>
+                            </div>
+                            <span class="text-xs font-black px-2 py-0.5 rounded-full {% if loop.first and tw.shifts_count > 0 %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200{% endif %}">
+                                {{ tw.share_pct }}%
+                            </span>
+                        </div>
+
+                        <div class="space-y-1.5 pt-1 border-t dark:border-gray-600/80">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-gray-500 dark:text-gray-400">Gross Hourly:</span>
+                                <strong class="text-emerald-600 dark:text-emerald-400">+<span class="convertible-amount" data-usd="{{ tw.hourly_gross }}"></span>/hr</strong>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-gray-500 dark:text-gray-400">Net Take-Home:</span>
+                                <strong class="text-blue-600 dark:text-blue-400"><span class="convertible-amount" data-usd="{{ tw.hourly_net }}"></span>/hr</strong>
+                            </div>
+                            <div class="flex justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                                <span>Total Earned:</span>
+                                <strong class="text-gray-800 dark:text-gray-200"><span class="convertible-amount" data-usd="{{ tw.total_earned }}"></span></strong>
+                            </div>
+                            <div class="flex justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                                <span>Shifts Logged:</span>
+                                <span class="font-semibold text-gray-700 dark:text-gray-300">{{ tw.shifts_count }} shifts ({{ tw.total_hours }}h)</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Tab 2: Best Days of the Week -->
+            <div id="panel-time-tab-days" class="hidden space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5">
+                    {% for day in time_intelligence.day_analysis %}
+                    <div class="p-3 rounded-xl border dark:border-gray-700 {% if day.is_best_day %}bg-amber-50/80 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 ring-2 ring-amber-400/50{% else %}bg-gray-50/70 dark:bg-gray-700/40{% endif %} flex flex-col justify-between space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="font-black text-sm text-gray-900 dark:text-white">{{ day.day_short }}</span>
+                            {% if day.is_best_day %}
+                            <span class="text-[10px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded-full">🏆 Top</span>
+                            {% else %}
+                            <span class="text-[10px] text-gray-400">{{ day.shifts_count }} shifts</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="space-y-1 text-xs">
+                            <div class="text-gray-500 text-[10px]">Avg Per Shift:</div>
+                            <div class="font-black text-sm text-emerald-600 dark:text-emerald-400">
+                                {% if day.shifts_count > 0 %}
+                                <span class="convertible-amount" data-usd="{{ day.avg_daily_earned }}"></span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </div>
+                            <div class="text-[10px] text-gray-500 dark:text-gray-400">
+                                Rate: <strong class="text-blue-600 dark:text-blue-400">{% if day.shifts_count > 0 %}<span class="convertible-amount" data-usd="{{ day.avg_hourly_gross }}"></span>/hr{% else %}-{% endif %}</strong>
+                            </div>
+                            <div class="text-[9px] text-gray-400 truncate pt-1 border-t dark:border-gray-600">
+                                Best: <span class="text-gray-600 dark:text-gray-300 font-semibold">{{ day.best_time_window }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Tab 3: Weekly Breakdown -->
+            <div id="panel-time-tab-weekly" class="hidden overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/70 text-gray-500 dark:text-gray-300 uppercase font-semibold">
+                            <th class="p-3">Week Period</th>
+                            <th class="p-3">Shifts & Hours</th>
+                            <th class="p-3">Gross Earned</th>
+                            <th class="p-3">Fuel & Upkeep</th>
+                            <th class="p-3">Net Take-Home</th>
+                            <th class="p-3">Avg Rate / Hr</th>
+                            <th class="p-3">Top Day of Week</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y dark:divide-gray-700">
+                        {% for w in time_intelligence.weekly_breakdown %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td class="p-3 font-bold text-gray-900 dark:text-white">{{ w.week_label }}</td>
+                            <td class="p-3">{{ w.shifts_count }} shifts ({{ w.total_hours }}h)</td>
+                            <td class="p-3 font-bold text-emerald-600">+<span class="convertible-amount" data-usd="{{ w.total_earned }}"></span></td>
+                            <td class="p-3 text-rose-500">-<span class="convertible-amount" data-usd="{{ w.total_upkeep }}"></span></td>
+                            <td class="p-3 font-bold text-blue-600 dark:text-blue-400"><span class="convertible-amount" data-usd="{{ w.net_saved }}"></span></td>
+                            <td class="p-3 font-black text-indigo-600 dark:text-indigo-400">⚡ <span class="convertible-amount" data-usd="{{ w.hourly_gross }}"></span>/hr</td>
+                            <td class="p-3 text-gray-700 dark:text-gray-300 font-semibold">{{ w.best_day_str }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="p-4 text-center text-gray-400">No weekly history recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Tab 4: Monthly Trends -->
+            <div id="panel-time-tab-monthly" class="hidden overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/70 text-gray-500 dark:text-gray-300 uppercase font-semibold">
+                            <th class="p-3">Month</th>
+                            <th class="p-3">Shifts & Total Hours</th>
+                            <th class="p-3">Total Gross</th>
+                            <th class="p-3">Operating Upkeep</th>
+                            <th class="p-3">Net Remittance</th>
+                            <th class="p-3">Hourly Yield</th>
+                            <th class="p-3">Top Day</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y dark:divide-gray-700">
+                        {% for m in time_intelligence.monthly_breakdown %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td class="p-3 font-bold text-gray-900 dark:text-white">{{ m.month_label }}</td>
+                            <td class="p-3">{{ m.shifts_count }} shifts ({{ m.total_hours }}h)</td>
+                            <td class="p-3 font-bold text-emerald-600">+<span class="convertible-amount" data-usd="{{ m.total_earned }}"></span></td>
+                            <td class="p-3 text-rose-500">-<span class="convertible-amount" data-usd="{{ m.total_upkeep }}"></span></td>
+                            <td class="p-3 font-bold text-blue-600 dark:text-blue-400"><span class="convertible-amount" data-usd="{{ m.net_saved }}"></span></td>
+                            <td class="p-3 font-black text-indigo-600 dark:text-indigo-400">⚡ <span class="convertible-amount" data-usd="{{ m.hourly_gross }}"></span>/hr</td>
+                            <td class="p-3 text-gray-700 dark:text-gray-300 font-semibold">{{ m.top_day }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="p-4 text-center text-gray-400">No monthly history recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Visual Trend Charts & Analytics (Chart.js) -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left 2 Cols: Cash Flow & Upkeep Trend -->
@@ -1599,7 +1894,7 @@
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-300 uppercase">
-                            <th class="p-4">Date</th>
+                            <th class="p-4">Date & Shift Hours</th>
                             <th class="p-4">Trips</th>
                             <th class="p-4">Distance</th>
                             <th class="p-4">Efficiency & Station</th>
@@ -1615,7 +1910,15 @@
                     <tbody class="divide-y dark:divide-gray-700 text-sm">
                         {% for log in logs %}
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                            <td class="p-4">{{ log.date }}</td>
+                            <td class="p-4">
+                                <div class="font-bold text-gray-900 dark:text-white">{{ log.date }}</div>
+                                <div class="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
+                                    ⏰ {{ log.formatted_shift_time }}
+                                </div>
+                                <div class="text-[10px] text-gray-400">
+                                    {{ log.day_name }} • <span class="font-bold text-emerald-600 dark:text-emerald-400">⚡ <span class="convertible-amount" data-usd="{{ log.hourly_gross }}"></span>/hr</span>
+                                </div>
+                            </td>
                             <td class="p-4 font-semibold">{{ log.trips_completed }}</td>
                             <td class="p-4">{{ log.kilometers }} km</td>
                             <td class="p-4">

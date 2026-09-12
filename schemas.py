@@ -116,6 +116,8 @@ class RiderLogBase(BaseModel):
   fuel_cost: float = 0.00
   fuel_station: Optional[str] = None
   fuel_litres: Optional[float] = None
+  start_time: Optional[str] = None
+  end_time: Optional[str] = None
   shift_hours: float = 8.0
   airtime_spent: float = 0.00
   food_spent: float = 0.00

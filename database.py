@@ -9,7 +9,17 @@ SQLALCHEMY_DATABASE_URL = os.getenv(
     "postgresql://postgres:DEX@localhost:5432/finatrack_db"
 )
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+try:
+  if "sqlite" in SQLALCHEMY_DATABASE_URL:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+  else:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    with engine.connect() as conn:
+      pass
+except Exception:
+  SQLALCHEMY_DATABASE_URL = "sqlite:///./finatrack.db"
+  engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

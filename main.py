@@ -1,112 +1,51 @@
+import calendar
+import csv
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Optional
-from database import engine, get_db
-import models
+import io
 import re
-import requests
+from typing import Optional
 import urllib.parse
-import weasyprint
+from database import engine, get_db
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import models
+import requests
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+import weasyprint
 
 # Create database tables & auto-migrate new columns
 models.Base.metadata.create_all(bind=engine)
 try:
   with engine.connect() as conn:
-    conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS account_number VARCHAR;"))
-    conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS interest_rate_p_a FLOAT DEFAULT 0.0;"))
-    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
-    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS fuel_station VARCHAR;"))
-    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS fuel_litres FLOAT;"))
-    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS shift_hours FLOAT DEFAULT 8.0;"))
-    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS earnings_account_id INTEGER;"))
-    conn.execute(text("ALTER TABLE rider_logs ADD COLUMN IF NOT EXISTS expense_account_id INTEGER;"))
-    conn.execute(text("ALTER TABLE maintenance_schedules ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
-    conn.execute(text("ALTER TABLE compliance_deadlines ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
-    conn.execute(text("ALTER TABLE bike_financings ADD COLUMN IF NOT EXISTS bike_id INTEGER;"))
-    conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS rider_log_id INTEGER;"))
-    conn.commit()
+    alter_cols = [
+        ("accounts", "account_number", "VARCHAR"),
+        ("accounts", "interest_rate_p_a", "FLOAT DEFAULT 0.0"),
+        ("rider_logs", "bike_id", "INTEGER"),
+        ("rider_logs", "fuel_station", "VARCHAR"),
+        ("rider_logs", "fuel_litres", "FLOAT"),
+        ("rider_logs", "shift_hours", "FLOAT DEFAULT 8.0"),
+        ("rider_logs", "start_time", "VARCHAR(20)"),
+        ("rider_logs", "end_time", "VARCHAR(20)"),
+        ("rider_logs", "earnings_account_id", "INTEGER"),
+        ("rider_logs", "expense_account_id", "INTEGER"),
+        ("maintenance_schedules", "bike_id", "INTEGER"),
+        ("compliance_deadlines", "bike_id", "INTEGER"),
+        ("bike_financings", "bike_id", "INTEGER"),
+        ("transactions", "rider_log_id", "INTEGER"),
+    ]
+    for tbl, col, ctype in alter_cols:
+      try:
+        conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {col} {ctype};"))
+        conn.commit()
+      except Exception:
+        pass
 
-    # Seed default bike if empty
-    res_bike = conn.execute(text("SELECT COUNT(*) FROM bikes;")).scalar()
-    if res_bike == 0:
-      conn.execute(text("""
-        INSERT INTO bikes (plate_number, model_name, owner_name, daily_target, is_active)
-        VALUES ('KMDN 456Y', 'Bajaj Boxer 150 UG', 'Dennis', 2500.0, 1);
-      """))
-      conn.commit()
-
-    # Seed default recurring bills if empty
-    res_bill = conn.execute(text("SELECT COUNT(*) FROM bills;")).scalar()
-    if res_bill == 0:
-      conn.execute(text("""
-        INSERT INTO bills (title, category, amount, due_day, is_recurring, notes)
-        VALUES 
-        ('KPLC Prepaid Electricity Tokens', 'KPLC', 1500.0, 5, 1, 'Meter # 142389102'),
-        ('Nairobi Water & Sewerage', 'WATER', 650.0, 10, 1, 'Acc # 00192837'),
-        ('Home Wi-Fi Fiber (Safaricom / Zuku)', 'INTERNET', 2999.0, 15, 1, 'Monthly unlimited internet');
-      """))
-      conn.commit()
-
-    # Seed Ziidi MMF (Safaricom) account if not present
-    res_ziidi = conn.execute(text("SELECT COUNT(*) FROM accounts WHERE name ILIKE '%Ziidi%';")).scalar()
-    if res_ziidi == 0:
-      conn.execute(text("""
-        INSERT INTO accounts (name, account_number, account_type, balance, interest_rate_p_a)
-        VALUES ('Ziidi MMF (Safaricom)', 'M-PESA-GROW', 'MMF', 5000.0, 13.5);
-      """))
-      conn.commit()
-
-    # Seed default maintenance schedule if empty
-    res_maint = conn.execute(text("SELECT COUNT(*) FROM maintenance_schedules;")).scalar()
-    if res_maint == 0:
-      t_now = date.today().isoformat()
-      next_d = (date.today() + timedelta(weeks=3)).isoformat()
-      conn.execute(text(f"""
-        INSERT INTO maintenance_schedules (service_type, interval_weeks, last_service_date, next_due_date, last_brake_pad_date, notes)
-        VALUES ('Oil Change, Chain Lube & Brake Pad Check', 3, '{t_now}', '{next_d}', '{t_now}', 'Standard 3-4 week preventive service bundle');
-      """))
-      conn.commit()
-
-    # Seed default compliance deadlines if empty
-    res_comp = conn.execute(text("SELECT COUNT(*) FROM compliance_deadlines;")).scalar()
-    if res_comp == 0:
-      t_now = date.today().isoformat()
-      dl_exp = (date.today() + timedelta(days=365)).isoformat()
-      ins_exp = (date.today() + timedelta(days=180)).isoformat()
-      conn.execute(text(f"""
-        INSERT INTO compliance_deadlines (title, interval_months, last_renewed_date, expiry_date, notes)
-        VALUES 
-        ('Driving License (DL)', 12, '{t_now}', '{dl_exp}', 'Class A2 Boda Boda License'),
-        ('Motorbike Commercial Insurance', 6, '{t_now}', '{ins_exp}', 'PSV Passenger / Boda Insurance Cover');
-      """))
-      conn.commit()
-
-    # Seed default allocation rules if empty
-    res_alloc = conn.execute(text("SELECT COUNT(*) FROM allocation_rules;")).scalar()
-    if res_alloc == 0:
-      ziidi_id = conn.execute(text("SELECT id FROM accounts WHERE name ILIKE '%Ziidi%' LIMIT 1;")).scalar() or conn.execute(text("SELECT id FROM accounts WHERE account_type = 'MMF' LIMIT 1;")).scalar()
-      sacco_id = conn.execute(text("SELECT id FROM accounts WHERE account_type = 'SAVINGS' LIMIT 1;")).scalar()
-      goal_id = conn.execute(text("SELECT id FROM goals LIMIT 1;")).scalar()
-      mpesa_id = conn.execute(text("SELECT id FROM accounts WHERE account_type = 'MOBILE' LIMIT 1;")).scalar()
-
-      conn.execute(text(f"""
-        INSERT INTO allocation_rules (bucket_name, target_type, target_id, percentage, icon, is_active)
-        VALUES 
-        ('Ziidi MMF (Safaricom)', 'ACCOUNT', {ziidi_id if ziidi_id else 'NULL'}, 20.0, '📈', 1),
-        ('Lock / Sacco Savings', 'ACCOUNT', {sacco_id if sacco_id else 'NULL'}, 20.0, '🔒', 1),
-        ('Savings Goals', 'GOAL', {goal_id if goal_id else 'NULL'}, 15.0, '🎯', 1),
-        ('Recurring Bills Reserve', 'ACCOUNT', {mpesa_id if mpesa_id else 'NULL'}, 15.0, '⚡', 1),
-        ('Daily Living Expenses', 'CASH', NULL, 30.0, '💵', 1);
-      """))
-      conn.commit()
 except Exception as err:
-  print(f"Schema migration/seed note: {err}")
+  print(f"Schema migration note: {err}")
 
 app = FastAPI(title="Finatrack")
 
@@ -162,26 +101,59 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
   budget_model = getattr(models, "Budget", None)
   budgets = db.query(budget_model).all() if budget_model else []
 
-  # Calculate progress percentage for each goal
+  # Calculate progress percentage and deadline for each goal
+  raw_alloc_rules = db.query(models.AllocationRule).all() if hasattr(models, "AllocationRule") else []
+  goal_to_rule_map = {r.target_id: r for r in raw_alloc_rules if r.target_type == "GOAL" and r.target_id}
+
   goals = []
   for g in raw_goals:
     current = float(getattr(g, "current_amount", 0) or 0)
     target = float(getattr(g, "target_amount", 1) or 1)
     percentage = round((current / target) * 100, 1) if target > 0 else 0.0
     display_percentage = min(percentage, 100.0)
+    remaining_amt = max(0.0, target - current)
+
+    t_date = getattr(g, "target_date", None)
+    days_left = None
+    is_due_soon = False
+    is_overdue = False
+    if t_date:
+      if isinstance(t_date, str):
+        try:
+          t_date = date.fromisoformat(t_date)
+        except Exception:
+          pass
+      if isinstance(t_date, date):
+        days_left = (t_date - date.today()).days
+        is_due_soon = 0 <= days_left <= 30
+        is_overdue = days_left < 0
+
+    linked_rule = goal_to_rule_map.get(g.id)
 
     goals.append({
         "id": g.id,
         "title": getattr(g, "title", "Goal"),
         "target_amount": target,
         "current_amount": current,
-        "target_date": getattr(g, "target_date", None),
+        "remaining_amount": remaining_amt,
+        "target_date": t_date,
+        "days_left": days_left,
+        "is_due_soon": is_due_soon,
+        "is_overdue": is_overdue,
         "percentage": percentage,
         "display_percentage": display_percentage,
+        "is_linked_to_split": linked_rule is not None and linked_rule.is_active == 1,
+        "linked_split_pct": float(linked_rule.percentage) if linked_rule else 0.0,
     })
 
   # Calculate budget progress and monthly income/expense
-  current_month = date.today().strftime("%Y-%m")
+  today_dt = date.today()
+  current_month = today_dt.strftime("%Y-%m")
+  _, days_in_current_month = calendar.monthrange(today_dt.year, today_dt.month)
+  current_day_num = today_dt.day
+  days_remaining_in_month = max(1, days_in_current_month - current_day_num)
+  expected_pace_pct = (current_day_num / days_in_current_month) * 100.0
+
   budget_data = []
   for b in budgets:
     cat = getattr(b, "category", "")
@@ -195,13 +167,33 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
     limit = float(getattr(b, "limit_amount", 1) or 1)
     percentage = round((spent / limit) * 100, 1) if limit > 0 else 0.0
     display_percentage = min(percentage, 100.0)
+    rem_amt = max(0.0, limit - spent)
+    safe_daily_spend = rem_amt / days_remaining_in_month
+
+    if percentage >= 100.0:
+      burn_label = "🚨 Budget Exceeded"
+      burn_badge = "rose"
+    elif percentage > (expected_pace_pct + 15.0):
+      burn_label = "⚡ Burning Fast"
+      burn_badge = "amber"
+    elif percentage > 0:
+      burn_label = "🟢 On Track"
+      burn_badge = "emerald"
+    else:
+      burn_label = "✨ No Spend Yet"
+      burn_badge = "indigo"
+
     budget_data.append({
         "id": b.id,
         "category": cat,
         "limit_amount": limit,
         "spent": spent,
+        "remaining": rem_amt,
+        "safe_daily_spend": safe_daily_spend,
         "percentage": percentage,
         "display_percentage": display_percentage,
+        "burn_label": burn_label,
+        "burn_badge": burn_badge,
     })
 
   monthly_income = sum(
@@ -315,6 +307,12 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
         days_left = (due_dt - now).days
         timeline_status_label = f"Due in {days_left}d"
 
+    wa_reminder_url = None
+    if d.debt_type == "OWED_TO_ME" and not is_settled:
+      rem_kes = int(remaining * get_live_rate())
+      wa_msg = f"Hi {d.person_name}, gentle reminder regarding the balance of Ksh {rem_kes:,} due on {due_dt.strftime('%d %b %Y')}. You can send via M-Pesa. Thank you!"
+      wa_reminder_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(wa_msg)}"
+
     processed_debts.append({
         "id": d.id,
         "person_name": d.person_name,
@@ -329,6 +327,7 @@ def finance_dashboard(request: Request, db: Session = Depends(get_db)):
         "status": computed_status,
         "timeline_status_label": timeline_status_label,
         "description": d.description or "",
+        "whatsapp_reminder_url": wa_reminder_url,
         "is_overdue": is_overdue,
         "is_due_soon": is_due_soon,
         "is_settled": is_settled,
@@ -587,7 +586,7 @@ def create_account(
     )
     db.add(acc)
     db.commit()
-  return RedirectResponse(url="/", status_code=303)
+  return RedirectResponse(url="/?toast=Account+created+successfully", status_code=303)
 
 
 @app.post("/accounts/update/{acc_id}")
@@ -615,7 +614,7 @@ def update_account(
     acc.interest_rate_p_a = float(interest_rate_p_a or 0.0)
     acc.balance = final_balance
     db.commit()
-  return RedirectResponse(url="/", status_code=303)
+  return RedirectResponse(url="/?toast=Account+updated+successfully", status_code=303)
 
 
 @app.post("/accounts/interest/log/{acc_id}")
@@ -728,9 +727,37 @@ def delete_account(acc_id: int, db: Session = Depends(get_db)):
   account_model = getattr(models, "FinanceAccount", getattr(models, "Account", None))
   acc = db.query(account_model).filter(account_model.id == acc_id).first() if account_model else None
   if acc:
+    if hasattr(models, "AllocationRule"):
+      rules = db.query(models.AllocationRule).filter(
+          models.AllocationRule.target_id == acc_id,
+          models.AllocationRule.target_type == "ACCOUNT"
+      ).all()
+      for r in rules:
+        r.target_id = None
+    if hasattr(models, "Bill"):
+      bills = db.query(models.Bill).filter(models.Bill.payment_account_id == acc_id).all()
+      for b in bills:
+        b.payment_account_id = None
     db.delete(acc)
     db.commit()
-  return RedirectResponse(url="/", status_code=303)
+  return RedirectResponse(url="/?toast=Account+deleted+successfully", status_code=303)
+
+
+@app.post("/system/reset-data")
+def reset_all_data(db: Session = Depends(get_db)):
+  for model_name in [
+      "Transaction", "RiderLog", "Debt", "Budget", "Goal", "Bill",
+      "MaintenanceSchedule", "ComplianceDeadline", "BikeFinancing",
+      "AllocationRule", "Bike", "Account"
+  ]:
+    m = getattr(models, model_name, None)
+    if m:
+      try:
+        db.query(m).delete()
+      except Exception:
+        pass
+  db.commit()
+  return RedirectResponse(url="/?toast=All+demo+data+cleared!+Ready+for+real+data.", status_code=303)
 
 
 @app.post("/transfers/create")
@@ -818,7 +845,111 @@ def create_budget(
       db.add(new_budget)
 
     db.commit()
-  return RedirectResponse(url="/", status_code=303)
+  return RedirectResponse(url="/?toast=Budget+saved+successfully", status_code=303)
+
+
+@app.post("/budgets/delete/{budget_id}")
+def delete_budget(budget_id: int, db: Session = Depends(get_db)):
+  if hasattr(models, "Budget"):
+    b = db.query(models.Budget).filter(models.Budget.id == budget_id).first()
+    if b:
+      db.delete(b)
+      db.commit()
+  return RedirectResponse(url="/?toast=Budget+category+removed", status_code=303)
+
+
+@app.get("/finance/export/csv")
+def export_finance_csv(db: Session = Depends(get_db)):
+  tx_model = getattr(models, "Transaction", None)
+  txs = db.query(tx_model).order_by(tx_model.date.desc()).all() if tx_model else []
+  rate = get_live_rate()
+  acc_model = getattr(models, "FinanceAccount", getattr(models, "Account", None))
+  accounts = db.query(acc_model).all() if acc_model else []
+  acc_map = {a.id: a.name for a in accounts}
+
+  output = io.StringIO()
+  writer = csv.writer(output)
+  writer.writerow(["ID", "Date", "Account", "Type", "Category", "Amount_KES", "Amount_USD", "Description"])
+
+  for t in txs:
+    amt_usd = float(t.amount or 0.0)
+    amt_kes = round(amt_usd * rate, 2)
+    writer.writerow([
+        t.id,
+        t.date.strftime("%Y-%m-%d") if hasattr(t.date, "strftime") else str(t.date or "")[:10],
+        acc_map.get(t.account_id, "Unknown"),
+        t.transaction_type,
+        t.category,
+        amt_kes,
+        round(amt_usd, 2),
+        t.description or "",
+    ])
+
+  output.seek(0)
+  filename = f"Finatrack_Ledger_{date.today().strftime('%Y%m%d')}.csv"
+  return StreamingResponse(
+      iter([output.getvalue()]),
+      media_type="text/csv",
+      headers={"Content-Disposition": f"attachment; filename={filename}"},
+  )
+
+
+@app.get("/rider/export/csv")
+def export_rider_csv(db: Session = Depends(get_db)):
+  log_model = getattr(models, "RiderLog", None)
+  logs = db.query(log_model).order_by(log_model.date.desc()).all() if log_model else []
+  rate = get_live_rate()
+  bike_model = getattr(models, "Bike", None)
+  bikes = db.query(bike_model).all() if bike_model else []
+  bike_map = {b.id: f"{b.plate_number} ({b.model_name})" for b in bikes}
+
+  output = io.StringIO()
+  writer = csv.writer(output)
+  writer.writerow([
+      "ID", "Date", "Bike", "Start_Time", "End_Time", "Hours", "Trips",
+      "Distance_Km", "Fuel_Litres", "Fuel_Station", "Fuel_Cost_KES",
+      "Food_KES", "Airtime_KES", "Maintenance_KES", "Misc_KES",
+      "Total_Earned_KES", "Total_Expenses_KES", "Net_Remittance_KES"
+  ])
+
+  for l in logs:
+    earned_kes = round(float(l.total_earned or 0.0) * rate, 2)
+    fuel_kes = round(float(l.fuel_cost or 0.0) * rate, 2)
+    food_kes = round(float(getattr(l, "food_spent", 0.0) or 0.0) * rate, 2)
+    air_kes = round(float(l.airtime_spent or 0.0) * rate, 2)
+    maint_kes = round(float(getattr(l, "maintenance_cost", 0.0) or 0.0) * rate, 2)
+    misc_kes = round(float(l.misc_expenses or 0.0) * rate, 2)
+    tot_exp = fuel_kes + food_kes + air_kes + maint_kes + misc_kes
+    net_kes = earned_kes - tot_exp
+
+    writer.writerow([
+        l.id,
+        l.date.strftime("%Y-%m-%d") if l.date else "",
+        bike_map.get(l.bike_id, "Main Bike"),
+        getattr(l, "start_time", "") or "",
+        getattr(l, "end_time", "") or "",
+        getattr(l, "shift_hours", 8.0) or 8.0,
+        l.trips_completed or 0,
+        l.kilometers or 0.0,
+        getattr(l, "fuel_litres", 0.0) or l.fuel_used_liters or 0.0,
+        getattr(l, "fuel_station", "OTHER") or "OTHER",
+        fuel_kes,
+        food_kes,
+        air_kes,
+        maint_kes,
+        misc_kes,
+        earned_kes,
+        round(tot_exp, 2),
+        round(net_kes, 2),
+    ])
+
+  output.seek(0)
+  filename = f"Finatrack_Rider_Shifts_{date.today().strftime('%Y%m%d')}.csv"
+  return StreamingResponse(
+      iter([output.getvalue()]),
+      media_type="text/csv",
+      headers={"Content-Disposition": f"attachment; filename={filename}"},
+  )
 
 
 @app.post("/transactions/create")
@@ -892,6 +1023,8 @@ def create_goal(
     title: str = Form(...),
     target_amount: float = Form(...),
     target_date: Optional[str] = Form(None),
+    add_to_split: Optional[str] = Form(None),
+    auto_split_pct: Optional[float] = Form(10.0),
     db: Session = Depends(get_db),
 ):
   currency_pref = request.cookies.get("finatrack_currency", "Ksh")
@@ -912,10 +1045,57 @@ def create_goal(
 
   goal_model = getattr(models, "SavingsGoal", getattr(models, "Goal", None))
   if goal_model:
-    goal = goal_model(title=title, target_amount=final_target, target_date=parsed_date)
+    goal = goal_model(title=title.strip(), target_amount=final_target, target_date=parsed_date)
     db.add(goal)
     db.commit()
-  return RedirectResponse(url="/", status_code=303)
+    db.refresh(goal)
+
+    if add_to_split and hasattr(models, "AllocationRule"):
+      rule = models.AllocationRule(
+          bucket_name=f"Goal: {goal.title}",
+          target_type="GOAL",
+          target_id=goal.id,
+          percentage=float(auto_split_pct or 10.0),
+          icon="🎯",
+          is_active=1,
+      )
+      db.add(rule)
+      db.commit()
+
+  return RedirectResponse(url="/?toast=Savings+goal+created+successfully", status_code=303)
+
+
+@app.post("/goals/link-split/{goal_id}")
+def link_goal_to_split(
+    request: Request,
+    goal_id: int,
+    percentage: float = Form(10.0),
+    db: Session = Depends(get_db),
+):
+  goal_model = getattr(models, "SavingsGoal", getattr(models, "Goal", None))
+  goal = db.query(goal_model).filter(goal_model.id == goal_id).first() if goal_model else None
+  if goal and hasattr(models, "AllocationRule"):
+    existing = db.query(models.AllocationRule).filter(
+        models.AllocationRule.target_type == "GOAL",
+        models.AllocationRule.target_id == goal.id,
+    ).first()
+
+    if not existing:
+      rule = models.AllocationRule(
+          bucket_name=f"Goal: {goal.title}",
+          target_type="GOAL",
+          target_id=goal.id,
+          percentage=float(percentage or 10.0),
+          icon="🎯",
+          is_active=1,
+      )
+      db.add(rule)
+    else:
+      existing.is_active = 1
+      existing.percentage = float(percentage or existing.percentage)
+    db.commit()
+
+  return RedirectResponse(url="/?toast=Goal+linked+to+Smart+Income+Splitter#debts-section", status_code=303)
 
 
 @app.post("/goals/fund/{goal_id}")
@@ -963,9 +1143,14 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
   goal_model = getattr(models, "SavingsGoal", getattr(models, "Goal", None))
   goal = db.query(goal_model).filter(goal_model.id == goal_id).first() if goal_model else None
   if goal:
+    if hasattr(models, "AllocationRule"):
+      db.query(models.AllocationRule).filter(
+          models.AllocationRule.target_type == "GOAL",
+          models.AllocationRule.target_id == goal.id,
+      ).delete()
     db.delete(goal)
     db.commit()
-  return RedirectResponse(url="/", status_code=303)
+  return RedirectResponse(url="/?toast=Goal+deleted+successfully", status_code=303)
 
 
 # --- SMART INCOME SPLITTER & MULTI-BUCKET ALLOCATION ROUTES ---
@@ -1146,6 +1331,42 @@ async def bulk_update_allocation_rules(
         rule.is_active = 1 if is_act in ["1", "true", "on", "yes"] else 0
     except Exception as e:
       print(f"Error updating rule {rid_str}: {e}")
+
+  # Process dynamically added new bucket rules from modal
+  new_bucket_names = form.getlist("new_bucket_name")
+  new_percentages = form.getlist("new_percentage")
+  new_target_types = form.getlist("new_target_type")
+  new_target_ids = form.getlist("new_target_id")
+  new_icons = form.getlist("new_icon")
+
+  for i in range(len(new_bucket_names)):
+    bname = new_bucket_names[i].strip() if i < len(new_bucket_names) else ""
+    if not bname:
+      continue
+    pct = float(new_percentages[i]) if i < len(new_percentages) and new_percentages[i] else 10.0
+    ttype = new_target_types[i] if i < len(new_target_types) else "GOAL"
+    tid_raw = new_target_ids[i] if i < len(new_target_ids) else ""
+    tid = int(tid_raw) if tid_raw and tid_raw.isdigit() else None
+    ico = new_icons[i].strip() if i < len(new_icons) and new_icons[i] else ("🎯" if ttype == "GOAL" else "💰")
+
+    new_rule = models.AllocationRule(
+        bucket_name=bname,
+        target_type=ttype,
+        target_id=tid if ttype in ["ACCOUNT", "GOAL"] else None,
+        percentage=pct,
+        icon=ico,
+        is_active=1,
+    )
+    db.add(new_rule)
+
+  # Process deletions if any
+  delete_rule_ids = form.getlist("delete_rule_id")
+  for del_id_str in delete_rule_ids:
+    if del_id_str and del_id_str.isdigit():
+      del_id = int(del_id_str)
+      del_rule = db.query(models.AllocationRule).filter(models.AllocationRule.id == del_id).first()
+      if del_rule:
+        db.delete(del_rule)
 
   db.commit()
   sep = "&" if "?" in redirect_url else "?"
@@ -1565,6 +1786,115 @@ async def mpesa_sms_webhook(request: Request, db: Session = Depends(get_db)):
   }
 
 
+# --- RIDER SHIFT TIME & ANALYTICS HELPERS ---
+
+
+def parse_time_str(t_str: Optional[str]) -> Optional[float]:
+  """Parses time strings like '11:00', '11:00 AM', '22:00', '10:00 PM' into decimal hours (0.0 to 24.0)."""
+  if not t_str:
+    return None
+  t_str = str(t_str).strip()
+  if not t_str:
+    return None
+  try:
+    if ":" in t_str:
+      parts = t_str.split(":")
+      hr_part = parts[0].strip().split()[0]
+      min_raw = parts[1].strip()
+      min_part = ""
+      for ch in min_raw:
+        if ch.isdigit():
+          min_part += ch
+        else:
+          break
+      mins = int(min_part) if min_part else 0
+      hr = int(hr_part)
+      lower = t_str.lower()
+      if "pm" in lower and hr < 12:
+        hr += 12
+      elif "am" in lower and hr == 12:
+        hr = 0
+      return hr + (mins / 60.0)
+    val = float(t_str)
+    return val if 0.0 <= val <= 24.0 else None
+  except Exception:
+    return None
+
+
+def format_time_display(t_str: Optional[str]) -> str:
+  """Formats '11:00' to '11:00 AM', '22:00' to '10:00 PM'."""
+  if not t_str:
+    return ""
+  t_str = str(t_str).strip()
+  if not t_str:
+    return ""
+  try:
+    val = parse_time_str(t_str)
+    if val is not None:
+      hr = int(val)
+      mins = int(round((val - hr) * 60))
+      ampm = "AM" if hr < 12 else "PM"
+      disp_hr = 12 if hr in (0, 12) else hr % 12
+      return f"{disp_hr}:{mins:02d} {ampm}"
+    return t_str
+  except Exception:
+    return t_str
+
+
+def calc_shift_hours_from_times(
+    start_t: Optional[str], end_t: Optional[str], default_hours: float = 8.0
+) -> float:
+  s_val = parse_time_str(start_t)
+  e_val = parse_time_str(end_t)
+  if s_val is not None and e_val is not None:
+    if e_val >= s_val:
+      diff = e_val - s_val
+    else:
+      # Crosses midnight, e.g. 20:00 to 04:00
+      diff = (24.0 - s_val) + e_val
+    return round(diff, 2) if diff > 0 else default_hours
+  return default_hours
+
+
+def get_time_window_info(start_t: Optional[str]):
+  s_val = parse_time_str(start_t)
+  if s_val is None:
+    return {
+        "key": "midday",
+        "name": "General Day Shift",
+        "icon": "🛵",
+        "slot": "Standard Shift",
+    }
+  if 5.0 <= s_val < 11.0:
+    return {
+        "key": "morning",
+        "name": "Early Morning (05:00 – 11:00)",
+        "icon": "🌅",
+        "slot": "Morning Commute & Breakfast",
+    }
+  elif 11.0 <= s_val < 16.0:
+    return {
+        "key": "midday",
+        "name": "Midday & Lunch (11:00 – 16:00)",
+        "icon": "☀️",
+        "slot": "Lunch & Afternoon Errands",
+    }
+  elif 16.0 <= s_val < 21.0:
+    return {
+        "key": "evening",
+        "name": "Evening Rush (16:00 – 21:00)",
+        "icon": "🌆",
+        "slot": "Peak Evening Commute & Dinner",
+    }
+  else:
+    return {
+        "key": "night",
+        "name": "Late Night (21:00 – 05:00)",
+        "icon": "🌙",
+        "slot": "Night Deliveries & Club Runs",
+    }
+
+
 # --- RIDER DASHBOARD ROUTES ---
 
 
@@ -1681,25 +2011,60 @@ def rider_dashboard(
   accounts = db.query(account_model).all() if account_model else []
   accounts_map = {acc.id: acc.name for acc in accounts}
 
-  # Enrich logs with account names and station info
+  # Enrich logs with account names, station info, and shift time details
   enriched_logs = []
   for l in logs:
+    s_time = getattr(l, "start_time", None)
+    e_time = getattr(l, "end_time", None)
+    hrs = float(getattr(l, "shift_hours", 8.0) or 8.0)
+    e_gross = float(l.total_earned or 0.0)
+    e_upk = (
+        float(l.fuel_cost or 0.0)
+        + float(getattr(l, "food_spent", 0.0) or 0.0)
+        + float(l.airtime_spent or 0.0)
+        + float(l.misc_expenses or 0.0)
+        + float(getattr(l, "maintenance_cost", 0.0) or 0.0)
+    )
+    e_net = e_gross - e_upk
+    h_rate = (e_gross / hrs) if hrs > 0 else 0.0
+    h_net_rate = (e_net / hrs) if hrs > 0 else 0.0
+
+    fmt_s = format_time_display(s_time)
+    fmt_e = format_time_display(e_time)
+    if fmt_s and fmt_e:
+      time_disp = f"{fmt_s} – {fmt_e} ({hrs:.1f}h)"
+    elif fmt_s:
+      time_disp = f"From {fmt_s} ({hrs:.1f}h)"
+    else:
+      time_disp = f"{hrs:.1f} hrs"
+
     enriched_logs.append({
         "id": l.id,
         "bike_id": getattr(l, "bike_id", None),
         "date": l.date,
+        "day_name": l.date.strftime("%A"),
+        "day_short": l.date.strftime("%a"),
+        "start_time": s_time,
+        "end_time": e_time,
+        "formatted_start_time": fmt_s,
+        "formatted_end_time": fmt_e,
+        "formatted_shift_time": time_disp,
+        "time_window_info": get_time_window_info(s_time),
         "trips_completed": l.trips_completed,
         "kilometers": l.kilometers,
         "total_earned": l.total_earned,
         "fuel_used_liters": l.fuel_used_liters,
         "fuel_litres": getattr(l, "fuel_litres", None),
         "fuel_station": getattr(l, "fuel_station", None) or "OTHER",
-        "shift_hours": getattr(l, "shift_hours", 8.0) or 8.0,
+        "shift_hours": hrs,
         "fuel_cost": l.fuel_cost,
         "food_spent": float(getattr(l, "food_spent", 0.0) or 0.0),
         "airtime_spent": l.airtime_spent,
         "misc_expenses": l.misc_expenses,
         "maintenance_cost": l.maintenance_cost,
+        "net_saved": e_net,
+        "hourly_gross": h_rate,
+        "hourly_net": h_net_rate,
         "earnings_account_id": getattr(l, "earnings_account_id", None),
         "expense_account_id": getattr(l, "expense_account_id", None),
         "earnings_account_name": accounts_map.get(getattr(l, "earnings_account_id", None)),
@@ -1937,6 +2302,263 @@ def rider_dashboard(
       round(tot_misc, 2),
   ]
 
+  # --- Shift Time Intelligence & Analytics (Weekly, Monthly, Days, Time-Windows) ---
+  total_shift_hours_all = sum([float(getattr(l, "shift_hours", 8.0) or 8.0) for l in logs])
+  total_earned_all = sum([float(l.total_earned or 0.0) for l in logs])
+  total_expenses_all = sum([
+      float(l.fuel_cost or 0.0)
+      + float(getattr(l, "food_spent", 0.0) or 0.0)
+      + float(l.airtime_spent or 0.0)
+      + float(l.misc_expenses or 0.0)
+      + float(getattr(l, "maintenance_cost", 0.0) or 0.0)
+      for l in logs
+  ])
+  total_net_all = total_earned_all - total_expenses_all
+
+  overall_avg_gross_hourly = (total_earned_all / total_shift_hours_all) if total_shift_hours_all > 0 else 0.0
+  overall_avg_net_hourly = (total_net_all / total_shift_hours_all) if total_shift_hours_all > 0 else 0.0
+
+  # 1. Best Days of the Week Analysis (Mon - Sun)
+  days_order = [
+      ("Monday", "Mon", 0),
+      ("Tuesday", "Tue", 1),
+      ("Wednesday", "Wed", 2),
+      ("Thursday", "Thu", 3),
+      ("Friday", "Fri", 4),
+      ("Saturday", "Sat", 5),
+      ("Sunday", "Sun", 6),
+  ]
+  day_stats_map = {
+      idx: {
+          "name": name,
+          "short": short,
+          "shifts": 0,
+          "hours": 0.0,
+          "earned": 0.0,
+          "upkeep": 0.0,
+          "windows": {},
+      }
+      for name, short, idx in days_order
+  }
+
+  for l in logs:
+    wd = l.date.weekday()
+    h = float(getattr(l, "shift_hours", 8.0) or 8.0)
+    e = float(l.total_earned or 0.0)
+    u = (
+        float(l.fuel_cost or 0.0)
+        + float(getattr(l, "food_spent", 0.0) or 0.0)
+        + float(l.airtime_spent or 0.0)
+        + float(l.misc_expenses or 0.0)
+        + float(getattr(l, "maintenance_cost", 0.0) or 0.0)
+    )
+    st = getattr(l, "start_time", None)
+    w_info = get_time_window_info(st)
+    w_name = w_info["name"]
+
+    day_stats_map[wd]["shifts"] += 1
+    day_stats_map[wd]["hours"] += h
+    day_stats_map[wd]["earned"] += e
+    day_stats_map[wd]["upkeep"] += u
+    day_stats_map[wd]["windows"][w_name] = day_stats_map[wd]["windows"].get(w_name, 0.0) + e
+
+  day_analysis_list = []
+  for name, short, idx in days_order:
+    d_data = day_stats_map[idx]
+    s_cnt = d_data["shifts"]
+    hrs = d_data["hours"]
+    gross = d_data["earned"]
+    upk = d_data["upkeep"]
+    net = gross - upk
+    avg_per_shift = (gross / s_cnt) if s_cnt > 0 else 0.0
+    avg_hourly = (gross / hrs) if hrs > 0 else 0.0
+    avg_net_hourly = (net / hrs) if hrs > 0 else 0.0
+
+    top_w = "General Shift"
+    if d_data["windows"]:
+      top_w = max(d_data["windows"].items(), key=lambda x: x[1])[0]
+
+    day_analysis_list.append({
+        "day_name": name,
+        "day_short": short,
+        "weekday_idx": idx,
+        "shifts_count": s_cnt,
+        "total_hours": round(hrs, 1),
+        "total_earned": round(gross, 2),
+        "total_upkeep": round(upk, 2),
+        "net_saved": round(net, 2),
+        "avg_daily_earned": round(avg_per_shift, 2),
+        "avg_daily_net": round(net / s_cnt if s_cnt > 0 else 0.0, 2),
+        "avg_hourly_gross": round(avg_hourly, 2),
+        "avg_hourly_net": round(avg_net_hourly, 2),
+        "best_time_window": top_w,
+        "is_best_day": False,
+    })
+
+  sorted_days_by_earned = sorted(
+      [d for d in day_analysis_list if d["shifts_count"] > 0],
+      key=lambda x: x["avg_daily_earned"],
+      reverse=True,
+  )
+  best_day_overall = sorted_days_by_earned[0] if sorted_days_by_earned else None
+  if best_day_overall:
+    for d in day_analysis_list:
+      if d["day_name"] == best_day_overall["day_name"]:
+        d["is_best_day"] = True
+
+  # 2. Time-Window Analysis (Morning, Midday/Afternoon, Evening, Night)
+  time_windows_defs = [
+      ("morning", "🌅 Early Morning (05:00 – 11:00)", "05:00 - 11:00", "Morning Rush & Breakfast"),
+      ("midday", "☀️ Midday & Afternoon (11:00 – 16:00)", "11:00 - 16:00", "Lunch Deliveries & Errands"),
+      ("evening", "🌆 Evening Rush (16:00 – 21:00)", "16:00 - 21:00", "Peak Evening Commute & Dinner"),
+      ("night", "🌙 Late Night (21:00 – 05:00)", "21:00 - 05:00", "Night Deliveries & Club Runs"),
+  ]
+  time_window_stats = {
+      key: {
+          "key": key,
+          "name": name,
+          "slot": slot,
+          "desc": desc,
+          "shifts": 0,
+          "hours": 0.0,
+          "earned": 0.0,
+          "upkeep": 0.0,
+      }
+      for key, name, slot, desc in time_windows_defs
+  }
+
+  for l in logs:
+    st = getattr(l, "start_time", None)
+    w_info = get_time_window_info(st)
+    w_key = w_info["key"] if w_info["key"] in time_window_stats else "midday"
+    h = float(getattr(l, "shift_hours", 8.0) or 8.0)
+    e = float(l.total_earned or 0.0)
+    u = (
+        float(l.fuel_cost or 0.0)
+        + float(getattr(l, "food_spent", 0.0) or 0.0)
+        + float(l.airtime_spent or 0.0)
+        + float(l.misc_expenses or 0.0)
+        + float(getattr(l, "maintenance_cost", 0.0) or 0.0)
+    )
+    time_window_stats[w_key]["shifts"] += 1
+    time_window_stats[w_key]["hours"] += h
+    time_window_stats[w_key]["earned"] += e
+    time_window_stats[w_key]["upkeep"] += u
+
+  time_window_analysis = []
+  for key, name, slot, desc in time_windows_defs:
+    tw = time_window_stats[key]
+    s_cnt = tw["shifts"]
+    hrs = tw["hours"]
+    gross = tw["earned"]
+    upk = tw["upkeep"]
+    net = gross - upk
+    hourly_gross = (gross / hrs) if hrs > 0 else 0.0
+    hourly_net = (net / hrs) if hrs > 0 else 0.0
+    share_pct = (gross / total_earned_all * 100.0) if total_earned_all > 0 else 0.0
+
+    time_window_analysis.append({
+        "key": key,
+        "name": name,
+        "slot": slot,
+        "desc": desc,
+        "shifts_count": s_cnt,
+        "total_hours": round(hrs, 1),
+        "total_earned": round(gross, 2),
+        "total_upkeep": round(upk, 2),
+        "net_saved": round(net, 2),
+        "hourly_gross": round(hourly_gross, 2),
+        "hourly_net": round(hourly_net, 2),
+        "share_pct": round(share_pct, 1),
+    })
+
+  sorted_windows_by_hourly = sorted(
+      [tw for tw in time_window_analysis if tw["shifts_count"] > 0],
+      key=lambda x: x["hourly_gross"],
+      reverse=True,
+  )
+  best_time_window_overall = sorted_windows_by_hourly[0] if sorted_windows_by_hourly else None
+
+  # 3. Weekly Detailed Breakdown (Week-by-Week comparison)
+  weekly_breakdown_list = []
+  for w_key in sorted(weeks_map.keys(), reverse=True)[:8]:
+    w_logs = [l for l in logs if f"{l.date.year}-W{l.date.isocalendar()[1]:02d}" == w_key]
+    w_hrs = sum([float(getattr(l, "shift_hours", 8.0) or 8.0) for l in w_logs])
+    w_gross = sum([float(l.total_earned or 0.0) for l in w_logs])
+    w_upk = sum([
+        float(l.fuel_cost or 0.0)
+        + float(getattr(l, "food_spent", 0.0) or 0.0)
+        + float(l.airtime_spent or 0.0)
+        + float(l.misc_expenses or 0.0)
+        + float(getattr(l, "maintenance_cost", 0.0) or 0.0)
+        for l in w_logs
+    ])
+    w_net = w_gross - w_upk
+    w_hourly = (w_gross / w_hrs) if w_hrs > 0 else 0.0
+    w_net_hourly = (w_net / w_hrs) if w_hrs > 0 else 0.0
+
+    best_d_log = max(w_logs, key=lambda x: float(x.total_earned or 0.0)) if w_logs else None
+    best_day_str = f"{best_d_log.date.strftime('%a, %d %b')}" if best_d_log else "N/A"
+
+    weekly_breakdown_list.append({
+        "week_key": w_key,
+        "week_label": weeks_map[w_key]["label"],
+        "shifts_count": len(w_logs),
+        "total_hours": round(w_hrs, 1),
+        "total_earned": round(w_gross, 2),
+        "total_upkeep": round(w_upk, 2),
+        "net_saved": round(w_net, 2),
+        "hourly_gross": round(w_hourly, 2),
+        "hourly_net": round(w_net_hourly, 2),
+        "best_day_str": best_day_str,
+    })
+
+  # 4. Monthly Detailed Breakdown (Month-by-Month comparison)
+  monthly_breakdown_list = []
+  for m_key in sorted(months_map.keys(), reverse=True)[:6]:
+    m_logs = [l for l in logs if l.date.strftime("%Y-%m") == m_key]
+    m_hrs = sum([float(getattr(l, "shift_hours", 8.0) or 8.0) for l in m_logs])
+    m_gross = sum([float(l.total_earned or 0.0) for l in m_logs])
+    m_upk = sum([
+        float(l.fuel_cost or 0.0)
+        + float(getattr(l, "food_spent", 0.0) or 0.0)
+        + float(l.airtime_spent or 0.0)
+        + float(l.misc_expenses or 0.0)
+        + float(getattr(l, "maintenance_cost", 0.0) or 0.0)
+        for l in m_logs
+    ])
+    m_net = m_gross - m_upk
+    m_hourly = (m_gross / m_hrs) if m_hrs > 0 else 0.0
+
+    m_day_counts = {}
+    for ml in m_logs:
+      m_day_counts[ml.date.strftime('%A')] = m_day_counts.get(ml.date.strftime('%A'), 0.0) + float(ml.total_earned or 0.0)
+    top_m_day = max(m_day_counts.items(), key=lambda x: x[1])[0] if m_day_counts else "N/A"
+
+    monthly_breakdown_list.append({
+        "month_key": m_key,
+        "month_label": months_map[m_key]["label"],
+        "shifts_count": len(m_logs),
+        "total_hours": round(m_hrs, 1),
+        "total_earned": round(m_gross, 2),
+        "total_upkeep": round(m_upk, 2),
+        "net_saved": round(m_net, 2),
+        "hourly_gross": round(m_hourly, 2),
+        "top_day": top_m_day,
+    })
+
+  time_intelligence = {
+      "total_hours_all": round(total_shift_hours_all, 1),
+      "overall_avg_gross_hourly": round(overall_avg_gross_hourly, 2),
+      "overall_avg_net_hourly": round(overall_avg_net_hourly, 2),
+      "best_day": best_day_overall,
+      "best_time_window": best_time_window_overall,
+      "day_analysis": day_analysis_list,
+      "time_window_analysis": time_window_analysis,
+      "weekly_breakdown": weekly_breakdown_list,
+      "monthly_breakdown": monthly_breakdown_list,
+  }
+
   # Allocation Rules for Rider Shift Auto-Split
   goal_model = getattr(models, "SavingsGoal", getattr(models, "Goal", None))
   raw_goals = db.query(goal_model).all() if goal_model else []
@@ -2005,6 +2627,7 @@ def rider_dashboard(
           "chart_upkeep": daily_upkeep,
           "chart_fuel": daily_fuel,
           "expense_donut": expense_donut,
+          "time_intelligence": time_intelligence,
           "quote": quote,
           "verse": verse,
           "today": today_date,
@@ -2202,7 +2825,9 @@ def create_rider_log(
     fuel_litres: Optional[float] = Form(None),
     fuel_used_liters: float = Form(0.00),
     fuel_cost: float = Form(0.00),
-    shift_hours: float = Form(8.0),
+    start_time: Optional[str] = Form(None),
+    end_time: Optional[str] = Form(None),
+    shift_hours: Optional[float] = Form(None),
     food_spent: float = Form(0.00),
     airtime_spent: float = Form(0.00),
     misc_expenses: float = Form(0.00),
@@ -2227,6 +2852,10 @@ def create_rider_log(
 
   final_litres = fuel_litres if fuel_litres is not None and fuel_litres > 0 else fuel_used_liters
 
+  # Calculate shift duration from start_time and end_time if present
+  computed_hours = calc_shift_hours_from_times(start_time, end_time, shift_hours or 8.0)
+  final_hours = float(shift_hours) if shift_hours and shift_hours > 0 and (not start_time or not end_time) else computed_hours
+
   rider_log_model = getattr(models, "RiderLog", None)
   if rider_log_model:
     log = rider_log_model(
@@ -2239,7 +2868,9 @@ def create_rider_log(
         fuel_litres=float(final_litres),
         fuel_used_liters=float(final_litres),
         fuel_cost=fuel_norm,
-        shift_hours=float(shift_hours or 8.0),
+        start_time=start_time.strip() if start_time else None,
+        end_time=end_time.strip() if end_time else None,
+        shift_hours=float(final_hours or 8.0),
         food_spent=food_norm,
         airtime_spent=airtime_norm,
         misc_expenses=misc_norm,

@@ -97,6 +97,8 @@ class RiderLog(Base):
   fuel_cost = Column(Float, default=0.0)
   fuel_station = Column(String, nullable=True)  # RUBIS, TOTAL, SHELL, OLA, HASS, OTHER
   fuel_litres = Column(Float, nullable=True)
+  start_time = Column(String, nullable=True)  # e.g. '11:00' or '11:00 AM'
+  end_time = Column(String, nullable=True)    # e.g. '22:00' or '10:00 PM'
   shift_hours = Column(Float, default=8.0)
   airtime_spent = Column(Float, default=0.0)
   food_spent = Column(Float, default=0.0)

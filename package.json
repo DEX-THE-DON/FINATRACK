@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/server.ts",
+    "test": "tsx src/utils/math.test.ts",
+    "pages:dev": "wrangler pages dev static",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android",
     "cap:build": "cd android && ./gradlew assembleDebug"
@@ -16,14 +20,20 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/DEX-THE-DON/FINATRACK/issues"
-  },
-  "homepage": "https://github.com/DEX-THE-DON/FINATRACK#readme",
   "dependencies": {
     "@capacitor/android": "^8.5.1",
     "@capacitor/cli": "^8.5.1",
-    "@capacitor/core": "^8.5.1"
+    "@capacitor/core": "^8.5.1",
+    "@hono/node-server": "^2.1.1",
+    "@supabase/supabase-js": "^2.116.0",
+    "decimal.js": "^10.6.0",
+    "hono": "^4.13.7",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "wrangler": "^3.75.0"
   }
 }
