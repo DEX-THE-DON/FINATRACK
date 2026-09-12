@@ -406,17 +406,21 @@ export function renderRiderDashboard(data: any): string {
         <div id="fleet-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b dark:border-gray-800 pb-4">
                 <div class="flex items-center space-x-3">
-                    <div class="w-12 h-12 rounded-2xl ${activePowerType === 'ELECTRIC' ? 'bg-gradient-to-tr from-emerald-500 to-teal-600' : 'bg-gradient-to-tr from-amber-500 to-rose-600'} flex items-center justify-center text-2xl text-white shadow-md">
-                        ${activePowerType === 'ELECTRIC' ? '⚡' : '🏍️'}
+                    <div class="w-12 h-12 rounded-2xl ${active_bike ? (activePowerType === 'ELECTRIC' ? 'bg-gradient-to-tr from-emerald-500 to-teal-600' : 'bg-gradient-to-tr from-amber-500 to-rose-600') : 'bg-slate-700'} flex items-center justify-center text-2xl text-white shadow-md">
+                        ${active_bike ? (activePowerType === 'ELECTRIC' ? '⚡' : '🏍️') : '🛵'}
                     </div>
                     <div>
                         <div class="flex items-center space-x-2">
-                            <h2 class="text-lg font-black text-gray-900 dark:text-white">Active Bike: ${active_bike ? `${active_bike.plate_number} (${active_bike.model_name || 'Fleet Bike'})` : 'No Bike Selected'}</h2>
+                            <h2 class="text-lg font-black text-gray-900 dark:text-white">${active_bike ? `Active Vehicle: ${active_bike.plate_number} (${active_bike.model_name || 'Fleet Bike'})` : 'No Vehicle Registered Yet'}</h2>
+                            ${active_bike ? `
                             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${activePowerType === 'ELECTRIC' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'}">
                                 ${activePowerType === 'ELECTRIC' ? '🔋 Electric EV (Battery Swap)' : '⛽ Petrol Engine (ICE)'}
-                            </span>
+                            </span>` : `
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                Quick Setup
+                            </span>`}
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-usd="${active_bike?.daily_target || 2500}"></strong> • Managed by ${active_bike?.owner_name || username}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${active_bike ? `Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-usd="${active_bike?.daily_target || 2500}"></strong> • Managed by ${active_bike?.owner_name || username}` : 'Register your motorbike or electric bike below to start tracking shifts & finance.'}</p>
                     </div>
                 </div>
 
@@ -428,7 +432,7 @@ export function renderRiderDashboard(data: any): string {
             </div>
 
             <!-- Add Bike Collapsible Form -->
-            <div id="add-bike-form-container" class="hidden p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-3">
+            <div id="add-bike-form-container" class="${bikes.length === 0 ? '' : 'hidden'} p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-3">
                 <h3 class="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">Register New Motorbike or Electric Vehicle to Fleet</h3>
                 <form action="/bikes/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
@@ -460,7 +464,7 @@ export function renderRiderDashboard(data: any): string {
 
             <!-- Fleet Switcher Grid -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                ${bikes.map((b: any) => `
+                ${bikes.length > 0 ? bikes.map((b: any) => `
                 <div class="p-3.5 rounded-2xl border ${b.is_active ? 'bg-blue-50/60 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700' : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700'} flex justify-between items-center">
                     <div class="space-y-0.5">
                         <div class="flex items-center space-x-2">
@@ -471,7 +475,7 @@ export function renderRiderDashboard(data: any): string {
                         </div>
                         <p class="text-xs text-gray-500 dark:text-gray-400">${b.model_name || 'Motorbike'} • Target: <strong class="convertible-amount font-bold text-gray-800 dark:text-gray-200" data-usd="${b.daily_target}"></strong></p>
                     </div>
-                    <div>
+                    <div class="flex items-center space-x-1.5">
                         ${b.is_active ? `
                         <span class="px-2.5 py-1 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-2xs">Active</span>
                         ` : `
@@ -481,8 +485,17 @@ export function renderRiderDashboard(data: any): string {
                             </button>
                         </form>
                         `}
+                        <form action="/bikes/delete/${b.id}" method="POST" onsubmit="return confirm('Remove vehicle ${b.plate_number} from fleet?');">
+                            <button type="submit" title="Remove vehicle" class="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition active:scale-95">
+                                🗑️
+                            </button>
+                        </form>
                     </div>
-                </div>`).join('')}
+                </div>`).join('') : `
+                <div class="col-span-full p-4 text-center rounded-2xl bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-300 dark:border-gray-700">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">🛵 No vehicles in your fleet yet. Fill the registration form above to add your first motorbike or electric EV.</p>
+                </div>
+                `}
             </div>
         </div>
 
@@ -623,7 +636,7 @@ export function renderRiderDashboard(data: any): string {
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Assigned Fleet Bike</label>
                     <select name="bike_id" onchange="onBikeSelectChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold">
-                        ${bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'}) - ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}</option>`).join('')}
+                        ${bikes.length > 0 ? bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'}) - ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}</option>`).join('') : '<option value="">-- No Vehicle (Register Above) --</option>'}
                     </select>
                 </div>
 

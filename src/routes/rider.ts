@@ -159,12 +159,16 @@ riderRoutes.post('/rider/logs/delete/:id', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// MOTORBIKE FLEET CRUD
+// MOTORBIKE & EV FLEET CRUD
 // ------------------------------------------------------------------------------
 riderRoutes.post('/bikes/create', async (c) => {
   const body = await c.req.parseBody();
   const plate = String(body['plate_number'] || '').trim().toUpperCase();
-  const model = body['model_name'] ? String(body['model_name']).trim() : 'Bajaj Boxer 150';
+  if (!plate) {
+    return c.redirect('/rider?toast=Please+enter+a+valid+number+plate', 303);
+  }
+
+  const model = body['model_name'] ? String(body['model_name']).trim() : 'Boda Boda';
   const owner = body['owner_name'] ? String(body['owner_name']).trim() : 'Dennis';
   const powerType = (String(body['power_type'] || 'PETROL').toUpperCase() === 'ELECTRIC' ? 'ELECTRIC' : 'PETROL') as 'PETROL' | 'ELECTRIC';
   const rawTarget = parseFloat(String(body['daily_target'] || '2500.0')) || 2500.0;
@@ -178,16 +182,21 @@ riderRoutes.post('/bikes/create', async (c) => {
     : rawTarget;
 
   const supabase = getSupabaseClient(c.env);
-  await supabase.from('bikes').insert({
+  
+  // Deactivate all other bikes so the newly registered vehicle becomes active
+  await supabase.from('bikes').update({ is_active: 0 }).neq('id', '00000000-0000-0000-0000-000000000000');
+  
+  const { data: newBike, error } = await supabase.from('bikes').insert({
     plate_number: plate,
     model_name: model,
     owner_name: owner,
     power_type: powerType,
     daily_target: targetUsd,
     is_active: 1,
-  });
+  }).select().single();
 
-  return c.redirect('/rider?toast=Motorbike+added+to+fleet', 303);
+  const typeLabel = powerType === 'ELECTRIC' ? 'Electric+EV' : 'Motorbike';
+  return c.redirect(`/rider?toast=${typeLabel}+[${plate}]+registered+to+fleet!`, 303);
 });
 
 riderRoutes.post('/bikes/activate/:id', async (c) => {
@@ -195,7 +204,20 @@ riderRoutes.post('/bikes/activate/:id', async (c) => {
   const supabase = getSupabaseClient(c.env);
   await supabase.from('bikes').update({ is_active: 0 }).neq('id', id);
   await supabase.from('bikes').update({ is_active: 1 }).eq('id', id);
-  return c.redirect('/rider?toast=Active+bike+switched', 303);
+  return c.redirect('/rider?toast=Active+vehicle+switched', 303);
+});
+
+riderRoutes.post('/bikes/delete/:id', async (c) => {
+  const id = c.req.param('id');
+  const supabase = getSupabaseClient(c.env);
+  await supabase.from('bikes').delete().eq('id', id);
+  
+  // If active bike was deleted, activate any remaining bike
+  const { data: remaining } = await supabase.from('bikes').select('*').limit(1);
+  if (remaining && remaining.length > 0) {
+    await supabase.from('bikes').update({ is_active: 1 }).eq('id', remaining[0].id);
+  }
+  return c.redirect('/rider?toast=Vehicle+removed+from+fleet', 303);
 });
 
 // ------------------------------------------------------------------------------
