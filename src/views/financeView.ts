@@ -219,56 +219,78 @@ export function renderFinanceDashboard(data: any): string {
                 return;
             }
 
-            const chunks = raw.trim().split(/(?=[A-Z0-9]{8,12}\s+Confirmed)/i);
+            let text = raw.trim();
+            // Normalize common Safaricom punctuation quirks
+            text = text.replace(/([0-9]|AM|PM|am|pm)\.New\s+M-PESA/gi, '$1. New M-PESA');
+
             const results = [];
+            const receivedRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:You have received\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+received from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const sentRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+sent to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const paidRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+paid to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const withdrawRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+withdrawn from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const dtRegex = /on\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?))?/i;
 
-            const receivedRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:You have received\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+received from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
-            const sentRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+sent to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
-            const paidRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+paid to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
-            const withdrawRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+withdrawn from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
-            const dtRegex = /on\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?))?/i;
+            const regex = /(?:^|\b)([A-Z0-9]{8,12})\s+(?:Confirmed|You have received)[\s\S]*?(?=(?:\b[A-Z0-9]{8,12}\s+(?:Confirmed|You have received))|$)/gi;
+            const chunks = [];
+            let rMatch;
+            while ((rMatch = regex.exec(text)) !== null) {
+                chunks.push(rMatch[0].trim());
+            }
 
-            chunks.forEach(c => {
-                const text = c.trim();
-                if (text.length < 15) return;
+            if (chunks.length === 0) {
+                chunks.push(text);
+            }
+
+            chunks.forEach(function(c) {
+                const itemText = c.trim();
+                if (itemText.length < 15) return;
                 let code = '', amt = 0, party = '', type = 'EXPENSE', cat = 'Living Expenses';
-                let match = text.match(receivedRegex);
+                let match = itemText.match(receivedRegex);
                 if (match) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
                     party = match[3].trim();
                     type = 'INCOME';
-                    cat = (party.toUpperCase().includes('BOLT') || party.toUpperCase().includes('UBER')) ? 'Rider & Boda Deliveries' : 'M-Pesa Income';
-                } else if ((match = text.match(sentRegex))) {
+                    cat = (party.toUpperCase().includes('BOLT') || party.toUpperCase().includes('UBER') || party.toUpperCase().includes('GLOVO')) ? 'Rider & Boda Deliveries' : 'M-Pesa Income';
+                } else if ((match = itemText.match(sentRegex))) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
                     party = match[3].trim();
                     type = 'EXPENSE';
                     cat = 'Living Expenses';
-                } else if ((match = text.match(paidRegex))) {
+                } else if ((match = itemText.match(paidRegex))) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
                     party = match[3].trim();
                     type = 'EXPENSE';
                     const p = party.toUpperCase();
                     if (p.includes('SPIRO') || p.includes('ROAM') || p.includes('AMPERSAND') || p.includes('KIRI') || p.includes('ARC RIDE') || p.includes('BASIGO') || p.includes('BATTERY') || p.includes('SWAP')) cat = 'EV Battery Swap & Charging';
-                    else if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL') || p.includes('OLA') || p.includes('HASS')) cat = 'Fuel & Petrol';
-                    else if (p.includes('KPLC') || p.includes('WATER') || p.includes('SAFARICOM')) cat = 'Utilities & Bills';
-                    else if (p.includes('NAIVAS') || p.includes('QUICKMART') || p.includes('HOTEL') || p.includes('FOOD')) cat = 'Food & Groceries';
+                    else if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL') || p.includes('OLA') || p.includes('HASS') || p.includes('OIL')) cat = 'Fuel & Petrol';
+                    else if (p.includes('KPLC') || p.includes('WATER') || p.includes('SAFARICOM') || p.includes('ZUKU')) cat = 'Utilities & Bills';
+                    else if (p.includes('NAIVAS') || p.includes('QUICKMART') || p.includes('CARREFOUR') || p.includes('HOTEL') || p.includes('FOOD')) cat = 'Food & Groceries';
                     else cat = 'Living Expenses';
-                } else if ((match = text.match(withdrawRegex))) {
+                } else if ((match = itemText.match(withdrawRegex))) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
                     party = match[3].trim();
                     type = 'EXPENSE';
                     cat = 'Cash Withdrawal';
+                } else {
+                    const genericMatch = itemText.match(/([A-Z0-9]{8,12})\s+.*?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+                    if (genericMatch) {
+                        code = genericMatch[1].toUpperCase();
+                        amt = parseFloat(genericMatch[2].replace(/,/g, ''));
+                        type = itemText.toLowerCase().includes('received') ? 'INCOME' : 'EXPENSE';
+                        party = 'M-Pesa Transaction';
+                        cat = type === 'INCOME' ? 'M-Pesa Income' : 'Living Expenses';
+                    }
                 }
 
                 if (code && amt > 0) {
-                    const dtM = text.match(dtRegex);
+                    const dtM = itemText.match(dtRegex);
                     const rawDt = dtM ? dtM[1] : 'Today';
-                    const rawTm = dtM && dtM[2] ? dtM[2] : '';
-                    results.push({ code, type, amt, party, rawDt, rawTm, cat });
+                    const rawTm = dtM && dtM[2] ? dtM[2].trim() : '';
+                    results.push({ code: code, type: type, amt: amt, party: party, rawDt: rawDt, rawTm: rawTm, cat: cat });
                 }
             });
 

@@ -46,4 +46,14 @@ if (!parsedEV || parsedEV.code !== 'QD44444444' || parsedEV.amount_kes !== 400 |
 }
 console.log('✅ 4. EV Battery Swap SMS:', parsedEV.code, parsedEV.amount_kes, 'KES -> Category:', parsedEV.suggested_category);
 
+// Test 5: Rubis Fuel Station with period in party name and PM.New balance
+const rubisSms = 'UIC8Z65ZQV Confirmed. Ksh500.00 paid to Rubis Dagoretti 1. on 12/9/26 at 5:42 PM.New M-PESA balance is Ksh0.00. Transaction cost, Ksh0.00. Amount you can transact within the day is 499,047.00. See all your balances now https://saf.cx/kWQpy';
+const parsedRubis = parseSingleMpesaMessage(rubisSms);
+if (!parsedRubis || parsedRubis.code !== 'UIC8Z65ZQV' || parsedRubis.amount_kes !== 500 || parsedRubis.party !== 'Rubis Dagoretti 1' || parsedRubis.suggested_category !== 'Fuel & Petrol' || parsedRubis.time !== '5:42 PM') {
+  console.error('❌ Failed Test 5: Rubis Fuel SMS', parsedRubis);
+  process.exit(1);
+}
+console.log('✅ 5. Rubis Fuel SMS:', parsedRubis.code, parsedRubis.amount_kes, 'KES -> Party:', parsedRubis.party, '-> Cat:', parsedRubis.suggested_category, 'Time:', parsedRubis.time);
+
 console.log('🎉 ALL M-PESA REGEX & BATCH SMS TESTS PASSED 100%!');
+
