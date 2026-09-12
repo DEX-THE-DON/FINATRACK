@@ -689,9 +689,9 @@ export function renderFinanceDashboard(data: any): string {
 
                 <!-- Add Account Form -->
                 <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, Ziidi MMF)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
-                    <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
-                    <select name="account_type" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
+                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, Ziidi MMF)" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm" required>
+                    <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm">
+                    <select name="account_type" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm">
                         <option value="MOBILE">Mobile Money (M-Pesa, Airtel)</option>
                         <option value="BANK">Bank Account</option>
                         <option value="SAVINGS">Savings Account (Sacco / Fixed)</option>
@@ -699,10 +699,10 @@ export function renderFinanceDashboard(data: any): string {
                         <option value="LOOP">Loop Business</option>
                         <option value="CASH">Cash / Petty Cash</option>
                     </select>
-                    <input type="number" step="any" name="interest_rate_p_a" placeholder="APY % (e.g. 13.45)" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm">
-                    <input type="number" step="any" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
+                    <input type="number" step="any" inputmode="decimal" name="interest_rate_p_a" placeholder="APY % (e.g. 13.45)" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm">
+                    <input type="number" step="any" inputmode="decimal" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm convertible-placeholder" required>
                     <div class="sm:col-span-2 lg:col-span-5">
-                        <button type="submit" class="w-full bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-sm font-semibold py-2 rounded-lg transition">Add Account</button>
+                        <button type="submit" class="w-full bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-sm font-semibold py-2.5 rounded-xl transition">Add Account</button>
                     </div>
                 </form>
             </div>
@@ -715,22 +715,122 @@ export function renderFinanceDashboard(data: any): string {
                     <form action="/transfers/create" method="POST" class="space-y-3">
                         <div>
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">From Account</label>
-                            <select name="from_account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
+                            <select name="from_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm" required>
                                 ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                             </select>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">To Account</label>
-                            <select name="to_account_id" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm" required>
+                            <select name="to_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm" required>
                                 ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                             </select>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                            <input type="number" step="any" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm convertible-placeholder" required>
+                            <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm convertible-placeholder" required>
                         </div>
-                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg text-sm transition mt-2">Transfer Funds</button>
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition mt-2">Transfer Funds</button>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ➕ Transactions & Ledger Card -->
+        <div id="tx-card" class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-xl">
+                        💳
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Record Transaction</h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Manually log an income or expense into your ledger.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Tx Form -->
+            <form action="/transactions/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
+                    <select name="transaction_type" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <option value="EXPENSE">🔴 Expense</option>
+                        <option value="INCOME">🟢 Income</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account</label>
+                    <select name="account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <option value="">-- No Account / Cash --</option>
+                        ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Category</label>
+                    <select name="category" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <option value="Living Expenses">Living Expenses</option>
+                        <option value="Food & Groceries">Food & Groceries</option>
+                        <option value="Fuel & Petrol">Fuel & Petrol</option>
+                        <option value="Utilities & Bills">Utilities & Bills</option>
+                        <option value="Rider & Boda Deliveries">Rider & Boda Deliveries</option>
+                        <option value="M-Pesa Income">M-Pesa Income</option>
+                        <option value="MMF Interest">MMF Interest</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
+                    <input type="date" name="t_date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold" required>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition shadow-xs active:scale-95">
+                        ➕ Save Tx
+                    </button>
+                </div>
+            </form>
+
+            <!-- Recent Transactions Table -->
+            <div class="pt-4 border-t dark:border-gray-800 space-y-2">
+                <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200">Recent Transactions (${transactions.length})</h3>
+                <div class="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-gray-50 dark:bg-gray-800/60 uppercase text-gray-400 text-[10px]">
+                            <tr>
+                                <th class="py-3 px-3">Date</th>
+                                <th class="py-3 px-3">Type</th>
+                                <th class="py-3 px-3">Category</th>
+                                <th class="py-3 px-3">Amount</th>
+                                <th class="py-3 px-3 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y dark:divide-gray-800">
+                            ${transactions.length > 0 ? transactions.slice(0, 15).map((t: any) => `
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
+                                <td class="py-2.5 px-3 font-medium text-gray-600 dark:text-gray-300">${t.date}</td>
+                                <td class="py-2.5 px-3">
+                                    <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${t.transaction_type === 'INCOME' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}">
+                                        ${t.transaction_type}
+                                    </span>
+                                </td>
+                                <td class="py-2.5 px-3 font-medium text-gray-800 dark:text-gray-200">${t.category}</td>
+                                <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount" data-usd="${t.amount}">
+                                    ${t.amount}
+                                </td>
+                                <td class="py-2.5 px-3 text-center">
+                                    <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
+                                        <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold text-xs p-1">✕</button>
+                                    </form>
+                                </td>
+                            </tr>`).join('') : `
+                            <tr>
+                                <td colspan="5" class="py-6 text-center text-gray-400">No transactions recorded yet. Use the form above or the M-Pesa SMS auto-parser!</td>
+                            </tr>`}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -748,7 +848,7 @@ export function renderFinanceDashboard(data: any): string {
                     <span>📥 Backup CSV</span>
                 </a>
                 <form action="/system/reset-data" method="POST" onsubmit="return confirm('⚠️ WARNING: This will permanently wipe all transactions, accounts, debts, budgets, bills, and rider logs so you can start completely clean. Are you sure?');">
-                    <button type="submit" class="px-4 py-2 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+                    <button type="submit" class="px-4 py-2 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 active:scale-95">
                         <span>🗑️ Reset & Clear All Data</span>
                     </button>
                 </form>
@@ -756,6 +856,36 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
     </main>
+
+    <!-- ⚙️ Waterfall Split Rules Settings Modal -->
+    <div id="rules-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+        <div class="bg-white dark:bg-gray-900 rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-gray-100 dark:border-gray-800 space-y-4">
+            <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">⚙️</span>
+                    <h3 class="font-bold text-gray-900 dark:text-white text-base">Waterfall Split Allocation Rules</h3>
+                </div>
+                <button onclick="document.getElementById('rules-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Configure how your daily income is split automatically across buckets (total should equal 100%).</p>
+            <form action="/rules/update" method="POST" class="space-y-3">
+                ${allocation_rules.map((r: any) => `
+                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-lg">${r.icon || '💰'}</span>
+                        <span class="text-xs font-bold text-gray-800 dark:text-gray-200">${r.bucket_name}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="number" step="1" min="0" max="100" inputmode="numeric" name="percentage_${r.id}" value="${r.percentage}" class="w-16 p-2 text-base sm:text-sm font-bold text-center border dark:border-gray-700 dark:bg-gray-900 rounded-lg" required>
+                        <span class="text-xs font-bold text-gray-500">%</span>
+                    </div>
+                </div>`).join('')}
+                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs mt-2 active:scale-95">
+                    Save Allocation Rules
+                </button>
+            </form>
+        </div>
+    </div>
 
     <!-- Mobile PWA Install Floating Banner -->
     <div id="pwa-bottom-banner" class="pwa-install-trigger hidden fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-50 bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border border-gray-700/60 flex items-center justify-between gap-3 transition-all duration-300">
@@ -802,6 +932,10 @@ export function renderFinanceDashboard(data: any): string {
                     <p>Tap <strong>"Add"</strong> in the top-right corner to finish installing!</p>
                 </div>
             </div>
+            <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95">Got it!</button>
+        </div>
+    </div>
+
     <!-- 📱 Native Mobile Bottom App Dock -->
     <nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800/80 px-4 py-2 flex justify-around items-center sm:hidden shadow-lg safe-area-bottom">
         <a href="/" class="flex flex-col items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-bold active:scale-90 transition-transform">

@@ -124,9 +124,9 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
     </header>
 
     <!-- Main Auth Center Card -->
-    <main class="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-6 z-10">
+    <main class="flex-1 flex items-center justify-center px-3 sm:px-6 lg:px-8 py-4 sm:py-6 z-10 w-full">
         
-        <div class="glass-card rounded-3xl overflow-hidden w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 relative min-h-[580px]">
+        <div class="glass-card rounded-2xl sm:rounded-3xl overflow-hidden w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 relative min-h-[520px]">
             
             <!-- Toast Alert inside Card -->
             ${toast ? `
@@ -135,14 +135,14 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             </div>` : ''}
 
             <!-- Left Hero Art / Synthwave Horizon -->
-            <div class="lg:col-span-6 relative overflow-hidden bg-gradient-to-b from-[#180e2b] via-[#100921] to-[#0a0514] p-8 sm:p-10 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-white/10">
+            <div class="lg:col-span-6 relative overflow-hidden bg-gradient-to-b from-[#180e2b] via-[#100921] to-[#0a0514] p-6 sm:p-10 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-white/10">
                 
                 <!-- Ambient Glowing Sun Artwork -->
-                <div class="absolute -top-10 left-1/2 -translate-x-1/2 w-64 h-64 sun-glow rounded-full pointer-events-none opacity-80"></div>
-                <div class="absolute top-8 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full bg-gradient-to-b from-pink-400 via-rose-500 to-purple-900 border border-pink-300/40 shadow-2xl pointer-events-none opacity-90"></div>
+                <div class="absolute -top-10 left-1/2 -translate-x-1/2 w-48 sm:w-64 h-48 sm:h-64 sun-glow rounded-full pointer-events-none opacity-80"></div>
+                <div class="absolute top-6 sm:top-8 left-1/2 -translate-x-1/2 w-32 sm:w-44 h-32 sm:h-44 rounded-full bg-gradient-to-b from-pink-400 via-rose-500 to-purple-900 border border-pink-300/40 shadow-2xl pointer-events-none opacity-90"></div>
 
                 <!-- Mountain Horizon Silhouette SVG -->
-                <div class="absolute bottom-0 inset-x-0 h-48 pointer-events-none opacity-80">
+                <div class="absolute bottom-0 inset-x-0 h-32 sm:h-48 pointer-events-none opacity-80">
                     <svg viewBox="0 0 500 200" preserveAspectRatio="none" class="w-full h-full">
                         <polygon points="0,200 60,110 130,160 210,80 290,150 380,90 460,140 500,100 500,200" fill="#0c0717" />
                         <polygon points="0,200 100,140 180,175 270,110 350,160 430,120 500,170 500,200" fill="#140c26" opacity="0.7"/>
@@ -154,16 +154,16 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                 </div>
 
                 <!-- Branding Header -->
-                <div class="relative z-10">
-                    <div class="flex items-center space-x-2.5 mb-4">
+                <div class="relative z-10 flex items-center justify-between">
+                    <div class="flex items-center space-x-2.5">
                         <span class="text-2xl">⚡</span>
-                        <h2 class="font-display font-black text-xl tracking-tight text-white">Finatrack Cloud</h2>
+                        <h2 class="font-display font-black text-lg sm:text-xl tracking-tight text-white">Finatrack Cloud</h2>
                     </div>
                 </div>
 
                 <!-- Center Welcome Text -->
-                <div class="relative z-10 my-auto pt-24 pb-8 space-y-3">
-                    <h3 class="font-display font-extrabold text-3xl sm:text-4xl text-white tracking-tight leading-tight">
+                <div class="relative z-10 my-auto pt-10 sm:pt-24 pb-4 sm:pb-8 space-y-2 sm:space-y-3">
+                    <h3 class="font-display font-extrabold text-2xl sm:text-4xl text-white tracking-tight leading-tight">
                         Welcome!<br/>
                         <span class="bg-clip-text text-transparent bg-gradient-to-r from-pink-400 via-rose-300 to-cyan-300">
                             To Next-Gen Wealth
@@ -175,7 +175,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                 </div>
 
                 <!-- Footer Social / Community Icons -->
-                <div class="relative z-10 flex items-center space-x-4 pt-4 border-t border-white/10 text-gray-400 text-sm">
+                <div class="relative z-10 flex items-center space-x-4 pt-3 sm:pt-4 border-t border-white/10 text-gray-400 text-xs">
                     <a href="https://github.com/DEX-THE-DON/FINATRACK" target="_blank" class="hover:text-pink-400 transition transform hover:scale-110">
                         <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
                     </a>
@@ -186,42 +186,42 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             </div>
 
             <!-- Right Interactive Form Panel -->
-            <div class="lg:col-span-6 p-8 sm:p-10 flex flex-col justify-between bg-black/20">
+            <div class="lg:col-span-6 p-6 sm:p-10 flex flex-col justify-between bg-black/20">
                 
                 <div>
                     <!-- Form Title & Toggle Header -->
-                    <div class="flex justify-between items-center mb-8">
-                        <h2 id="auth-form-title" class="font-display font-extrabold text-2xl text-white tracking-tight">
+                    <div class="flex justify-between items-center mb-6 sm:mb-8">
+                        <h2 id="auth-form-title" class="font-display font-extrabold text-xl sm:text-2xl text-white tracking-tight">
                             ${mode === 'signup' ? 'Create Account' : 'Welcome Back'}
                         </h2>
 
                         <!-- Tab Pill Switcher -->
                         <div class="bg-white/5 border border-white/10 p-1 rounded-xl flex items-center text-xs font-semibold">
-                            <button type="button" onclick="switchAuthTab('signup')" id="tab-signup-btn" class="px-3 py-1 rounded-lg transition ${mode === 'signup' ? 'bg-pink-500 text-white shadow-xs' : 'text-gray-400 hover:text-white'}">
+                            <button type="button" onclick="switchAuthTab('signup')" id="tab-signup-btn" class="px-3 py-1.5 rounded-lg transition active:scale-95 ${mode === 'signup' ? 'bg-pink-500 text-white shadow-xs' : 'text-gray-400 hover:text-white'}">
                                 Sign Up
                             </button>
-                            <button type="button" onclick="switchAuthTab('login')" id="tab-login-btn" class="px-3 py-1 rounded-lg transition ${mode === 'login' ? 'bg-pink-500 text-white shadow-xs' : 'text-gray-400 hover:text-white'}">
+                            <button type="button" onclick="switchAuthTab('login')" id="tab-login-btn" class="px-3 py-1.5 rounded-lg transition active:scale-95 ${mode === 'login' ? 'bg-pink-500 text-white shadow-xs' : 'text-gray-400 hover:text-white'}">
                                 Log In
                             </button>
                         </div>
                     </div>
 
                     <!-- SIGN UP FORM -->
-                    <form id="signup-form" action="/auth/signup" method="POST" class="${mode === 'signup' ? '' : 'hidden'} space-y-5">
+                    <form id="signup-form" action="/auth/signup" method="POST" class="${mode === 'signup' ? '' : 'hidden'} space-y-4 sm:space-y-5">
                         
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div class="space-y-1">
                                 <label class="text-[11px] font-semibold text-gray-400 tracking-wide uppercase">First Name</label>
                                 <div class="relative">
-                                    <input type="text" name="first_name" placeholder="Dennis" required class="input-underline w-full py-2 text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
-                                    <span class="absolute right-0 top-2.5 text-gray-500 text-xs">👤</span>
+                                    <input type="text" name="first_name" placeholder="Dennis" required autocomplete="given-name" class="input-underline w-full py-2.5 text-base sm:text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
+                                    <span class="absolute right-0 top-3 text-gray-500 text-xs">👤</span>
                                 </div>
                             </div>
                             <div class="space-y-1">
                                 <label class="text-[11px] font-semibold text-gray-400 tracking-wide uppercase">Last Name</label>
                                 <div class="relative">
-                                    <input type="text" name="last_name" placeholder="Dex" required class="input-underline w-full py-2 text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
-                                    <span class="absolute right-0 top-2.5 text-gray-500 text-xs">👤</span>
+                                    <input type="text" name="last_name" placeholder="Dex" required autocomplete="family-name" class="input-underline w-full py-2.5 text-base sm:text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
+                                    <span class="absolute right-0 top-3 text-gray-500 text-xs">👤</span>
                                 </div>
                             </div>
                         </div>
@@ -229,39 +229,39 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                         <div class="space-y-1">
                             <label class="text-[11px] font-semibold text-gray-400 tracking-wide uppercase">Email Address</label>
                             <div class="relative">
-                                <input type="email" name="email" placeholder="you@example.com" required class="input-underline w-full py-2 text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
-                                <span class="absolute right-0 top-2.5 text-gray-500 text-xs">✉️</span>
+                                <input type="email" name="email" placeholder="you@example.com" required inputmode="email" autocomplete="email" autocapitalize="none" class="input-underline w-full py-2.5 text-base sm:text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
+                                <span class="absolute right-0 top-3 text-gray-500 text-xs">✉️</span>
                             </div>
                         </div>
 
                         <div class="space-y-1">
                             <label class="text-[11px] font-semibold text-gray-400 tracking-wide uppercase">Password</label>
                             <div class="relative">
-                                <input type="password" name="password" placeholder="••••••••••••" required minlength="6" class="input-underline w-full py-2 text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
-                                <span class="absolute right-0 top-2.5 text-gray-500 text-xs">🔒</span>
+                                <input type="password" name="password" placeholder="••••••••••••" required minlength="6" autocomplete="new-password" class="input-underline w-full py-2.5 text-base sm:text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
+                                <span class="absolute right-0 top-3 text-gray-500 text-xs">🔒</span>
                             </div>
                         </div>
 
-                        <div class="flex items-center space-x-2 pt-1">
+                        <div class="flex items-center space-x-2.5 pt-1">
                             <input type="checkbox" id="terms-agree" required class="w-4 h-4 rounded border-gray-700 bg-white/5 text-pink-500 focus:ring-pink-500 focus:ring-offset-0 cursor-pointer">
                             <label for="terms-agree" class="text-xs text-gray-400 cursor-pointer">
                                 I agree to the Finatrack Privacy & Security terms
                             </label>
                         </div>
 
-                        <button type="submit" class="btn-neon w-full py-3 rounded-xl text-sm font-extrabold text-white tracking-wide uppercase mt-2">
+                        <button type="submit" class="btn-neon w-full py-3.5 sm:py-3 rounded-xl text-sm font-extrabold text-white tracking-wide uppercase mt-2 active:scale-95 transition min-h-[48px] flex items-center justify-center">
                             Create Free Account
                         </button>
                     </form>
 
                     <!-- LOG IN FORM -->
-                    <form id="login-form" action="/auth/login" method="POST" class="${mode === 'login' ? '' : 'hidden'} space-y-5">
+                    <form id="login-form" action="/auth/login" method="POST" class="${mode === 'login' ? '' : 'hidden'} space-y-4 sm:space-y-5">
                         
                         <div class="space-y-1">
                             <label class="text-[11px] font-semibold text-gray-400 tracking-wide uppercase">Email Address</label>
                             <div class="relative">
-                                <input type="email" name="email" placeholder="you@example.com" required class="input-underline w-full py-2 text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
-                                <span class="absolute right-0 top-2.5 text-gray-500 text-xs">✉️</span>
+                                <input type="email" name="email" placeholder="you@example.com" required inputmode="email" autocomplete="email" autocapitalize="none" class="input-underline w-full py-2.5 text-base sm:text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
+                                <span class="absolute right-0 top-3 text-gray-500 text-xs">✉️</span>
                             </div>
                         </div>
 
@@ -271,13 +271,13 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                                 <a href="#" onclick="alert('Password reset link has been dispatched to your email address.'); return false;" class="text-[11px] text-pink-400 hover:text-pink-300">Forgot?</a>
                             </div>
                             <div class="relative">
-                                <input type="password" name="password" placeholder="••••••••••••" required class="input-underline w-full py-2 text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
-                                <span class="absolute right-0 top-2.5 text-gray-500 text-xs">🔒</span>
+                                <input type="password" name="password" placeholder="••••••••••••" required autocomplete="current-password" class="input-underline w-full py-2.5 text-base sm:text-sm text-white placeholder-gray-600 focus:placeholder-gray-500 pr-7">
+                                <span class="absolute right-0 top-3 text-gray-500 text-xs">🔒</span>
                             </div>
                         </div>
 
                         <div class="flex items-center justify-between pt-1">
-                            <div class="flex items-center space-x-2">
+                            <div class="flex items-center space-x-2.5">
                                 <input type="checkbox" id="remember-me" checked class="w-4 h-4 rounded border-gray-700 bg-white/5 text-pink-500 focus:ring-pink-500 focus:ring-offset-0 cursor-pointer">
                                 <label for="remember-me" class="text-xs text-gray-400 cursor-pointer">
                                     Keep me signed in
@@ -285,7 +285,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                             </div>
                         </div>
 
-                        <button type="submit" class="btn-neon w-full py-3 rounded-xl text-sm font-extrabold text-white tracking-wide uppercase mt-2">
+                        <button type="submit" class="btn-neon w-full py-3.5 sm:py-3 rounded-xl text-sm font-extrabold text-white tracking-wide uppercase mt-2 active:scale-95 transition min-h-[48px] flex items-center justify-center">
                             Log In to Finatrack
                         </button>
                     </form>
@@ -293,7 +293,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                 </div>
 
                 <!-- Bottom Toggle Footer -->
-                <div class="pt-6 border-t border-white/10 mt-6 text-center space-y-3">
+                <div class="pt-5 border-t border-white/10 mt-6 text-center space-y-3">
                     <p id="auth-switch-prompt" class="text-xs text-gray-400">
                         ${mode === 'signup' 
                             ? `Already Have An Account? <button type="button" onclick="switchAuthTab('login')" class="text-pink-400 hover:text-pink-300 font-bold ml-1">Sign In</button>`
@@ -301,7 +301,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                     </p>
 
                     <div>
-                        <a href="/" class="text-[11px] text-gray-500 hover:text-gray-300 transition flex items-center justify-center gap-1">
+                        <a href="/" class="text-[11px] text-gray-500 hover:text-gray-300 transition flex items-center justify-center gap-1 py-1">
                             <span>⚡</span> Skip & Explore as Guest / Demo Mode &rarr;
                         </a>
                     </div>

@@ -437,7 +437,7 @@ export function renderRiderDashboard(data: any): string {
             <form action="/rider/logs" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Shift Date</label>
-                    <input type="date" name="date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm font-semibold" required>
+                    <input type="date" name="date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-semibold" required>
                 </div>
 
                 <!-- Shift Start & End Times -->
@@ -447,26 +447,26 @@ export function renderRiderDashboard(data: any): string {
                         <span id="shift-duration-badge" class="text-[11px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-md">⏱️ 11.0 hrs</span>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
-                        <input type="time" name="start_time" id="input_start_time" value="11:00" onchange="calcDuration()" class="p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm font-bold" required>
-                        <input type="time" name="end_time" id="input_end_time" value="22:00" onchange="calcDuration()" class="p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm font-bold" required>
+                        <input type="time" name="start_time" id="input_start_time" value="11:00" onchange="calcDuration()" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold" required>
+                        <input type="time" name="end_time" id="input_end_time" value="22:00" onchange="calcDuration()" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold" required>
                     </div>
                     <input type="hidden" name="shift_hours" id="input_shift_hours" value="11.0">
                     <div class="flex flex-wrap gap-1.5 pt-1">
-                        <button type="button" onclick="setShiftPreset('11:00', '22:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-lg font-semibold transition">☀️ 11am – 10pm (11h)</button>
-                        <button type="button" onclick="setShiftPreset('06:00', '14:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-lg font-semibold transition">🌅 6am – 2pm (8h)</button>
-                        <button type="button" onclick="setShiftPreset('14:00', '23:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-lg font-semibold transition">🌆 2pm – 11pm (9h)</button>
-                        <button type="button" onclick="setShiftPreset('20:00', '04:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-lg font-semibold transition">🌙 8pm – 4am (8h)</button>
+                        <button type="button" onclick="setShiftPreset('11:00', '22:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 active:scale-95 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded-lg font-semibold transition">☀️ 11am – 10pm (11h)</button>
+                        <button type="button" onclick="setShiftPreset('06:00', '14:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 active:scale-95 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded-lg font-semibold transition">🌅 6am – 2pm (8h)</button>
+                        <button type="button" onclick="setShiftPreset('14:00', '23:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 active:scale-95 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded-lg font-semibold transition">🌆 2pm – 11pm (9h)</button>
+                        <button type="button" onclick="setShiftPreset('20:00', '04:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 active:scale-95 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded-lg font-semibold transition">🌙 8pm – 4am (8h)</button>
                     </div>
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Total Earned (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" name="total_earned" placeholder="e.g. 3500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm font-bold text-emerald-600 dark:text-emerald-400" required>
+                    <input type="number" step="any" inputmode="decimal" name="total_earned" placeholder="e.g. 3500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400" required>
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">Petrol Station</label>
-                    <select name="fuel_station" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm font-medium">
+                    <select name="fuel_station" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium">
                         <option value="RUBIS">Rubis Energy</option>
                         <option value="TOTAL">TotalEnergies</option>
                         <option value="SHELL">Shell / Vivo</option>
@@ -478,24 +478,24 @@ export function renderRiderDashboard(data: any): string {
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Fuel Cost (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" name="fuel_cost" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm">
+                    <input type="number" step="any" inputmode="decimal" name="fuel_cost" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Food / Lunch (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" name="food_spent" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm">
+                    <input type="number" step="any" inputmode="decimal" name="food_spent" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Deposit Net Into Account</label>
-                    <select name="earnings_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-sm font-medium text-emerald-600">
+                    <select name="earnings_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium text-emerald-600">
                         <option value="">-- Don't Deposit --</option>
                         ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                     </select>
                 </div>
 
                 <div class="sm:col-span-2 lg:col-span-4">
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition shadow-md">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-3 rounded-xl text-sm transition shadow-md">
                         Save Shift Record & Sync With Finance Ledger
                     </button>
                 </div>
