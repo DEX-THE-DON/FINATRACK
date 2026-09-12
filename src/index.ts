@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
+import fs from 'node:fs';
+import path from 'node:path';
 import { AppEnv, getSupabaseClient } from './db/supabase';
 import { financeRoutes } from './routes/finance';
 import { riderRoutes, classifyShiftWindow } from './routes/rider';
@@ -23,8 +25,19 @@ export const app = new Hono<{ Bindings: AppEnv }>();
 
 const USD_TO_KES = 129.0;
 
+// Helper to safely fetch static assets from disk in Node / Edge environments
+function getStaticAsset(relPath: string): Buffer | null {
+  try {
+    const fullPath = path.resolve(process.cwd(), relPath);
+    if (fs.existsSync(fullPath)) {
+      return fs.readFileSync(fullPath);
+    }
+  } catch (e) {}
+  return null;
+}
+
 // ------------------------------------------------------------------------------
-// PWA MANIFEST & SERVICE WORKER
+// PWA MANIFEST & ICON SERVING
 // ------------------------------------------------------------------------------
 app.get('/manifest.json', (c) => {
   return c.body(JSON.stringify({
@@ -39,9 +52,12 @@ app.get('/manifest.json', (c) => {
     background_color: "#0f172a",
     theme_color: "#0f172a",
     icons: [
-      { src: "/static/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-      { src: "/static/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
-      { src: "/static/icons/icon.svg", sizes: "any", type: "image/svg+xml" }
+      { src: "/static/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/static/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/static/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/static/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/static/icons/icon.svg", sizes: "512x512", type: "image/svg+xml" },
+      { src: "/favicon.ico", sizes: "64x64", type: "image/x-icon" }
     ],
     shortcuts: [
       { name: "Finance Hub", url: "/", description: "Personal finance, balances & waterfall allocation" },
@@ -55,10 +71,57 @@ app.get('/manifest.json', (c) => {
 
 app.get('/manifest.webmanifest', (c) => c.redirect('/manifest.json', 301));
 
+// Explicit high-priority icon routes for PC / Mobile / Android / iOS PWA installs
+app.get('/favicon.ico', (c) => {
+  const buf = getStaticAsset('static/favicon.ico') || getStaticAsset('static/icons/icon-192.png');
+  if (buf) {
+    return c.body(new Uint8Array(buf), 200, { 'Content-Type': 'image/x-icon', 'Cache-Control': 'public, max-age=86400' });
+  }
+  return c.text('Not Found', 404);
+});
+
+app.get('/apple-touch-icon.png', (c) => {
+  const buf = getStaticAsset('static/icons/icon-192.png');
+  if (buf) {
+    return c.body(new Uint8Array(buf), 200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+  }
+  return c.text('Not Found', 404);
+});
+
+app.get('/apple-touch-icon-precomposed.png', (c) => {
+  const buf = getStaticAsset('static/icons/icon-192.png');
+  if (buf) {
+    return c.body(new Uint8Array(buf), 200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+  }
+  return c.text('Not Found', 404);
+});
+
+app.get('/static/icons/:name', (c) => {
+  const name = c.req.param('name');
+  const buf = getStaticAsset(`static/icons/${name}`);
+  if (buf) {
+    const mime = name.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+    return c.body(new Uint8Array(buf), 200, { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' });
+  }
+  return c.text('Not Found', 404);
+});
+
+app.get('/icons/:name', (c) => {
+  const name = c.req.param('name');
+  const buf = getStaticAsset(`static/icons/${name}`);
+  if (buf) {
+    const mime = name.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+    return c.body(new Uint8Array(buf), 200, { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' });
+  }
+  return c.text('Not Found', 404);
+});
+
+app.use('/static/*', serveStatic({ root: './' }));
+
 app.get('/sw.js', (c) => {
   const swScript = `
 const CACHE_NAME = 'finatrack-v2';
-const STATIC_ASSETS = ['/manifest.json', '/static/icons/icon.svg'];
+const STATIC_ASSETS = ['/manifest.json', '/static/icons/icon.svg', '/static/icons/icon-192.png', '/static/icons/icon-512.png', '/favicon.ico'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
