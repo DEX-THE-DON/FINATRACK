@@ -38,10 +38,11 @@ exportRoutes.get('/rider/export/csv', async (c) => {
   const bikeMap = new Map((bikes || []).map((b) => [b.id, `${b.plate_number} (${b.model_name || 'Bike'})`]));
   const liveRate = 129.0;
 
-  let csvContent = 'ID,Date,Bike,Start_Time,End_Time,Hours,Trips,Distance_Km,Fuel_Litres,Fuel_Station,Fuel_Cost_KES,Food_KES,Airtime_KES,Maintenance_KES,Misc_KES,Total_Earned_KES,Total_Expenses_KES,Net_Remittance_KES\n';
+  let csvContent = 'ID,Date,Bike,Power_Type,Start_Time,End_Time,Hours,Trips,Distance_Km,Station,Swaps_Count,Fuel_Litres,Energy_Cost_KES,Food_KES,Airtime_KES,Maintenance_KES,Misc_KES,Total_Earned_KES,Total_Expenses_KES,Net_Remittance_KES\n';
 
   for (const l of logs || []) {
     const bikeStr = bikeMap.get(l.bike_id || '') || 'Default Bike';
+    const powerType = l.power_type || 'PETROL';
     const earnedKes = (Number(l.total_earned || 0) * liveRate).toFixed(2);
     const fuelKes = (Number(l.fuel_cost || 0) * liveRate).toFixed(2);
     const foodKes = (Number(l.food_spent || 0) * liveRate).toFixed(2);
@@ -59,7 +60,7 @@ exportRoutes.get('/rider/export/csv', async (c) => {
 
     const netRemitKes = (Number(earnedKes) - Number(totalExpKes)).toFixed(2);
 
-    csvContent += `"${l.id}","${l.date}","${bikeStr}","${l.start_time || ''}","${l.end_time || ''}",${l.shift_hours},${l.trips_completed},${l.kilometers},${l.fuel_litres || 0},"${l.fuel_station || 'RUBIS'}",${fuelKes},${foodKes},${airtimeKes},${maintKes},${miscKes},${earnedKes},${totalExpKes},${netRemitKes}\n`;
+    csvContent += `"${l.id}","${l.date}","${bikeStr}","${powerType}","${l.start_time || ''}","${l.end_time || ''}",${l.shift_hours},${l.trips_completed},${l.kilometers},"${l.fuel_station || (powerType === 'ELECTRIC' ? 'SPIRO' : 'RUBIS')}",${l.swaps_count || 0},${l.fuel_litres || 0},${fuelKes},${foodKes},${airtimeKes},${maintKes},${miscKes},${earnedKes},${totalExpKes},${netRemitKes}\n`;
   }
 
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
