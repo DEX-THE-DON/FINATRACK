@@ -4,9 +4,18 @@ import { AppEnv, getRequestContext } from '../db/supabase';
 export const exportRoutes = new Hono<{ Bindings: AppEnv }>();
 
 exportRoutes.get('/finance/export/csv', async (c) => {
-  const { supabase } = await getRequestContext(c);
-  const { data: txs } = await supabase.from('transactions').select('*').order('date', { ascending: false });
-  const { data: accounts } = await supabase.from('accounts').select('id, name');
+  const { supabase, userId } = await getRequestContext(c);
+  let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false });
+  let accQuery = supabase.from('accounts').select('id, name');
+  if (userId) {
+    txQuery = txQuery.eq('user_id', userId);
+    accQuery = accQuery.eq('user_id', userId);
+  } else {
+    return c.text('Please log in to export your financial data.', 401);
+  }
+
+  const { data: txs } = await txQuery;
+  const { data: accounts } = await accQuery;
 
   const accMap = new Map((accounts || []).map((a) => [a.id, a.name]));
   const liveRate = 129.0; // Standard USD to KES rate
@@ -31,9 +40,18 @@ exportRoutes.get('/finance/export/csv', async (c) => {
 });
 
 exportRoutes.get('/rider/export/csv', async (c) => {
-  const { supabase } = await getRequestContext(c);
-  const { data: logs } = await supabase.from('rider_logs').select('*').order('date', { ascending: false });
-  const { data: bikes } = await supabase.from('bikes').select('id, plate_number, model_name');
+  const { supabase, userId } = await getRequestContext(c);
+  let logQuery = supabase.from('rider_logs').select('*').order('date', { ascending: false });
+  let bikeQuery = supabase.from('bikes').select('id, plate_number, model_name');
+  if (userId) {
+    logQuery = logQuery.eq('user_id', userId);
+    bikeQuery = bikeQuery.eq('user_id', userId);
+  } else {
+    return c.text('Please log in to export your shift logs.', 401);
+  }
+
+  const { data: logs } = await logQuery;
+  const { data: bikes } = await bikeQuery;
 
   const bikeMap = new Map((bikes || []).map((b) => [b.id, `${b.plate_number} (${b.model_name || 'Bike'})`]));
   const liveRate = 129.0;

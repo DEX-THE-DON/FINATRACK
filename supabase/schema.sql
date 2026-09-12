@@ -241,8 +241,8 @@ BEGIN
             DROP POLICY IF EXISTS "user_isolation_policy" ON %I;
             CREATE POLICY "user_isolation_policy" ON %I
                 FOR ALL
-                USING (auth.uid() = user_id OR user_id IS NULL)
-                WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+                USING (auth.uid() = user_id)
+                WITH CHECK (auth.uid() = user_id);
         ', tbl, tbl);
     END LOOP;
 END $$;

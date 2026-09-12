@@ -107,13 +107,34 @@ app.get('/', async (c) => {
   const { supabase, userId, username, isLoggedIn } = await getRequestContext(c);
   const toast = c.req.query('toast') || '';
 
-  const { data: accounts } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
-  const { data: transactions } = await supabase.from('transactions').select('*').order('date', { ascending: false }).limit(50);
-  const { data: goals } = await supabase.from('goals').select('*').order('created_at', { ascending: true });
-  const { data: budgets } = await supabase.from('budgets').select('*');
-  const { data: debts } = await supabase.from('debts').select('*').order('due_at', { ascending: true });
-  const { data: bills } = await supabase.from('bills').select('*').order('due_day', { ascending: true });
-  const { data: allocationRules } = await supabase.from('allocation_rules').select('*').order('percentage', { ascending: false });
+  let accounts: any[] = [];
+  let transactions: any[] = [];
+  let goals: any[] = [];
+  let budgets: any[] = [];
+  let debts: any[] = [];
+  let bills: any[] = [];
+  let allocationRules: any[] = [];
+
+  if (userId) {
+    const [accRes, txRes, goalRes, bgtRes, debtRes, billRes, ruleRes] = await Promise.all([
+      supabase.from('accounts').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+      supabase.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(50),
+      supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+      supabase.from('budgets').select('*').eq('user_id', userId),
+      supabase.from('debts').select('*').eq('user_id', userId).order('due_at', { ascending: true }),
+      supabase.from('bills').select('*').eq('user_id', userId).order('due_day', { ascending: true }),
+      supabase.from('allocation_rules').select('*').eq('user_id', userId).order('percentage', { ascending: false }),
+    ]);
+
+    accounts = accRes.data || [];
+    transactions = txRes.data || [];
+    goals = goalRes.data || [];
+    budgets = bgtRes.data || [];
+    debts = debtRes.data || [];
+    bills = billRes.data || [];
+    allocationRules = ruleRes.data || [];
+  }
+
   const DEFAULT_RULES = [
     { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
     { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
@@ -122,8 +143,8 @@ app.get('/', async (c) => {
     { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
   ];
 
-  const accs = accounts || [];
-  const txs = transactions || [];
+  const accs = accounts;
+  const txs = transactions;
   const rules = (allocationRules && allocationRules.length > 0) ? allocationRules : DEFAULT_RULES;
 
   // Aggregations
@@ -205,16 +226,36 @@ app.get('/rider', async (c) => {
   const { supabase, userId, username, isLoggedIn } = await getRequestContext(c);
   const toast = c.req.query('toast') || '';
 
-  const { data: bikes } = await supabase.from('bikes').select('*');
-  const { data: logs } = await supabase.from('rider_logs').select('*').order('date', { ascending: false });
-  const { data: accounts } = await supabase.from('accounts').select('*');
-  const { data: maintenance } = await supabase.from('maintenance_schedules').select('*');
-  const { data: compliance } = await supabase.from('compliance_deadlines').select('*');
-  const { data: financing } = await supabase.from('bike_financings').select('*');
-  const { data: allocationRules } = await supabase.from('allocation_rules').select('*');
+  let bikes: any[] = [];
+  let logs: any[] = [];
+  let accounts: any[] = [];
+  let maintenance: any[] = [];
+  let compliance: any[] = [];
+  let financing: any[] = [];
+  let allocationRules: any[] = [];
 
-  const activeBikes = bikes || [];
-  const shiftLogs = logs || [];
+  if (userId) {
+    const [bikeRes, logRes, accRes, maintRes, compRes, finRes, ruleRes] = await Promise.all([
+      supabase.from('bikes').select('*').eq('user_id', userId),
+      supabase.from('rider_logs').select('*').eq('user_id', userId).order('date', { ascending: false }),
+      supabase.from('accounts').select('*').eq('user_id', userId),
+      supabase.from('maintenance_schedules').select('*').eq('user_id', userId),
+      supabase.from('compliance_deadlines').select('*').eq('user_id', userId),
+      supabase.from('bike_financings').select('*').eq('user_id', userId),
+      supabase.from('allocation_rules').select('*').eq('user_id', userId),
+    ]);
+
+    bikes = bikeRes.data || [];
+    logs = logRes.data || [];
+    accounts = accRes.data || [];
+    maintenance = maintRes.data || [];
+    compliance = compRes.data || [];
+    financing = finRes.data || [];
+    allocationRules = ruleRes.data || [];
+  }
+
+  const activeBikes = bikes;
+  const shiftLogs = logs;
 
   // Shift & Time Intelligence Engine
   let totalHours = 0;
