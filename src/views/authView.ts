@@ -16,14 +16,14 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
     <meta name="application-name" content="Finatrack">
     
     <!-- Icons for PWA, PC, Android, iOS -->
-    <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png">
-    <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
     <link rel="shortcut icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-192.png">
-    <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png">
-    <link rel="apple-touch-icon" sizes="512x512" href="/static/icons/icon-512.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
