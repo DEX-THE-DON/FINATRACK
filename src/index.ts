@@ -61,7 +61,7 @@ app.get('/manifest.webmanifest', (c) => c.redirect('/manifest.json', 301));
 
 app.get('/sw.js', (c) => {
   const swScript = `
-const CACHE_NAME = 'finatrack-v3';
+const CACHE_NAME = 'finatrack-v4';
 const STATIC_ASSETS = ['/manifest.json', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/favicon.ico'];
 
 self.addEventListener('install', (event) => {

@@ -53,7 +53,25 @@ if (!parsedRubis || parsedRubis.code !== 'UIC8Z65ZQV' || parsedRubis.amount_kes 
   console.error('❌ Failed Test 5: Rubis Fuel SMS', parsedRubis);
   process.exit(1);
 }
-console.log('✅ 5. Rubis Fuel SMS:', parsedRubis.code, parsedRubis.amount_kes, 'KES -> Party:', parsedRubis.party, '-> Cat:', parsedRubis.suggested_category, 'Time:', parsedRubis.time);
+console.log('✅ 5. Rubis Fuel SMS:', parsedRubis.code, parsedRubis.amount_kes, 'KES -> Party:', parsedRubis.party, 'Time:', parsedRubis.time);
+
+// Test 6: Unicode non-breaking spaces and ZWSP
+const unicodeSms = 'UIC8Z65ZQV\u00A0Confirmed.\u00A0Ksh500.00\u00A0paid to\u00A0Rubis Dagoretti 1.\u00A0on 12/9/26 at 5:42 PM.New M-PESA balance is Ksh0.00.';
+const parsedUnicode = parseSingleMpesaMessage(unicodeSms);
+if (!parsedUnicode || parsedUnicode.code !== 'UIC8Z65ZQV' || parsedUnicode.amount_kes !== 500) {
+  console.error('❌ Failed Test 6: Unicode NBSP SMS', parsedUnicode);
+  process.exit(1);
+}
+console.log('✅ 6. Unicode NBSP SMS:', parsedUnicode.code, parsedUnicode.amount_kes, 'KES');
+
+// Test 7: Dot abbreviations in merchant name
+const abbrSms = 'QC33333333 Confirmed. Ksh450.00 paid to K.P.L.C. PREPAID on 12/9/26 at 8:15 PM.';
+const parsedAbbr = parseSingleMpesaMessage(abbrSms);
+if (!parsedAbbr || parsedAbbr.party !== 'K.P.L.C. PREPAID') {
+  console.error('❌ Failed Test 7: Abbreviation SMS', parsedAbbr);
+  process.exit(1);
+}
+console.log('✅ 7. Abbreviation Party:', parsedAbbr.party);
 
 console.log('🎉 ALL M-PESA REGEX & BATCH SMS TESTS PASSED 100%!');
 

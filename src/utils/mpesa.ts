@@ -98,24 +98,27 @@ export function parseMpesaAmount(amtStr: string): number {
  */
 export function parseSingleMpesaMessage(sms: string): ParsedMpesaTx | null {
   if (!sms) return null;
-  let text = sms.trim();
+  // Normalize all unicode spaces, zero-width spaces, and punctuation quirks
+  let text = sms
+    .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, ' ')
+    .trim();
   if (text.length < 15) return null;
 
   // Normalize common Safaricom punctuation quirks (e.g. "PM.New M-PESA" -> "PM. New M-PESA")
   text = text.replace(/([0-9]|AM|PM|am|pm)\.New\s+M-PESA/gi, '$1. New M-PESA');
 
-  // Regex Patterns for M-Pesa SMS variants:
-  // 1. RECEIVED: "QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE 0712345678 on 12/9/26 at 11:30 AM."
-  const receivedRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:You have received\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+received from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+  // Regex Patterns for M-Pesa SMS variants with flexible lookahead boundaries:
+  // 1. RECEIVED
+  const receivedRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:You have received\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+received from\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
   
-  // 2. SENT: "QA98765432 Confirmed. Ksh500.00 sent to JANE DOE 0723456789 on 12/9/26 at 2:15 PM."
-  const sentRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+sent to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+  // 2. SENT
+  const sentRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+sent to\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
 
-  // 3. PAID TO (PAYBILL / BUY GOODS / TILL): "QB12345678 Confirmed. Ksh750.00 paid to TOTAL ENERGIES. on 12/9/26"
-  const paidRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+paid to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+  // 3. PAID TO (PAYBILL / BUY GOODS / TILL)
+  const paidRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+paid to\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
 
-  // 4. WITHDRAWN: "QC12345678 Confirmed. Ksh1,000.00 withdrawn from 123456 - AGENT NAME on ..."
-  const withdrawRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+withdrawn from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+  // 4. WITHDRAWN
+  const withdrawRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+withdrawn from\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
 
   // Date and Time pattern: "on 12/9/26 at 11:30 AM" or "on 2026-09-12 11:30"
   const dateTimeRegex = /on\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?))?/i;
@@ -132,22 +135,22 @@ export function parseSingleMpesaMessage(sms: string): ParsedMpesaTx | null {
   if (match) {
     code = match[1].toUpperCase();
     amount = parseMpesaAmount(match[2]);
-    party = match[3].trim();
+    party = match[3].trim().replace(/\.+$/, '');
     type = 'INCOME';
   } else if ((match = text.match(sentRegex))) {
     code = match[1].toUpperCase();
     amount = parseMpesaAmount(match[2]);
-    party = match[3].trim();
+    party = match[3].trim().replace(/\.+$/, '');
     type = 'EXPENSE';
   } else if ((match = text.match(paidRegex))) {
     code = match[1].toUpperCase();
     amount = parseMpesaAmount(match[2]);
-    party = match[3].trim();
+    party = match[3].trim().replace(/\.+$/, '');
     type = 'EXPENSE';
   } else if ((match = text.match(withdrawRegex))) {
     code = match[1].toUpperCase();
     amount = parseMpesaAmount(match[2]);
-    party = match[3].trim();
+    party = match[3].trim().replace(/\.+$/, '');
     type = 'EXPENSE';
   } else {
     // Fallback heuristic: match any SMS with Receipt code and Ksh amount
@@ -196,7 +199,9 @@ export function parseSingleMpesaMessage(sms: string): ParsedMpesaTx | null {
 export function parseMultipleMpesaMessages(rawBatchText: string): ParsedMpesaTx[] {
   if (!rawBatchText || !rawBatchText.trim()) return [];
 
-  const text = rawBatchText.trim();
+  const text = rawBatchText
+    .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, ' ')
+    .trim();
   const results: ParsedMpesaTx[] = [];
 
   // Match messages starting with alphanumeric receipt code followed by Confirmed/received
