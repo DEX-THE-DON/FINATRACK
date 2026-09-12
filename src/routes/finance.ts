@@ -7,6 +7,7 @@ import {
   calculateBudgetPace,
   formatMoney
 } from '../utils/math';
+import { parseMultipleMpesaMessages } from '../utils/mpesa';
 import { Decimal } from 'decimal.js';
 
 export const financeRoutes = new Hono<{ Bindings: AppEnv }>();
@@ -590,4 +591,61 @@ financeRoutes.post('/system/reset-data', async (c) => {
   await supabase.from('accounts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
   return c.redirect('/?toast=All+data+cleared!+Ready+for+real+data.', 303);
+});
+
+// ------------------------------------------------------------------------------
+// M-PESA BATCH SMS PARSING & IMPORT
+// ------------------------------------------------------------------------------
+financeRoutes.post('/finance/mpesa/parse', async (c) => {
+  const body = await c.req.parseBody();
+  const rawText = String(body['raw_sms'] || '');
+  const parsed = parseMultipleMpesaMessages(rawText);
+  return c.json({ success: true, count: parsed.length, transactions: parsed });
+});
+
+financeRoutes.post('/finance/mpesa/import', async (c) => {
+  const body = await c.req.parseBody();
+  const accountId = String(body['account_id'] || '');
+  const rawText = String(body['raw_sms'] || '');
+  const liveRate = getExchangeRate();
+
+  if (!accountId) {
+    return c.redirect('/?toast=Please+select+an+account+to+import+into', 303);
+  }
+
+  const parsedList = parseMultipleMpesaMessages(rawText);
+  if (parsedList.length === 0) {
+    return c.redirect('/?toast=No+valid+M-Pesa+messages+found+in+the+pasted+text', 303);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+  const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+  let currentBalanceUsd = acc ? toDecimal(acc.balance) : new Decimal(0);
+
+  let importedCount = 0;
+  for (const t of parsedList) {
+    const amountUsd = toDecimal(t.amount_kes).dividedBy(liveRate).toDecimalPlaces(2).toNumber();
+    
+    await supabase.from('transactions').insert({
+      account_id: accountId,
+      amount: amountUsd,
+      type: t.type,
+      category: t.suggested_category,
+      description: t.description,
+      date: t.date,
+    });
+
+    if (t.type === 'INCOME') {
+      currentBalanceUsd = currentBalanceUsd.plus(amountUsd);
+    } else {
+      currentBalanceUsd = currentBalanceUsd.minus(amountUsd);
+    }
+    importedCount++;
+  }
+
+  if (acc) {
+    await supabase.from('accounts').update({ balance: currentBalanceUsd.toNumber() }).eq('id', accountId);
+  }
+
+  return c.redirect(`/?toast=Successfully+imported+${importedCount}+M-Pesa+transactions!`, 303);
 });

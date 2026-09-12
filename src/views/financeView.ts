@@ -192,6 +192,106 @@ export function renderFinanceDashboard(data: any): string {
                 if (spanEl) spanEl.innerText = 'Ksh ' + amt;
             });
         }
+
+        function parseMpesaClient() {
+            const input = document.getElementById('mpesa-batch-input');
+            const raw = input ? input.value : '';
+            if (!raw.trim()) {
+                alert('Please paste at least one M-Pesa SMS message.');
+                return;
+            }
+
+            const chunks = raw.trim().split(/(?=[A-Z0-9]{8,12}\s+Confirmed)/i);
+            const results = [];
+
+            const receivedRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:You have received\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+received from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const sentRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+sent to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const paidRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+paid to\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const withdrawRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+withdrawn from\s+([^.]+?)(?:\s+on|\s+at|\s+New M-PESA balance|\.)/i;
+            const dtRegex = /on\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?))?/i;
+
+            chunks.forEach(c => {
+                const text = c.trim();
+                if (text.length < 15) return;
+                let code = '', amt = 0, party = '', type = 'EXPENSE', cat = 'Living Expenses';
+                let match = text.match(receivedRegex);
+                if (match) {
+                    code = match[1].toUpperCase();
+                    amt = parseFloat(match[2].replace(/,/g, ''));
+                    party = match[3].trim();
+                    type = 'INCOME';
+                    cat = (party.toUpperCase().includes('BOLT') || party.toUpperCase().includes('UBER')) ? 'Rider & Boda Deliveries' : 'M-Pesa Income';
+                } else if ((match = text.match(sentRegex))) {
+                    code = match[1].toUpperCase();
+                    amt = parseFloat(match[2].replace(/,/g, ''));
+                    party = match[3].trim();
+                    type = 'EXPENSE';
+                    cat = 'Living Expenses';
+                } else if ((match = text.match(paidRegex))) {
+                    code = match[1].toUpperCase();
+                    amt = parseFloat(match[2].replace(/,/g, ''));
+                    party = match[3].trim();
+                    type = 'EXPENSE';
+                    const p = party.toUpperCase();
+                    if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL')) cat = 'Fuel & Petrol';
+                    else if (p.includes('KPLC') || p.includes('WATER') || p.includes('SAFARICOM')) cat = 'Utilities & Bills';
+                    else if (p.includes('NAIVAS') || p.includes('QUICKMART') || p.includes('HOTEL') || p.includes('FOOD')) cat = 'Food & Groceries';
+                    else cat = 'Living Expenses';
+                } else if ((match = text.match(withdrawRegex))) {
+                    code = match[1].toUpperCase();
+                    amt = parseFloat(match[2].replace(/,/g, ''));
+                    party = match[3].trim();
+                    type = 'EXPENSE';
+                    cat = 'Cash Withdrawal';
+                }
+
+                if (code && amt > 0) {
+                    const dtM = text.match(dtRegex);
+                    const rawDt = dtM ? dtM[1] : 'Today';
+                    const rawTm = dtM && dtM[2] ? dtM[2] : '';
+                    results.push({ code, type, amt, party, rawDt, rawTm, cat });
+                }
+            });
+
+            const previewDiv = document.getElementById('mpesa-preview-area');
+            const tableBody = document.getElementById('mpesa-preview-tbody');
+            const countBadge = document.getElementById('mpesa-parsed-count');
+            const importBtn = document.getElementById('mpesa-import-submit-btn');
+
+            if (results.length > 0) {
+                if (countBadge) countBadge.innerText = results.length + ' SMS Extracted';
+                if (tableBody) {
+                    tableBody.innerHTML = results.map(function(r) {
+                        const typeClass = r.type === 'INCOME' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300';
+                        return '<tr class="border-b border-gray-100 dark:border-gray-800 text-xs">' +
+                            '<td class="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">#' + r.code + '</td>' +
+                            '<td class="py-2.5 px-3">' + r.rawDt + ' ' + r.rawTm + '</td>' +
+                            '<td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded-full font-bold ' + typeClass + '">' + r.type + '</span></td>' +
+                            '<td class="py-2.5 px-3 font-medium">' + r.party + '</td>' +
+                            '<td class="py-2.5 px-3 font-bold text-gray-900 dark:text-white">Ksh ' + r.amt.toLocaleString(undefined, {minimumFractionDigits: 2}) + '</td>' +
+                            '<td class="py-2.5 px-3"><span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-md font-semibold">' + r.cat + '</span></td>' +
+                        '</tr>';
+                    }).join('');
+                }
+                if (previewDiv) previewDiv.classList.remove('hidden');
+                if (importBtn) importBtn.removeAttribute('disabled');
+            } else {
+                alert('Could not detect standard M-Pesa receipt formats. Please ensure message starts with code (e.g. QA12345678 Confirmed...)');
+            }
+        }
+
+        function pasteSampleMpesa(type) {
+            const input = document.getElementById('mpesa-batch-input');
+            if (!input) return;
+            if (type === 'single') {
+                input.value = 'QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE 0712345678 on 12/9/26 at 11:30 AM. New M-PESA balance is Ksh5,400.00. Transaction cost, Ksh0.00.';
+            } else {
+                input.value = 'QA11111111 Confirmed. Ksh2,400.00 received from BOLT DELIVERIES on 12/9/26 at 6:00 PM. New M-PESA balance is Ksh7,170.00.\\n' +
+                              'QB22222222 Confirmed. Ksh630.00 paid to TOTAL ENERGIES. on 12/9/26 at 7:30 PM. New M-PESA balance is Ksh6,540.00.\\n' +
+                              'QC33333333 Confirmed. Ksh450.00 paid to KPLC PREPAID on 12/9/26 at 8:15 PM. New M-PESA balance is Ksh6,090.00.';
+            }
+            parseMpesaClient();
+        }
     </script>
 </head>
 <body class="bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 min-h-screen antialiased flex flex-col justify-between font-sans">
@@ -315,6 +415,81 @@ export function renderFinanceDashboard(data: any): string {
                     <p class="text-[10px] text-gray-400 font-medium">${r.percentage}% Allocation</p>
                 </div>`).join('')}
             </div>
+        </div>
+
+        <!-- 📲 Smart M-Pesa Batch SMS Auto-Parser Card -->
+        <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-emerald-500/30 p-6 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-xl">
+                        📲
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>Smart M-Pesa Batch SMS Auto-Parser</span>
+                            <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Multi-SMS Regex</span>
+                        </h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Paste single or multiple M-Pesa messages directly from your clipboard to extract transactions instantly!</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="pasteSampleMpesa('single')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-lg transition">
+                        📋 Sample Received
+                    </button>
+                    <button type="button" onclick="pasteSampleMpesa('batch')" class="px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-lg transition">
+                        📋 Sample Batch (3 SMS)
+                    </button>
+                </div>
+            </div>
+
+            <form action="/finance/mpesa/import" method="POST" class="space-y-4">
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                        Paste M-Pesa SMS text (Single or Multiple messages):
+                    </label>
+                    <textarea id="mpesa-batch-input" name="raw_sms" rows="3" placeholder="QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE...&#10;QB87654321 Confirmed. Ksh630.00 paid to TOTAL ENERGIES..." class="w-full p-3 font-mono text-xs bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500" required></textarea>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <button type="button" onclick="parseMpesaClient()" class="w-full sm:w-auto px-4 py-2 bg-gray-900 dark:bg-gray-800 hover:bg-black dark:hover:bg-gray-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs">
+                        <span>🔍 Extract & Preview Transactions</span>
+                    </button>
+
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <select name="account_id" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
+                            <option value="">-- Select Target Account --</option>
+                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
+                        </select>
+                        <button type="submit" id="mpesa-import-submit-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap">
+                            <span>📥 1-Tap Import to Ledger</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Preview Area -->
+                <div id="mpesa-preview-area" class="hidden space-y-2 pt-2 border-t dark:border-gray-800">
+                    <div class="flex justify-between items-center">
+                        <span id="mpesa-parsed-count" class="text-xs font-bold text-emerald-600 dark:text-emerald-400">0 SMS Extracted</span>
+                        <span class="text-[11px] text-gray-400">Review before importing</span>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 dark:bg-gray-800/60 text-[11px] text-gray-500 uppercase">
+                                <tr>
+                                    <th class="py-2 px-3">Receipt</th>
+                                    <th class="py-2 px-3">Date/Time</th>
+                                    <th class="py-2 px-3">Type</th>
+                                    <th class="py-2 px-3">Party</th>
+                                    <th class="py-2 px-3">Amount</th>
+                                    <th class="py-2 px-3">Category</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mpesa-preview-tbody" class="divide-y dark:divide-gray-800 bg-white dark:bg-gray-900"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </form>
         </div>
 
         <!-- 📈 MMF & Passive Yields Section -->
