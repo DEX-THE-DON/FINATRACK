@@ -44,6 +44,19 @@ export function renderRiderDashboard(data: any): string {
             }
         }
     </script>
+    <style>
+        .convertible-amount { transition: all 0.2s ease-in-out; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        .dark ::-webkit-scrollbar-thumb { background: #334155; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @supports (padding: max(0px)) {
+            .safe-area-bottom {
+                padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+            }
+        }
+    </style>
     <script>
         const USD_TO_KES = ${usd_to_kes};
         let deferredPrompt = null;
@@ -229,10 +242,32 @@ export function renderRiderDashboard(data: any): string {
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1 w-full">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 flex-1 w-full pb-28 sm:pb-8">
         
+        <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
+        <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>⏱️ Log Shift</span>
+            </button>
+            <a href="/" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>⚡ Finance</span>
+            </a>
+            <a href="/#mpesa-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gray-900 dark:bg-gray-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
+                <span>📲 M-Pesa</span>
+            </a>
+            <a href="/#waterfall-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🌊 Auto-Split</span>
+            </a>
+            <button onclick="document.getElementById('intelligence-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-cyan-300 text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>📈 Intelligence</span>
+            </button>
+            <button onclick="triggerAppInstall()" class="pwa-install-trigger flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-pink-600 to-rose-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>📲 Install</span>
+            </button>
+        </div>
+
         <!-- ⏰ Shift & Time Intelligence KPI Banner -->
-        <div class="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 rounded-3xl p-6 text-white shadow-lg border border-blue-800/40 space-y-4">
+        <div id="intelligence-card" class="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 rounded-3xl p-6 text-white shadow-lg border border-blue-800/40 space-y-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-blue-800/60 pb-3">
                 <div>
                     <h2 class="text-xl font-black flex items-center gap-2">
@@ -342,7 +377,7 @@ export function renderRiderDashboard(data: any): string {
         </div>
 
         <!-- Log Daily Shift Card -->
-        <div class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
+        <div id="shift-log-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
             <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
                 <div>
                     <h2 class="text-lg font-bold text-gray-900 dark:text-white">Log Rider Shift with Exact Working Times</h2>
@@ -518,6 +553,30 @@ export function renderRiderDashboard(data: any): string {
             </button>
         </div>
     </div>
+
+    <!-- 📱 Native Mobile Bottom App Dock -->
+    <nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800/80 px-4 py-2 flex justify-around items-center sm:hidden shadow-lg safe-area-bottom">
+        <a href="/" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-emerald-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">⚡</span>
+            <span class="text-[10px] tracking-tight">Finance</span>
+        </a>
+        <a href="/rider" class="flex flex-col items-center gap-0.5 text-blue-600 dark:text-blue-400 font-bold active:scale-90 transition-transform">
+            <span class="text-xl">🛵</span>
+            <span class="text-[10px] tracking-tight">Rider</span>
+        </a>
+        <a href="#shift-log-card" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">⏱️</span>
+            <span class="text-[10px] tracking-tight">Shift Log</span>
+        </a>
+        <a href="/#waterfall-card" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-indigo-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">🌊</span>
+            <span class="text-[10px] tracking-tight">Split</span>
+        </a>
+        <a href="/login" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-pink-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">🔑</span>
+            <span class="text-[10px] tracking-tight">Account</span>
+        </a>
+    </nav>
 </body>
 </html>`;
 }

@@ -53,6 +53,13 @@ export function renderFinanceDashboard(data: any): string {
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
         .dark ::-webkit-scrollbar-thumb { background: #334155; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @supports (padding: max(0px)) {
+            .safe-area-bottom {
+                padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+            }
+        }
     </style>
     <script>
         const USD_TO_KES = ${usd_to_kes};
@@ -341,8 +348,27 @@ export function renderFinanceDashboard(data: any): string {
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1 w-full">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 flex-1 w-full pb-28 sm:pb-8">
         
+        <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
+        <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <button onclick="document.getElementById('tx-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>➕ Add Tx</span>
+            </button>
+            <button onclick="pasteSampleMpesa('batch'); document.getElementById('mpesa-card')?.scrollIntoView({behavior: 'smooth'});" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gray-900 dark:bg-gray-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
+                <span>📲 Parse M-Pesa</span>
+            </button>
+            <button onclick="document.getElementById('waterfall-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🌊 Auto-Split</span>
+            </button>
+            <a href="/rider" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🛵 Log Shift</span>
+            </a>
+            <button onclick="triggerAppInstall()" class="pwa-install-trigger flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-pink-600 to-rose-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>📲 Install</span>
+            </button>
+        </div>
+
         <!-- Net Worth & Overview Stats -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-gradient-to-br from-emerald-600 to-teal-700 p-5 rounded-2xl text-white shadow-sm space-y-1">
@@ -371,7 +397,7 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 🌊 Dynamic Waterfall Auto-Split Card -->
-        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-md border border-indigo-800/40 space-y-4">
+        <div id="waterfall-card" class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-md border border-indigo-800/40 space-y-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-indigo-800/60 pb-3">
                 <div>
                     <div class="flex items-center space-x-2">
@@ -418,7 +444,7 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 📲 Smart M-Pesa Batch SMS Auto-Parser Card -->
-        <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-emerald-500/30 p-6 space-y-4">
+        <div id="mpesa-card" class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-emerald-500/30 p-6 space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-xl">
@@ -727,11 +753,29 @@ export function renderFinanceDashboard(data: any): string {
                     <p>Tap <strong>"Add"</strong> in the top-right corner to finish installing!</p>
                 </div>
             </div>
-            <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition">
-                Got It
-            </button>
-        </div>
-    </div>
+    <!-- 📱 Native Mobile Bottom App Dock -->
+    <nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800/80 px-4 py-2 flex justify-around items-center sm:hidden shadow-lg safe-area-bottom">
+        <a href="/" class="flex flex-col items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-bold active:scale-90 transition-transform">
+            <span class="text-xl">⚡</span>
+            <span class="text-[10px] tracking-tight">Finance</span>
+        </a>
+        <a href="/rider" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">🛵</span>
+            <span class="text-[10px] tracking-tight">Rider</span>
+        </a>
+        <a href="#mpesa-card" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-emerald-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">📲</span>
+            <span class="text-[10px] tracking-tight">M-Pesa</span>
+        </a>
+        <a href="#waterfall-card" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-indigo-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">🌊</span>
+            <span class="text-[10px] tracking-tight">Split</span>
+        </a>
+        <a href="/login" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-pink-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">🔑</span>
+            <span class="text-[10px] tracking-tight">Account</span>
+        </a>
+    </nav>
 </body>
 </html>`;
 }
