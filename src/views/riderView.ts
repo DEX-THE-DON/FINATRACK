@@ -218,6 +218,10 @@ export function renderRiderDashboard(data: any): string {
                     <option value="USD">USD</option>
                 </select>
 
+                <a href="/login" class="px-3 py-1.5 bg-gradient-to-r from-pink-500/10 to-purple-500/10 hover:from-pink-500/20 hover:to-purple-500/20 text-pink-600 dark:text-pink-400 border border-pink-500/30 rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs">
+                    <span>🔑 <span class="hidden sm:inline">Sign In</span></span>
+                </a>
+
                 <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">
                     🌙
                 </button>

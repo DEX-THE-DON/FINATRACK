@@ -4,8 +4,10 @@ import { AppEnv, getSupabaseClient } from './db/supabase';
 import { financeRoutes } from './routes/finance';
 import { riderRoutes, classifyShiftWindow } from './routes/rider';
 import { exportRoutes } from './routes/export';
+import { authRoutes } from './routes/auth';
 import { renderFinanceDashboard } from './views/financeView';
 import { renderRiderDashboard } from './views/riderView';
+import { renderAuthView } from './views/authView';
 import {
   toDecimal,
   calculateMonthlyYield,
@@ -309,11 +311,30 @@ app.get('/rider', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// 3. MOUNT ROUTE MODULES
+// 3. AUTHENTICATION VIEWS
+// ------------------------------------------------------------------------------
+app.get('/login', (c) => {
+  const toast = c.req.query('toast') || '';
+  return c.html(renderAuthView({ mode: 'login', toast }));
+});
+
+app.get('/signup', (c) => {
+  const toast = c.req.query('toast') || '';
+  return c.html(renderAuthView({ mode: 'signup', toast }));
+});
+
+app.get('/auth', (c) => {
+  const toast = c.req.query('toast') || '';
+  return c.html(renderAuthView({ mode: 'signup', toast }));
+});
+
+// ------------------------------------------------------------------------------
+// 4. MOUNT ROUTE MODULES
 // ------------------------------------------------------------------------------
 app.route('/', financeRoutes);
 app.route('/', riderRoutes);
 app.route('/', exportRoutes);
+app.route('/', authRoutes);
 
 // Export for Cloudflare Pages / Workers & Local execution
 export default app;
