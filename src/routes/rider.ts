@@ -114,7 +114,15 @@ riderRoutes.post('/rider/logs', async (c) => {
     insertPayload.user_id = userId;
   }
 
-  const { data: newLog, error } = await supabase.from('rider_logs').insert(insertPayload).select().single();
+  let { data: newLog, error } = await supabase.from('rider_logs').insert(insertPayload).select().single();
+
+  if (error && error.code === 'PGRST204') {
+    delete insertPayload.power_type;
+    delete insertPayload.swaps_count;
+    const retryRes = await supabase.from('rider_logs').insert(insertPayload).select().single();
+    newLog = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) {
     console.error('Failed to save shift log:', error);
@@ -221,7 +229,14 @@ riderRoutes.post('/bikes/create', async (c) => {
     insertPayload.user_id = userId;
   }
 
-  const { data: newBike, error } = await supabase.from('bikes').insert(insertPayload).select().single();
+  let { data: newBike, error } = await supabase.from('bikes').insert(insertPayload).select().single();
+
+  if (error && error.code === 'PGRST204') {
+    delete insertPayload.power_type;
+    const retryRes = await supabase.from('bikes').insert(insertPayload).select().single();
+    newBike = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) {
     console.error('Failed to register bike:', error);
