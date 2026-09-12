@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import { AppEnv, getSupabaseClient } from '../db/supabase';
+import { AppEnv, getRequestContext } from '../db/supabase';
 
 export const exportRoutes = new Hono<{ Bindings: AppEnv }>();
 
 exportRoutes.get('/finance/export/csv', async (c) => {
-  const supabase = getSupabaseClient(c.env);
+  const { supabase } = await getRequestContext(c);
   const { data: txs } = await supabase.from('transactions').select('*').order('date', { ascending: false });
   const { data: accounts } = await supabase.from('accounts').select('id, name');
 
@@ -31,7 +31,7 @@ exportRoutes.get('/finance/export/csv', async (c) => {
 });
 
 exportRoutes.get('/rider/export/csv', async (c) => {
-  const supabase = getSupabaseClient(c.env);
+  const { supabase } = await getRequestContext(c);
   const { data: logs } = await supabase.from('rider_logs').select('*').order('date', { ascending: false });
   const { data: bikes } = await supabase.from('bikes').select('id, plate_number, model_name');
 

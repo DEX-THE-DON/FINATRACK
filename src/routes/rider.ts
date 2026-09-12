@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AppEnv, getSupabaseClient } from '../db/supabase';
+import { AppEnv, getRequestContext } from '../db/supabase';
 import {
   toDecimal,
   calculateShiftHours,
@@ -41,6 +41,7 @@ export function classifyShiftWindow(startTime?: string | null, endTime?: string 
 // SHIFT LOGS CRUD
 // ------------------------------------------------------------------------------
 riderRoutes.post('/rider/logs', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const bikeId = body['bike_id'] ? String(body['bike_id']) : null;
   const powerType = String(body['power_type'] || 'PETROL').toUpperCase();
@@ -88,9 +89,8 @@ riderRoutes.post('/rider/logs', async (c) => {
     .plus(miscExpensesUsd)
     .toNumber();
 
-  const supabase = getSupabaseClient(c.env);
-  const { data: newLog } = await supabase.from('rider_logs').insert({
-    bike_id: bikeId,
+  const insertPayload: any = {
+    bike_id: bikeId || null,
     power_type: powerType,
     date: logDate,
     start_time: startTime,
@@ -107,9 +107,19 @@ riderRoutes.post('/rider/logs', async (c) => {
     airtime_spent: airtimeSpentUsd,
     maintenance_cost: maintCostUsd,
     misc_expenses: miscExpensesUsd,
-    earnings_account_id: earningsAccId,
-    expense_account_id: expenseAccId,
-  }).select().single();
+    earnings_account_id: earningsAccId || null,
+    expense_account_id: expenseAccId || null,
+  };
+  if (userId) {
+    insertPayload.user_id = userId;
+  }
+
+  const { data: newLog, error } = await supabase.from('rider_logs').insert(insertPayload).select().single();
+
+  if (error) {
+    console.error('Failed to save shift log:', error);
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to save shift: ' + error.message)}`, 303);
+  }
 
   // Automatic Finance Ledger Integration
   if (newLog) {
@@ -118,6 +128,7 @@ riderRoutes.post('/rider/logs', async (c) => {
       if (acc) {
         await supabase.from('accounts').update({ balance: toDecimal(acc.balance).plus(totalEarnedUsd).toNumber() }).eq('id', earningsAccId);
         await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
           account_id: earningsAccId,
           transaction_type: 'INCOME',
           category: 'Rider Revenue',
@@ -135,6 +146,7 @@ riderRoutes.post('/rider/logs', async (c) => {
         await supabase.from('accounts').update({ balance: toDecimal(acc.balance).minus(totalExpensesUsd).toNumber() }).eq('id', expenseAccId);
         const energyLabel = powerType === 'ELECTRIC' ? `${fuelStation} Battery Swap` : `${fuelStation} Fuel`;
         await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
           account_id: expenseAccId,
           transaction_type: 'EXPENSE',
           category: powerType === 'ELECTRIC' ? 'EV Battery Swap & Upkeep' : 'Rider Shift Upkeep',
@@ -151,10 +163,14 @@ riderRoutes.post('/rider/logs', async (c) => {
 });
 
 riderRoutes.post('/rider/logs/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
   await supabase.from('transactions').delete().eq('rider_log_id', id);
-  await supabase.from('rider_logs').delete().eq('id', id);
+  const { error } = await supabase.from('rider_logs').delete().eq('id', id);
+  if (error) {
+    console.error('Failed to delete shift log:', error);
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to delete shift: ' + error.message)}`, 303);
+  }
   return c.redirect('/rider?toast=Shift+log+removed', 303);
 });
 
@@ -162,6 +178,7 @@ riderRoutes.post('/rider/logs/delete/:id', async (c) => {
 // MOTORBIKE & EV FLEET CRUD
 // ------------------------------------------------------------------------------
 riderRoutes.post('/bikes/create', async (c) => {
+  const { supabase, userId, username } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const plate = String(body['plate_number'] || '').trim().toUpperCase();
   if (!plate) {
@@ -169,7 +186,7 @@ riderRoutes.post('/bikes/create', async (c) => {
   }
 
   const model = body['model_name'] ? String(body['model_name']).trim() : 'Boda Boda';
-  const owner = body['owner_name'] ? String(body['owner_name']).trim() : 'Dennis';
+  const owner = body['owner_name'] ? String(body['owner_name']).trim() : (username || 'Dennis');
   const powerType = (String(body['power_type'] || 'PETROL').toUpperCase() === 'ELECTRIC' ? 'ELECTRIC' : 'PETROL') as 'PETROL' | 'ELECTRIC';
   const rawTarget = parseFloat(String(body['daily_target'] || '2500.0')) || 2500.0;
 
@@ -181,39 +198,71 @@ riderRoutes.post('/bikes/create', async (c) => {
     ? toDecimal(rawTarget).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawTarget;
 
-  const supabase = getSupabaseClient(c.env);
-  
-  // Deactivate all other bikes so the newly registered vehicle becomes active
-  await supabase.from('bikes').update({ is_active: 0 }).neq('id', '00000000-0000-0000-0000-000000000000');
-  
-  const { data: newBike, error } = await supabase.from('bikes').insert({
+  // Deactivate existing bikes so the new bike becomes active
+  try {
+    if (userId) {
+      await supabase.from('bikes').update({ is_active: 0 }).eq('user_id', userId);
+    } else {
+      await supabase.from('bikes').update({ is_active: 0 }).neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+  } catch (err) {
+    console.warn('Deactivate previous bikes notice:', err);
+  }
+
+  const insertPayload: any = {
     plate_number: plate,
     model_name: model,
     owner_name: owner,
     power_type: powerType,
     daily_target: targetUsd,
     is_active: 1,
-  }).select().single();
+  };
+  if (userId) {
+    insertPayload.user_id = userId;
+  }
 
-  const typeLabel = powerType === 'ELECTRIC' ? 'Electric+EV' : 'Motorbike';
-  return c.redirect(`/rider?toast=${typeLabel}+[${plate}]+registered+to+fleet!`, 303);
+  const { data: newBike, error } = await supabase.from('bikes').insert(insertPayload).select().single();
+
+  if (error) {
+    console.error('Failed to register bike:', error);
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to register vehicle: ' + error.message)}`, 303);
+  }
+
+  const typeLabel = powerType === 'ELECTRIC' ? 'Electric EV' : 'Motorbike';
+  return c.redirect(`/rider?toast=${encodeURIComponent(`${typeLabel} [${plate}] registered to fleet!`)}`, 303);
 });
 
 riderRoutes.post('/bikes/activate/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('bikes').update({ is_active: 0 }).neq('id', id);
-  await supabase.from('bikes').update({ is_active: 1 }).eq('id', id);
+  if (userId) {
+    await supabase.from('bikes').update({ is_active: 0 }).eq('user_id', userId);
+  } else {
+    await supabase.from('bikes').update({ is_active: 0 }).neq('id', id);
+  }
+  const { error } = await supabase.from('bikes').update({ is_active: 1 }).eq('id', id);
+  if (error) {
+    console.error('Failed to activate bike:', error);
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to activate vehicle: ' + error.message)}`, 303);
+  }
   return c.redirect('/rider?toast=Active+vehicle+switched', 303);
 });
 
 riderRoutes.post('/bikes/delete/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('bikes').delete().eq('id', id);
+  const { error } = await supabase.from('bikes').delete().eq('id', id);
+  if (error) {
+    console.error('Failed to delete bike:', error);
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to delete vehicle: ' + error.message)}`, 303);
+  }
   
   // If active bike was deleted, activate any remaining bike
-  const { data: remaining } = await supabase.from('bikes').select('*').limit(1);
+  let query = supabase.from('bikes').select('*');
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+  const { data: remaining } = await query.limit(1);
   if (remaining && remaining.length > 0) {
     await supabase.from('bikes').update({ is_active: 1 }).eq('id', remaining[0].id);
   }
@@ -224,30 +273,37 @@ riderRoutes.post('/bikes/delete/:id', async (c) => {
 // MAINTENANCE & COMPLIANCE
 // ------------------------------------------------------------------------------
 riderRoutes.post('/rider/maintenance/service/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
   const today = new Date();
   const nextDate = new Date(today.getTime() + 21 * 86400000); // 3 weeks
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('maintenance_schedules').update({
+  const { error } = await supabase.from('maintenance_schedules').update({
     last_service_date: today.toISOString().slice(0, 10),
     next_due_date: nextDate.toISOString().slice(0, 10),
     last_brake_pad_date: today.toISOString().slice(0, 10),
   }).eq('id', id);
 
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Error updating service: ' + error.message)}`, 303);
+  }
   return c.redirect('/rider?toast=Service+logged+and+interval+reset', 303);
 });
 
 riderRoutes.post('/rider/compliance/renew/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
   const today = new Date();
   const nextYear = new Date(today.getTime() + 365 * 86400000);
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('compliance_deadlines').update({
+  const { error } = await supabase.from('compliance_deadlines').update({
     last_renewed_date: today.toISOString().slice(0, 10),
     expiry_date: nextYear.toISOString().slice(0, 10),
   }).eq('id', id);
 
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Error updating compliance: ' + error.message)}`, 303);
+  }
   return c.redirect('/rider?toast=Compliance+deadline+renewed', 303);
 });
+

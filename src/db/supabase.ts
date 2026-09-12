@@ -216,3 +216,54 @@ export function getSupabaseClient(env?: AppEnv, authHeader?: string): SupabaseCl
     },
   });
 }
+
+export async function getRequestContext(c: any) {
+  const env = c.env || {};
+  const cookieHeader = c.req.header('cookie') || '';
+  const cookies = Object.fromEntries(
+    cookieHeader.split(';').map((s: string) => {
+      const idx = s.indexOf('=');
+      return idx > -1 ? [s.slice(0, idx).trim(), s.slice(idx + 1).trim()] : [s.trim(), ''];
+    })
+  );
+
+  const token = cookies['sb-access-token'] || c.req.header('authorization')?.replace(/^Bearer\s+/i, '') || '';
+  const authHeader = token ? `Bearer ${token}` : undefined;
+  const supabase = getSupabaseClient(env, authHeader);
+
+  let user: any = null;
+  let username = '';
+  let email = '';
+  let isLoggedIn = false;
+
+  if (token) {
+    try {
+      const { data: userData, error } = await supabase.auth.getUser(token);
+      if (!error && userData?.user) {
+        user = userData.user;
+        isLoggedIn = true;
+        email = userData.user.email || '';
+        username = userData.user.user_metadata?.full_name || email.split('@')[0] || 'Member';
+      }
+    } catch (e) {
+      console.warn('Auth token verification error:', e);
+    }
+  }
+
+  if (!username && cookies['finatrack_user']) {
+    try {
+      username = decodeURIComponent(cookies['finatrack_user']);
+    } catch (_) {}
+  }
+
+  return {
+    supabase,
+    user,
+    userId: user?.id || null,
+    isLoggedIn,
+    username: username || 'Member',
+    email,
+    token,
+  };
+}
+

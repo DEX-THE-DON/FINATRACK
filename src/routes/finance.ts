@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AppEnv, getSupabaseClient } from '../db/supabase';
+import { AppEnv, getRequestContext } from '../db/supabase';
 import {
   toDecimal,
   calculateMonthlyYield,
@@ -22,6 +22,7 @@ function getExchangeRate(): number {
 // ACCOUNTS CRUD
 // ------------------------------------------------------------------------------
 financeRoutes.post('/accounts/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const name = String(body['name'] || '').trim();
   const accountNumber = body['account_number'] ? String(body['account_number']).trim() : null;
@@ -37,8 +38,8 @@ financeRoutes.post('/accounts/create', async (c) => {
     ? toDecimal(rawBalance).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawBalance;
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('accounts').insert({
+  const { error } = await supabase.from('accounts').insert({
+    ...(userId ? { user_id: userId } : {}),
     name,
     account_number: accountNumber,
     account_type: accountType,
@@ -46,10 +47,16 @@ financeRoutes.post('/accounts/create', async (c) => {
     balance: finalBalance,
   });
 
+  if (error) {
+    console.error('Failed to create account:', error);
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to create account: ' + error.message)}`, 303);
+  }
+
   return c.redirect('/?toast=Account+created+successfully', 303);
 });
 
 financeRoutes.post('/accounts/update/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const name = String(body['name'] || '').trim();
@@ -66,8 +73,7 @@ financeRoutes.post('/accounts/update/:id', async (c) => {
     ? toDecimal(rawBalance).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawBalance;
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('accounts').update({
+  const { error } = await supabase.from('accounts').update({
     name,
     account_number: accountNumber,
     account_type: accountType,
@@ -76,24 +82,31 @@ financeRoutes.post('/accounts/update/:id', async (c) => {
     updated_at: new Date().toISOString(),
   }).eq('id', id);
 
+  if (error) {
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to update account: ' + error.message)}`, 303);
+  }
+
   return c.redirect('/?toast=Account+updated+successfully', 303);
 });
 
 financeRoutes.post('/accounts/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
 
   // Decouple any linked allocation rules or bills
   await supabase.from('allocation_rules').update({ target_id: null }).eq('target_id', id);
   await supabase.from('bills').update({ payment_account_id: null }).eq('payment_account_id', id);
 
-  await supabase.from('accounts').delete().eq('id', id);
+  const { error } = await supabase.from('accounts').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete account: ' + error.message)}`, 303);
+  }
   return c.redirect('/?toast=Account+deleted+successfully', 303);
 });
 
 financeRoutes.post('/accounts/interest/log/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
 
   const { data: acc } = await supabase.from('accounts').select('*').eq('id', id).single();
   if (acc && acc.interest_rate_p_a > 0 && acc.balance > 0) {
@@ -102,6 +115,7 @@ financeRoutes.post('/accounts/interest/log/:id', async (c) => {
 
     await supabase.from('accounts').update({ balance: newBal }).eq('id', id);
     await supabase.from('transactions').insert({
+      ...(userId ? { user_id: userId } : {}),
       account_id: acc.id,
       transaction_type: 'INCOME',
       category: 'Interest & Yield',
@@ -118,6 +132,7 @@ financeRoutes.post('/accounts/interest/log/:id', async (c) => {
 // QUICK TRANSFERS
 // ------------------------------------------------------------------------------
 financeRoutes.post('/transfers/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const fromId = String(body['from_account_id'] || '');
   const toId = String(body['to_account_id'] || '');
@@ -132,7 +147,6 @@ financeRoutes.post('/transfers/create', async (c) => {
       ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
       : rawAmt;
 
-    const supabase = getSupabaseClient(c.env);
     const { data: fromAcc } = await supabase.from('accounts').select('*').eq('id', fromId).single();
     const { data: toAcc } = await supabase.from('accounts').select('*').eq('id', toId).single();
 
@@ -143,6 +157,7 @@ financeRoutes.post('/transfers/create', async (c) => {
       const today = new Date().toISOString().slice(0, 10);
       await supabase.from('transactions').insert([
         {
+          ...(userId ? { user_id: userId } : {}),
           account_id: fromId,
           transaction_type: 'EXPENSE',
           category: 'Transfer',
@@ -151,6 +166,7 @@ financeRoutes.post('/transfers/create', async (c) => {
           date: today,
         },
         {
+          ...(userId ? { user_id: userId } : {}),
           account_id: toId,
           transaction_type: 'INCOME',
           category: 'Transfer',
@@ -169,6 +185,7 @@ financeRoutes.post('/transfers/create', async (c) => {
 // TRANSACTIONS CRUD
 // ------------------------------------------------------------------------------
 financeRoutes.post('/transactions/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const accountId = String(body['account_id'] || '');
   const txType = String(body['transaction_type'] || 'EXPENSE').toUpperCase();
@@ -185,8 +202,8 @@ financeRoutes.post('/transactions/create', async (c) => {
     ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawAmt;
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('transactions').insert({
+  const { error } = await supabase.from('transactions').insert({
+    ...(userId ? { user_id: userId } : {}),
     account_id: accountId || null,
     transaction_type: txType,
     category,
@@ -194,6 +211,11 @@ financeRoutes.post('/transactions/create', async (c) => {
     date: tDate,
     description,
   });
+
+  if (error) {
+    console.error('Failed to create transaction:', error);
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to save transaction: ' + error.message)}`, 303);
+  }
 
   // Update account balance
   if (accountId) {
@@ -209,9 +231,12 @@ financeRoutes.post('/transactions/create', async (c) => {
 });
 
 financeRoutes.post('/transactions/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('transactions').delete().eq('id', id);
+  const { error } = await supabase.from('transactions').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete transaction: ' + error.message)}`, 303);
+  }
   return c.redirect('/?toast=Transaction+deleted', 303);
 });
 
@@ -219,6 +244,7 @@ financeRoutes.post('/transactions/delete/:id', async (c) => {
 // BUDGETS
 // ------------------------------------------------------------------------------
 financeRoutes.post('/budgets/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const category = String(body['category'] || '').trim();
   const rawLimit = parseFloat(String(body['limit_amount'] || '0.0')) || 0.0;
@@ -231,19 +257,27 @@ financeRoutes.post('/budgets/create', async (c) => {
     ? toDecimal(rawLimit).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawLimit;
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('budgets').upsert({
+  const { error } = await supabase.from('budgets').upsert({
+    ...(userId ? { user_id: userId } : {}),
     category,
     limit_amount: limitUsd,
   }, { onConflict: 'user_id, category' });
+
+  if (error) {
+    console.error('Failed to create budget:', error);
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to save budget: ' + error.message)}`, 303);
+  }
 
   return c.redirect('/?toast=Budget+saved+successfully', 303);
 });
 
 financeRoutes.post('/budgets/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('budgets').delete().eq('id', id);
+  const { error } = await supabase.from('budgets').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete budget: ' + error.message)}`, 303);
+  }
   return c.redirect('/?toast=Budget+category+removed', 303);
 });
 
@@ -251,6 +285,7 @@ financeRoutes.post('/budgets/delete/:id', async (c) => {
 // SAVINGS GOALS
 // ------------------------------------------------------------------------------
 financeRoutes.post('/goals/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const title = String(body['title'] || '').trim();
   const rawTarget = parseFloat(String(body['target_amount'] || '0.0')) || 0.0;
@@ -265,16 +300,22 @@ financeRoutes.post('/goals/create', async (c) => {
     ? toDecimal(rawTarget).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawTarget;
 
-  const supabase = getSupabaseClient(c.env);
-  const { data: goal } = await supabase.from('goals').insert({
+  const { data: goal, error } = await supabase.from('goals').insert({
+    ...(userId ? { user_id: userId } : {}),
     title,
     target_amount: targetUsd,
     current_amount: 0.00,
     target_date: targetDate,
   }).select().single();
 
+  if (error) {
+    console.error('Failed to create goal:', error);
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to create goal: ' + error.message)}`, 303);
+  }
+
   if (goal && addToSplit) {
     await supabase.from('allocation_rules').insert({
+      ...(userId ? { user_id: userId } : {}),
       bucket_name: title,
       target_type: 'GOAL',
       target_id: goal.id,
@@ -288,6 +329,7 @@ financeRoutes.post('/goals/create', async (c) => {
 });
 
 financeRoutes.post('/goals/fund/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
@@ -300,7 +342,6 @@ financeRoutes.post('/goals/fund/:id', async (c) => {
     ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawAmt;
 
-  const supabase = getSupabaseClient(c.env);
   const { data: goal } = await supabase.from('goals').select('*').eq('id', id).single();
   if (goal) {
     const newAmt = toDecimal(goal.current_amount).plus(amtUsd).toNumber();
@@ -311,6 +352,7 @@ financeRoutes.post('/goals/fund/:id', async (c) => {
 });
 
 financeRoutes.post('/goals/withdraw/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
@@ -323,7 +365,6 @@ financeRoutes.post('/goals/withdraw/:id', async (c) => {
     ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawAmt;
 
-  const supabase = getSupabaseClient(c.env);
   const { data: goal } = await supabase.from('goals').select('*').eq('id', id).single();
   if (goal) {
     const newAmt = Decimal.max(0, toDecimal(goal.current_amount).minus(amtUsd)).toNumber();
@@ -334,10 +375,13 @@ financeRoutes.post('/goals/withdraw/:id', async (c) => {
 });
 
 financeRoutes.post('/goals/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
   await supabase.from('allocation_rules').delete().eq('target_id', id);
-  await supabase.from('goals').delete().eq('id', id);
+  const { error } = await supabase.from('goals').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete goal: ' + error.message)}`, 303);
+  }
   return c.redirect('/?toast=Goal+deleted', 303);
 });
 
@@ -345,6 +389,7 @@ financeRoutes.post('/goals/delete/:id', async (c) => {
 // DEBTS & LOANS
 // ------------------------------------------------------------------------------
 financeRoutes.post('/debts/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const personName = String(body['person_name'] || '').trim();
   const debtType = String(body['debt_type'] || 'I_OWE');
@@ -361,8 +406,8 @@ financeRoutes.post('/debts/create', async (c) => {
     ? toDecimal(rawTotal).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawTotal;
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('debts').insert({
+  const { error } = await supabase.from('debts').insert({
+    ...(userId ? { user_id: userId } : {}),
     person_name: personName,
     debt_type: debtType,
     total_amount: totalUsd,
@@ -373,10 +418,16 @@ financeRoutes.post('/debts/create', async (c) => {
     description,
   });
 
+  if (error) {
+    console.error('Failed to create debt:', error);
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to save debt: ' + error.message)}`, 303);
+  }
+
   return c.redirect('/?toast=Debt+record+saved', 303);
 });
 
 financeRoutes.post('/debts/repay/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
@@ -389,7 +440,6 @@ financeRoutes.post('/debts/repay/:id', async (c) => {
     ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawAmt;
 
-  const supabase = getSupabaseClient(c.env);
   const { data: debt } = await supabase.from('debts').select('*').eq('id', id).single();
   if (debt) {
     const newPaid = toDecimal(debt.paid_amount).plus(amtUsd).toNumber();
@@ -405,9 +455,12 @@ financeRoutes.post('/debts/repay/:id', async (c) => {
 });
 
 financeRoutes.post('/debts/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('debts').delete().eq('id', id);
+  const { error } = await supabase.from('debts').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete debt: ' + error.message)}`, 303);
+  }
   return c.redirect('/?toast=Debt+record+deleted', 303);
 });
 
@@ -415,6 +468,7 @@ financeRoutes.post('/debts/delete/:id', async (c) => {
 // RECURRING BILLS
 // ------------------------------------------------------------------------------
 financeRoutes.post('/bills/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const title = String(body['title'] || '').trim();
   const category = String(body['category'] || 'UTILITY').trim();
@@ -431,8 +485,8 @@ financeRoutes.post('/bills/create', async (c) => {
     ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawAmt;
 
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('bills').insert({
+  const { error } = await supabase.from('bills').insert({
+    ...(userId ? { user_id: userId } : {}),
     title,
     category,
     amount: amtUsd,
@@ -442,15 +496,20 @@ financeRoutes.post('/bills/create', async (c) => {
     notes,
   });
 
+  if (error) {
+    console.error('Failed to create bill:', error);
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to save bill: ' + error.message)}`, 303);
+  }
+
   return c.redirect('/?toast=Recurring+bill+added+successfully', 303);
 });
 
 financeRoutes.post('/bills/pay/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const paymentAccountId = body['payment_account_id'] ? String(body['payment_account_id']) : null;
 
-  const supabase = getSupabaseClient(c.env);
   const { data: bill } = await supabase.from('bills').select('*').eq('id', id).single();
   if (bill) {
     const today = new Date().toISOString().slice(0, 10);
@@ -463,6 +522,7 @@ financeRoutes.post('/bills/pay/:id', async (c) => {
         const newBal = toDecimal(acc.balance).minus(bill.amount).toNumber();
         await supabase.from('accounts').update({ balance: newBal }).eq('id', accId);
         await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
           account_id: accId,
           transaction_type: 'EXPENSE',
           category: `Utility: ${bill.category}`,
@@ -478,9 +538,12 @@ financeRoutes.post('/bills/pay/:id', async (c) => {
 });
 
 financeRoutes.post('/bills/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const supabase = getSupabaseClient(c.env);
-  await supabase.from('bills').delete().eq('id', id);
+  const { error } = await supabase.from('bills').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete bill: ' + error.message)}`, 303);
+  }
   return c.redirect('/?toast=Bill+removed', 303);
 });
 
@@ -488,6 +551,7 @@ financeRoutes.post('/bills/delete/:id', async (c) => {
 // DYNAMIC WATERFALL AUTO-SPLIT EXECUTION
 // ------------------------------------------------------------------------------
 financeRoutes.post('/split/distribute', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
   const sourceAccountId = body['source_account_id'] ? String(body['source_account_id']) : null;
@@ -502,7 +566,6 @@ financeRoutes.post('/split/distribute', async (c) => {
     ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
     : rawAmt;
 
-  const supabase = getSupabaseClient(c.env);
   const { data: rules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
 
   if (rules && rules.length > 0) {
@@ -529,6 +592,7 @@ financeRoutes.post('/split/distribute', async (c) => {
           const newBal = toDecimal(acc.balance).plus(splitAmt).toNumber();
           await supabase.from('accounts').update({ balance: newBal }).eq('id', res.target_id);
           await supabase.from('transactions').insert({
+            ...(userId ? { user_id: userId } : {}),
             account_id: res.target_id,
             transaction_type: 'INCOME',
             category: 'Auto-Split Deposit',
@@ -554,8 +618,8 @@ financeRoutes.post('/split/distribute', async (c) => {
 // ALLOCATION RULES UPDATE
 // ------------------------------------------------------------------------------
 financeRoutes.post('/rules/update', async (c) => {
+  const { supabase } = await getRequestContext(c);
   const body = await c.req.parseBody();
-  const supabase = getSupabaseClient(c.env);
   const { data: rules } = await supabase.from('allocation_rules').select('*');
 
   if (rules) {
@@ -575,20 +639,35 @@ financeRoutes.post('/rules/update', async (c) => {
 // SYSTEM DATA RESET (CLEAN SLATE)
 // ------------------------------------------------------------------------------
 financeRoutes.post('/system/reset-data', async (c) => {
-  const supabase = getSupabaseClient(c.env);
+  const { supabase, userId } = await getRequestContext(c);
   
-  await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('rider_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('debts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('budgets').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('goals').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('bills').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('maintenance_schedules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('compliance_deadlines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('bike_financings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('allocation_rules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('bikes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('accounts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (userId) {
+    await supabase.from('transactions').delete().eq('user_id', userId);
+    await supabase.from('rider_logs').delete().eq('user_id', userId);
+    await supabase.from('debts').delete().eq('user_id', userId);
+    await supabase.from('budgets').delete().eq('user_id', userId);
+    await supabase.from('goals').delete().eq('user_id', userId);
+    await supabase.from('bills').delete().eq('user_id', userId);
+    await supabase.from('maintenance_schedules').delete().eq('user_id', userId);
+    await supabase.from('compliance_deadlines').delete().eq('user_id', userId);
+    await supabase.from('bike_financings').delete().eq('user_id', userId);
+    await supabase.from('allocation_rules').delete().eq('user_id', userId);
+    await supabase.from('bikes').delete().eq('user_id', userId);
+    await supabase.from('accounts').delete().eq('user_id', userId);
+  } else {
+    await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('rider_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('debts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('budgets').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('goals').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('bills').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('maintenance_schedules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('compliance_deadlines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('bike_financings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('allocation_rules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('bikes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('accounts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  }
 
   return c.redirect('/?toast=All+data+cleared!+Ready+for+real+data.', 303);
 });
@@ -604,6 +683,7 @@ financeRoutes.post('/finance/mpesa/parse', async (c) => {
 });
 
 financeRoutes.post('/finance/mpesa/import', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const accountId = String(body['account_id'] || '');
   const rawText = String(body['raw_sms'] || '');
@@ -618,7 +698,6 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
     return c.redirect('/?toast=No+valid+M-Pesa+messages+found+in+the+pasted+text', 303);
   }
 
-  const supabase = getSupabaseClient(c.env);
   const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
   let currentBalanceUsd = acc ? toDecimal(acc.balance) : new Decimal(0);
 
@@ -626,21 +705,24 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
   for (const t of parsedList) {
     const amountUsd = toDecimal(t.amount_kes).dividedBy(liveRate).toDecimalPlaces(2).toNumber();
     
-    await supabase.from('transactions').insert({
+    const { error: txError } = await supabase.from('transactions').insert({
+      ...(userId ? { user_id: userId } : {}),
       account_id: accountId,
       amount: amountUsd,
-      type: t.type,
+      transaction_type: t.type,
       category: t.suggested_category,
       description: t.description,
       date: t.date,
     });
 
-    if (t.type === 'INCOME') {
-      currentBalanceUsd = currentBalanceUsd.plus(amountUsd);
-    } else {
-      currentBalanceUsd = currentBalanceUsd.minus(amountUsd);
+    if (!txError) {
+      if (t.type === 'INCOME') {
+        currentBalanceUsd = currentBalanceUsd.plus(amountUsd);
+      } else {
+        currentBalanceUsd = currentBalanceUsd.minus(amountUsd);
+      }
+      importedCount++;
     }
-    importedCount++;
   }
 
   if (acc) {
@@ -649,3 +731,4 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
 
   return c.redirect(`/?toast=Successfully+imported+${importedCount}+M-Pesa+transactions!`, 303);
 });
+

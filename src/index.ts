@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AppEnv, getSupabaseClient } from './db/supabase';
+import { AppEnv, getRequestContext } from './db/supabase';
 import { financeRoutes } from './routes/finance';
 import { riderRoutes, classifyShiftWindow } from './routes/rider';
 import { exportRoutes } from './routes/export';
@@ -100,46 +100,12 @@ self.addEventListener('fetch', (event) => {
   });
 });
 
-// Helper to strictly verify authenticated user from Supabase session token
-async function getAuthenticatedUser(c: any, supabase: any) {
-  const cookieHeader = c.req.header('cookie') || '';
-  const cookies = Object.fromEntries(
-    cookieHeader.split(';').map((s: string) => {
-      const idx = s.indexOf('=');
-      return idx > -1 ? [s.slice(0, idx).trim(), s.slice(idx + 1).trim()] : [s.trim(), ''];
-    })
-  );
-
-  let username = '';
-  let email = '';
-  let isLoggedIn = false;
-
-  const token = cookies['sb-access-token'];
-  if (token) {
-    try {
-      const { data: userData, error } = await supabase.auth.getUser(token);
-      if (!error && userData?.user) {
-        isLoggedIn = true;
-        email = userData.user.email || '';
-        username = userData.user.user_metadata?.full_name || email.split('@')[0] || 'Member';
-      }
-    } catch (e) {}
-  }
-
-  return {
-    isLoggedIn,
-    username: isLoggedIn ? username : '',
-    email,
-  };
-}
-
 // ------------------------------------------------------------------------------
 // 1. FINANCE DASHBOARD (GET /)
 // ------------------------------------------------------------------------------
 app.get('/', async (c) => {
-  const supabase = getSupabaseClient(c.env);
+  const { supabase, userId, username, isLoggedIn } = await getRequestContext(c);
   const toast = c.req.query('toast') || '';
-  const authUser = await getAuthenticatedUser(c, supabase);
 
   const { data: accounts } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
   const { data: transactions } = await supabase.from('transactions').select('*').order('date', { ascending: false }).limit(50);
@@ -225,8 +191,8 @@ app.get('/', async (c) => {
     total_monthly_passive_income: totalMonthlyPassive.toFixed(2),
     usd_to_kes: USD_TO_KES,
     toast,
-    username: authUser.username,
-    is_logged_in: authUser.isLoggedIn,
+    username,
+    is_logged_in: isLoggedIn,
   });
 
   return c.html(html);
@@ -236,9 +202,8 @@ app.get('/', async (c) => {
 // 2. RIDER DASHBOARD (GET /rider)
 // ------------------------------------------------------------------------------
 app.get('/rider', async (c) => {
-  const supabase = getSupabaseClient(c.env);
+  const { supabase, userId, username, isLoggedIn } = await getRequestContext(c);
   const toast = c.req.query('toast') || '';
-  const authUser = await getAuthenticatedUser(c, supabase);
 
   const { data: bikes } = await supabase.from('bikes').select('*');
   const { data: logs } = await supabase.from('rider_logs').select('*').order('date', { ascending: false });
@@ -298,13 +263,13 @@ app.get('/rider', async (c) => {
     }
   }
 
-  const grossHourlyRate = totalHours > 0 ? Math.round((totalEarnedUsd * USD_TO_KES) / totalHours) : 0;
-  const netHourlyRate = totalHours > 0 ? Math.round(((totalEarnedUsd - totalExpensesUsd) * USD_TO_KES) / totalHours) : 0;
+  const grossHourlyRate = totalHours > 0 ? ((totalEarnedUsd * USD_TO_KES) / totalHours).toFixed(2) : '0.00';
+  const netHourlyRate = totalHours > 0 ? (((totalEarnedUsd - totalExpensesUsd) * USD_TO_KES) / totalHours).toFixed(2) : '0.00';
 
   // Best day computation
   let bestDayName = 'Friday';
   let bestDayAvg = 0;
-  const dayAnalysis = Object.entries(dayMap).map(([_, d]) => {
+  const dayAnalysis = Object.values(dayMap).map((d) => {
     const avg = d.count > 0 ? Math.round((d.gross * USD_TO_KES) / d.count) : 0;
     if (avg > bestDayAvg) {
       bestDayAvg = avg;
@@ -361,8 +326,8 @@ app.get('/rider', async (c) => {
     accounts: accounts || [],
     toast,
     usd_to_kes: USD_TO_KES,
-    username: authUser.username,
-    is_logged_in: authUser.isLoggedIn,
+    username,
+    is_logged_in: isLoggedIn,
   });
 
   return c.html(html);
