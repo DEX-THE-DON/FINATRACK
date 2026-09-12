@@ -226,6 +226,7 @@ export interface Database {
           plate_number: string;
           model_name: string | null;
           owner_name: string | null;
+          power_type: 'PETROL' | 'ELECTRIC';
           daily_target: number;
           is_active: number;
           created_at: string;
@@ -236,6 +237,7 @@ export interface Database {
           plate_number: string;
           model_name?: string | null;
           owner_name?: string | null;
+          power_type?: 'PETROL' | 'ELECTRIC';
           daily_target?: number;
           is_active?: number;
           created_at?: string;
@@ -246,6 +248,7 @@ export interface Database {
           plate_number?: string;
           model_name?: string | null;
           owner_name?: string | null;
+          power_type?: 'PETROL' | 'ELECTRIC';
           daily_target?: number;
           is_active?: number;
           created_at?: string;
@@ -256,6 +259,7 @@ export interface Database {
           id: string;
           user_id: string | null;
           bike_id: string | null;
+          power_type: string | null;
           date: string;
           start_time: string | null;
           end_time: string | null;
@@ -265,6 +269,7 @@ export interface Database {
           total_earned: number;
           fuel_station: string | null;
           fuel_litres: number | null;
+          swaps_count: number | null;
           fuel_cost: number;
           food_spent: number;
           airtime_spent: number;
@@ -278,7 +283,8 @@ export interface Database {
           id?: string;
           user_id?: string | null;
           bike_id?: string | null;
-          date?: string;
+          power_type?: string | null;
+          date: string;
           start_time?: string | null;
           end_time?: string | null;
           shift_hours?: number;
@@ -287,6 +293,7 @@ export interface Database {
           total_earned?: number;
           fuel_station?: string | null;
           fuel_litres?: number | null;
+          swaps_count?: number | null;
           fuel_cost?: number;
           food_spent?: number;
           airtime_spent?: number;
@@ -300,6 +307,7 @@ export interface Database {
           id?: string;
           user_id?: string | null;
           bike_id?: string | null;
+          power_type?: string | null;
           date?: string;
           start_time?: string | null;
           end_time?: string | null;
@@ -309,6 +317,7 @@ export interface Database {
           total_earned?: number;
           fuel_station?: string | null;
           fuel_litres?: number | null;
+          swaps_count?: number | null;
           fuel_cost?: number;
           food_spent?: number;
           airtime_spent?: number;

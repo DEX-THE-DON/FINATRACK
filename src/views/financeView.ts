@@ -251,7 +251,8 @@ export function renderFinanceDashboard(data: any): string {
                     party = match[3].trim();
                     type = 'EXPENSE';
                     const p = party.toUpperCase();
-                    if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL')) cat = 'Fuel & Petrol';
+                    if (p.includes('SPIRO') || p.includes('ROAM') || p.includes('AMPERSAND') || p.includes('KIRI') || p.includes('ARC RIDE') || p.includes('BASIGO') || p.includes('BATTERY') || p.includes('SWAP')) cat = 'EV Battery Swap & Charging';
+                    else if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL') || p.includes('OLA') || p.includes('HASS')) cat = 'Fuel & Petrol';
                     else if (p.includes('KPLC') || p.includes('WATER') || p.includes('SAFARICOM')) cat = 'Utilities & Bills';
                     else if (p.includes('NAIVAS') || p.includes('QUICKMART') || p.includes('HOTEL') || p.includes('FOOD')) cat = 'Food & Groceries';
                     else cat = 'Living Expenses';

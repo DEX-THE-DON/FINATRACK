@@ -17,6 +17,7 @@ export function renderRiderDashboard(data: any): string {
   } = data;
 
   const ti = time_intelligence;
+  const activePowerType = (active_bike && active_bike.power_type) || 'PETROL';
 
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
@@ -70,6 +71,8 @@ export function renderRiderDashboard(data: any): string {
     </style>
     <script>
         const USD_TO_KES = ${usd_to_kes};
+        const bikesData = ${JSON.stringify(bikes)};
+        let currentPowerType = '${activePowerType}';
         let deferredPrompt = null;
 
         if ('serviceWorker' in navigator) {
@@ -191,6 +194,89 @@ export function renderRiderDashboard(data: any): string {
             }
         }
 
+        // ==========================================
+        // ⚡ DYNAMIC EV VS PETROL ADAPTATION ENGINE
+        // ==========================================
+        function setPowerType(type) {
+            currentPowerType = type;
+            const hiddenPowerInput = document.getElementById('input_power_type');
+            if (hiddenPowerInput) hiddenPowerInput.value = type;
+
+            const btnPetrol = document.getElementById('btn-power-petrol');
+            const btnElectric = document.getElementById('btn-power-electric');
+            const stationLabel = document.getElementById('station-field-label');
+            const stationSelect = document.getElementById('fuel_station_select');
+            const costLabel = document.getElementById('energy-cost-label');
+            const metricContainer = document.getElementById('metric-field-container');
+
+            const maintPetrol = document.getElementById('maint-checklist-petrol');
+            const maintElectric = document.getElementById('maint-checklist-electric');
+
+            if (type === 'ELECTRIC') {
+                if (btnElectric) {
+                    btnElectric.className = 'px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs transition active:scale-95';
+                }
+                if (btnPetrol) {
+                    btnPetrol.className = 'px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold text-xs transition active:scale-95';
+                }
+                if (stationLabel) stationLabel.innerHTML = '🔋 EV Battery Swap Station';
+                if (costLabel) costLabel.innerHTML = '🔋 Battery Swap Cost (<span class="curr-symbol-label">Ksh</span>)';
+
+                if (stationSelect) {
+                    stationSelect.innerHTML = '<option value="SPIRO">Spiro Swap Station</option>' +
+                                              '<option value="ROAM">Roam Hub / Station</option>' +
+                                              '<option value="AMPERSAND">Ampersand Swap Point</option>' +
+                                              '<option value="KIRI">Kiri EV Hub</option>' +
+                                              '<option value="ARC_RIDE">ARC Ride Station</option>' +
+                                              '<option value="BASIGO">BasiGo Hub</option>' +
+                                              '<option value="OTHER">Other EV Network</option>';
+                }
+
+                if (metricContainer) {
+                    metricContainer.innerHTML = '<label class="block text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">🔋 Swaps Count</label>' +
+                                                '<input type="number" step="1" min="0" inputmode="numeric" name="swaps_count" value="1" placeholder="e.g. 2 swaps" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">';
+                }
+
+                if (maintElectric) maintElectric.classList.remove('hidden');
+                if (maintPetrol) maintPetrol.classList.add('hidden');
+            } else {
+                if (btnPetrol) {
+                    btnPetrol.className = 'px-3 py-1.5 rounded-xl bg-amber-600 text-white font-bold text-xs shadow-xs transition active:scale-95';
+                }
+                if (btnElectric) {
+                    btnElectric.className = 'px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold text-xs transition active:scale-95';
+                }
+                if (stationLabel) stationLabel.innerHTML = '⛽ Petrol Station';
+                if (costLabel) costLabel.innerHTML = '⛽ Fuel & Petrol Cost (<span class="curr-symbol-label">Ksh</span>)';
+
+                if (stationSelect) {
+                    stationSelect.innerHTML = '<option value="RUBIS">Rubis Energy</option>' +
+                                              '<option value="TOTAL">TotalEnergies</option>' +
+                                              '<option value="SHELL">Shell / Vivo</option>' +
+                                              '<option value="OLA">Ola Energy</option>' +
+                                              '<option value="HASS">Hass Petroleum</option>' +
+                                              '<option value="OTHER">Other Station</option>';
+                }
+
+                if (metricContainer) {
+                    metricContainer.innerHTML = '<label class="block text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⛽ Fuel Litres (Optional)</label>' +
+                                                '<input type="number" step="any" inputmode="decimal" name="fuel_litres" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">';
+                }
+
+                if (maintPetrol) maintPetrol.classList.remove('hidden');
+                if (maintElectric) maintElectric.classList.add('hidden');
+            }
+
+            applyConversion();
+        }
+
+        function onBikeSelectChanged(bikeId) {
+            const bike = bikesData.find(b => b.id === bikeId);
+            if (bike && bike.power_type) {
+                setPowerType(bike.power_type);
+            }
+        }
+
         function toggleDarkMode() {
             document.documentElement.classList.toggle('dark');
             localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -202,6 +288,7 @@ export function renderRiderDashboard(data: any): string {
             }
             applyConversion();
             calcDuration();
+            setPowerType(currentPowerType);
             if (!isRunningStandalone()) {
                 showInstallUi();
             }
@@ -222,7 +309,7 @@ export function renderRiderDashboard(data: any): string {
                 <span class="text-2xl">🛵</span>
                 <div>
                     <h1 class="font-extrabold text-lg text-gray-900 dark:text-white tracking-tight leading-none">Rider Fleet Tracker</h1>
-                    <span class="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">Shift & Time Intelligence</span>
+                    <span class="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">EV & ICE Time Intelligence</span>
                 </div>
             </div>
             
@@ -276,7 +363,7 @@ export function renderRiderDashboard(data: any): string {
                     <h2 class="text-base sm:text-lg font-black text-gray-900 dark:text-white leading-tight">
                         ${is_logged_in ? `Welcome back, <span class="text-blue-600 dark:text-blue-400 font-extrabold">${username}</span>!` : `Welcome to <span class="text-blue-600 dark:text-blue-400 font-extrabold">Rider Fleet Tracker</span>!`}
                     </h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">${is_logged_in ? 'Fleet telemetry & time yield intelligence synchronized across your unified account.' : 'Log shift working hours, analyze peak earning windows, and track fuel costs.'}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Dynamic EV battery swap & ICE fuel intelligence with automatic financial ledger synchronization.</p>
                 </div>
             </div>
             <div class="flex items-center space-x-2 text-xs">
@@ -298,21 +385,105 @@ export function renderRiderDashboard(data: any): string {
             <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>⏱️ Log Shift</span>
             </button>
+            <button onclick="document.getElementById('fleet-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-slate-700 transition">
+                <span>🛵 Fleet & EV</span>
+            </button>
+            <button onclick="document.getElementById('maint-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🛠️ Maintenance</span>
+            </button>
             <a href="/" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>⚡ Finance</span>
             </a>
             <a href="/#mpesa-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gray-900 dark:bg-gray-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
                 <span>📲 M-Pesa</span>
             </a>
-            <a href="/#waterfall-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
-                <span>🌊 Auto-Split</span>
-            </a>
-            <button onclick="document.getElementById('intelligence-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-cyan-300 text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
-                <span>📈 Intelligence</span>
-            </button>
             <button onclick="triggerAppInstall()" class="pwa-install-trigger flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-pink-600 to-rose-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>📲 Install</span>
             </button>
+        </div>
+
+        <!-- 🛵 Active Motorbike & Fleet Management Card -->
+        <div id="fleet-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b dark:border-gray-800 pb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 rounded-2xl ${activePowerType === 'ELECTRIC' ? 'bg-gradient-to-tr from-emerald-500 to-teal-600' : 'bg-gradient-to-tr from-amber-500 to-rose-600'} flex items-center justify-center text-2xl text-white shadow-md">
+                        ${activePowerType === 'ELECTRIC' ? '⚡' : '🏍️'}
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="text-lg font-black text-gray-900 dark:text-white">Active Bike: ${active_bike ? `${active_bike.plate_number} (${active_bike.model_name || 'Fleet Bike'})` : 'No Bike Selected'}</h2>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${activePowerType === 'ELECTRIC' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'}">
+                                ${activePowerType === 'ELECTRIC' ? '🔋 Electric EV (Battery Swap)' : '⛽ Petrol Engine (ICE)'}
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-usd="${active_bike?.daily_target || 2500}"></strong> • Managed by ${active_bike?.owner_name || username}</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="document.getElementById('add-bike-form-container').classList.toggle('hidden')" class="px-3.5 py-2 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
+                        <span>➕ Register Bike / EV</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Add Bike Collapsible Form -->
+            <div id="add-bike-form-container" class="hidden p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-3">
+                <h3 class="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">Register New Motorbike or Electric Vehicle to Fleet</h3>
+                <form action="/bikes/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Plate Number</label>
+                        <input type="text" name="plate_number" placeholder="e.g. KMEV 123A" required class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Model / Make</label>
+                        <input type="text" name="model_name" placeholder="e.g. Spiro Commando / Boxer 150" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-semibold">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Power System</label>
+                        <select name="power_type" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                            <option value="PETROL">⛽ Petrol Engine (Bajaj, TVS, Honda)</option>
+                            <option value="ELECTRIC">🔋 Electric EV (Spiro, Roam, Ampersand)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Daily Target (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="daily_target" placeholder="2500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold convertible-placeholder">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-xs">
+                            Save to Fleet
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Fleet Switcher Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                ${bikes.map((b: any) => `
+                <div class="p-3.5 rounded-2xl border ${b.is_active ? 'bg-blue-50/60 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700' : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700'} flex justify-between items-center">
+                    <div class="space-y-0.5">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-black text-sm text-gray-900 dark:text-white font-mono">${b.plate_number}</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${b.power_type === 'ELECTRIC' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'}">
+                                ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${b.model_name || 'Motorbike'} • Target: <strong class="convertible-amount font-bold text-gray-800 dark:text-gray-200" data-usd="${b.daily_target}"></strong></p>
+                    </div>
+                    <div>
+                        ${b.is_active ? `
+                        <span class="px-2.5 py-1 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-2xs">Active</span>
+                        ` : `
+                        <form action="/bikes/activate/${b.id}" method="POST">
+                            <button type="submit" class="px-2.5 py-1 bg-white dark:bg-gray-700 hover:bg-gray-100 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-bold text-xs rounded-xl transition active:scale-95">
+                                Select
+                            </button>
+                        </form>
+                        `}
+                    </div>
+                </div>`).join('')}
+            </div>
         </div>
 
         <!-- ⏰ Shift & Time Intelligence KPI Banner -->
@@ -343,7 +514,7 @@ export function renderRiderDashboard(data: any): string {
                 <div class="p-4 bg-slate-950/70 border border-blue-900/60 rounded-2xl">
                     <p class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">💵 Net Hourly Take-Home</p>
                     <p class="text-2xl font-black text-cyan-400 mt-1"><span class="curr-symbol-label">Ksh</span> ${ti.overall_avg_net_hourly || '0.00'} <span class="text-xs font-normal text-gray-400">/ hr</span></p>
-                    <p class="text-[10px] text-gray-400 mt-0.5">After fuel, lunch & maintenance</p>
+                    <p class="text-[10px] text-gray-400 mt-0.5">After fuel/swaps, lunch & upkeep</p>
                 </div>
 
                 <div class="p-4 bg-slate-950/70 border border-blue-900/60 rounded-2xl">
@@ -425,16 +596,37 @@ export function renderRiderDashboard(data: any): string {
             </div>
         </div>
 
-        <!-- Log Daily Shift Card -->
+        <!-- ⏱️ Log Daily Shift Card (Dynamic EV & ICE Adaptation) -->
         <div id="shift-log-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
-            <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b dark:border-gray-800 pb-3">
                 <div>
-                    <h2 class="text-lg font-bold text-gray-900 dark:text-white">Log Rider Shift with Exact Working Times</h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Specify your shift window (e.g. 11am to 10pm) or pick a 1-tap quick preset.</p>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>Log Rider Shift & Exact Working Window</span>
+                    </h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Fields dynamically adapt whether you ride an Electric EV (battery swap) or Petrol motorbike.</p>
+                </div>
+
+                <!-- 1-Tap Power Type Switcher Pills -->
+                <div class="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-2xl border border-gray-200 dark:border-gray-700">
+                    <button type="button" onclick="setPowerType('PETROL')" id="btn-power-petrol" class="px-3 py-1.5 rounded-xl font-bold text-xs transition active:scale-95 ${activePowerType === 'PETROL' ? 'bg-amber-600 text-white shadow-xs' : 'text-gray-700 dark:text-gray-300'}">
+                        ⛽ Petrol Engine
+                    </button>
+                    <button type="button" onclick="setPowerType('ELECTRIC')" id="btn-power-electric" class="px-3 py-1.5 rounded-xl font-bold text-xs transition active:scale-95 ${activePowerType === 'ELECTRIC' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-700 dark:text-gray-300'}">
+                        🔋 Electric (EV)
+                    </button>
                 </div>
             </div>
 
             <form action="/rider/logs" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <input type="hidden" name="power_type" id="input_power_type" value="${activePowerType}">
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Assigned Fleet Bike</label>
+                    <select name="bike_id" onchange="onBikeSelectChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold">
+                        ${bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'}) - ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}</option>`).join('')}
+                    </select>
+                </div>
+
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Shift Date</label>
                     <input type="date" name="date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-semibold" required>
@@ -464,21 +656,48 @@ export function renderRiderDashboard(data: any): string {
                     <input type="number" step="any" inputmode="decimal" name="total_earned" placeholder="e.g. 3500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400" required>
                 </div>
 
+                <!-- Dynamic Station Select -->
                 <div>
-                    <label class="block text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">Petrol Station</label>
-                    <select name="fuel_station" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium">
+                    <label id="station-field-label" class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                        ${activePowerType === 'ELECTRIC' ? '🔋 EV Battery Swap Station' : '⛽ Petrol Station'}
+                    </label>
+                    <select name="fuel_station" id="fuel_station_select" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium">
+                        ${activePowerType === 'ELECTRIC' ? `
+                        <option value="SPIRO">Spiro Swap Station</option>
+                        <option value="ROAM">Roam Hub / Station</option>
+                        <option value="AMPERSAND">Ampersand Swap Point</option>
+                        <option value="KIRI">Kiri EV Hub</option>
+                        <option value="ARC_RIDE">ARC Ride Station</option>
+                        <option value="BASIGO">BasiGo Hub</option>
+                        <option value="OTHER">Other EV Network</option>
+                        ` : `
                         <option value="RUBIS">Rubis Energy</option>
                         <option value="TOTAL">TotalEnergies</option>
                         <option value="SHELL">Shell / Vivo</option>
                         <option value="OLA">Ola Energy</option>
                         <option value="HASS">Hass Petroleum</option>
                         <option value="OTHER">Other Station</option>
+                        `}
                     </select>
                 </div>
 
+                <!-- Dynamic Cost Label -->
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Fuel Cost (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <label id="energy-cost-label" class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                        ${activePowerType === 'ELECTRIC' ? '🔋 Battery Swap Cost (<span class="curr-symbol-label">Ksh</span>)' : '⛽ Fuel & Petrol Cost (<span class="curr-symbol-label">Ksh</span>)'}
+                    </label>
                     <input type="number" step="any" inputmode="decimal" name="fuel_cost" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                </div>
+
+                <!-- Dynamic Metric (Litres vs Swaps Count) -->
+                <div id="metric-field-container">
+                    ${activePowerType === 'ELECTRIC' ? `
+                    <label class="block text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">🔋 Swaps Count</label>
+                    <input type="number" step="1" min="0" inputmode="numeric" name="swaps_count" value="1" placeholder="e.g. 2 swaps" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                    ` : `
+                    <label class="block text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⛽ Fuel Litres (Optional)</label>
+                    <input type="number" step="any" inputmode="decimal" name="fuel_litres" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                    `}
                 </div>
 
                 <div>
@@ -495,11 +714,84 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div class="sm:col-span-2 lg:col-span-4">
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-3 rounded-xl text-sm transition shadow-md">
-                        Save Shift Record & Sync With Finance Ledger
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2">
+                        <span>🚀 Save Shift Record & Sync With Finance Ledger</span>
                     </button>
                 </div>
             </form>
+        </div>
+
+        <!-- 🛠️ Maintenance & Fleet Health Intelligence Card -->
+        <div id="maint-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
+            <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl">
+                        🛠️
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Maintenance & Vehicle Health Checklist</h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Custom preventive maintenance schedules tailored for Electric EV vs Petrol engines.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Electric EV Maintenance Checklist -->
+            <div id="maint-checklist-electric" class="${activePowerType === 'ELECTRIC' ? '' : 'hidden'} space-y-3">
+                <div class="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl flex items-center justify-between">
+                    <div class="flex items-center space-x-2.5">
+                        <span class="text-2xl">🔋</span>
+                        <div>
+                            <h4 class="font-bold text-sm text-emerald-950 dark:text-emerald-200">Battery State-of-Health (SOH) & Contacts</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Inspect battery swap terminals, latch cleanliness, and BMS firmware.</p>
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold rounded-lg">Every 4 Weeks</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
+                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">⚡ Motor Controller & Throttle</p>
+                        <p class="text-[11px] text-gray-500">Inspect wiring harness, torque sensor, and water seals.</p>
+                    </div>
+                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
+                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">🛑 Regenerative Braking & Pads</p>
+                        <p class="text-[11px] text-gray-500">Check regen calibration & mechanical brake pad thickness.</p>
+                    </div>
+                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
+                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">🛵 Drive Belt & Tyre Pressure</p>
+                        <p class="text-[11px] text-gray-500">Check drive belt tension, alignment, and 32 PSI pressure.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Petrol ICE Maintenance Checklist -->
+            <div id="maint-checklist-petrol" class="${activePowerType === 'PETROL' ? '' : 'hidden'} space-y-3">
+                <div class="p-3 bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-2xl flex items-center justify-between">
+                    <div class="flex items-center space-x-2.5">
+                        <span class="text-2xl">🛢️</span>
+                        <div>
+                            <h4 class="font-bold text-sm text-amber-950 dark:text-amber-200">Engine Oil Change & Filter</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Drain and replace 20W-50 oil every 3 weeks or 1,500 km.</p>
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-1 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-xs font-extrabold rounded-lg">Every 3 Weeks</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
+                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">⚡ Spark Plug & Carburetor</p>
+                        <p class="text-[11px] text-gray-500">Clean electrode gap and tune idle fuel/air ratio.</p>
+                    </div>
+                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
+                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">🛑 Front & Rear Brake Shoes</p>
+                        <p class="text-[11px] text-gray-500">Inspect brake shoe wear and adjust drum cable play.</p>
+                    </div>
+                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
+                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">⛓️ Chain Tension & Lube</p>
+                        <p class="text-[11px] text-gray-500">Clean chain with diesel and apply heavy gear lube.</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Shift History Log Table -->
@@ -508,15 +800,16 @@ export function renderRiderDashboard(data: any): string {
                 <h3 class="font-bold text-gray-900 dark:text-white text-base">Shift History & Working Hour Yields</h3>
                 <span class="text-xs text-gray-500">${rider_logs.length} Shifts Recorded</span>
             </div>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <table class="w-full text-left text-xs">
                     <thead class="bg-gray-50 dark:bg-gray-800/60 uppercase text-gray-400 text-[10px]">
                         <tr>
                             <th class="p-4">Date</th>
                             <th class="p-4">Shift Hours</th>
+                            <th class="p-4">Power & Station</th>
                             <th class="p-4">Hourly Yield</th>
                             <th class="p-4">Gross Earned</th>
-                            <th class="p-4">Fuel & Upkeep</th>
+                            <th class="p-4">Energy & Upkeep</th>
                             <th class="p-4">Net Remittance</th>
                             <th class="p-4 text-center">Action</th>
                         </tr>
@@ -528,6 +821,11 @@ export function renderRiderDashboard(data: any): string {
                             <td class="p-4">
                                 <span class="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold">
                                     ⏰ ${l.start_time || '11:00'} – ${l.end_time || '22:00'} (${l.shift_hours}h)
+                                </span>
+                            </td>
+                            <td class="p-4">
+                                <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${l.power_type === 'ELECTRIC' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}">
+                                    ${l.power_type === 'ELECTRIC' ? `🔋 ${l.fuel_station || 'SPIRO'}` : `⛽ ${l.fuel_station || 'RUBIS'}`}
                                 </span>
                             </td>
                             <td class="p-4 font-bold text-amber-600 dark:text-amber-400">
@@ -543,7 +841,7 @@ export function renderRiderDashboard(data: any): string {
                             </td>
                         </tr>`).join('') : `
                         <tr>
-                            <td colspan="7" class="p-6 text-center text-gray-400">No shift records logged yet.</td>
+                            <td colspan="8" class="p-6 text-center text-gray-400">No shift records logged yet.</td>
                         </tr>`}
                     </tbody>
                 </table>
@@ -597,7 +895,7 @@ export function renderRiderDashboard(data: any): string {
                     <p>Tap <strong>"Add"</strong> in the top-right corner to finish installing!</p>
                 </div>
             </div>
-            <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition">
+            <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-xl transition">
                 Got It
             </button>
         </div>

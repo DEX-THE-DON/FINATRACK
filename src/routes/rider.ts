@@ -43,6 +43,7 @@ export function classifyShiftWindow(startTime?: string | null, endTime?: string 
 riderRoutes.post('/rider/logs', async (c) => {
   const body = await c.req.parseBody();
   const bikeId = body['bike_id'] ? String(body['bike_id']) : null;
+  const powerType = String(body['power_type'] || 'PETROL').toUpperCase();
   const logDate = String(body['date'] || new Date().toISOString().slice(0, 10));
   const startTime = body['start_time'] ? String(body['start_time']).trim() : null;
   const endTime = body['end_time'] ? String(body['end_time']).trim() : null;
@@ -55,8 +56,9 @@ riderRoutes.post('/rider/logs', async (c) => {
   const trips = parseInt(String(body['trips_completed'] || '0'), 10);
   const km = parseFloat(String(body['kilometers'] || '0.0')) || 0.0;
   const rawEarned = parseFloat(String(body['total_earned'] || '0.0')) || 0.0;
-  const fuelStation = String(body['fuel_station'] || 'RUBIS');
+  const fuelStation = String(body['fuel_station'] || (powerType === 'ELECTRIC' ? 'SPIRO' : 'RUBIS'));
   const fuelLitres = parseFloat(String(body['fuel_litres'] || '0.0')) || 0.0;
+  const swapsCount = parseInt(String(body['swaps_count'] || '0'), 10);
   const rawFuelCost = parseFloat(String(body['fuel_cost'] || '0.0')) || 0.0;
   const rawFood = parseFloat(String(body['food_spent'] || '0.0')) || 0.0;
   const rawMaint = parseFloat(String(body['maintenance_cost'] || '0.0')) || 0.0;
@@ -89,6 +91,7 @@ riderRoutes.post('/rider/logs', async (c) => {
   const supabase = getSupabaseClient(c.env);
   const { data: newLog } = await supabase.from('rider_logs').insert({
     bike_id: bikeId,
+    power_type: powerType,
     date: logDate,
     start_time: startTime,
     end_time: endTime,
@@ -98,6 +101,7 @@ riderRoutes.post('/rider/logs', async (c) => {
     total_earned: totalEarnedUsd,
     fuel_station: fuelStation,
     fuel_litres: fuelLitres,
+    swaps_count: swapsCount,
     fuel_cost: fuelCostUsd,
     food_spent: foodSpentUsd,
     airtime_spent: airtimeSpentUsd,
@@ -129,12 +133,13 @@ riderRoutes.post('/rider/logs', async (c) => {
       const { data: acc } = await supabase.from('accounts').select('*').eq('id', expenseAccId).single();
       if (acc) {
         await supabase.from('accounts').update({ balance: toDecimal(acc.balance).minus(totalExpensesUsd).toNumber() }).eq('id', expenseAccId);
+        const energyLabel = powerType === 'ELECTRIC' ? `${fuelStation} Battery Swap` : `${fuelStation} Fuel`;
         await supabase.from('transactions').insert({
           account_id: expenseAccId,
           transaction_type: 'EXPENSE',
-          category: 'Rider Shift Upkeep',
+          category: powerType === 'ELECTRIC' ? 'EV Battery Swap & Upkeep' : 'Rider Shift Upkeep',
           amount: totalExpensesUsd,
-          description: `Rider Shift Expenses (${fuelStation} Fuel, Lunch & Upkeep)`,
+          description: `Rider Shift Expenses (${energyLabel}, Lunch & Upkeep)`,
           rider_log_id: newLog.id,
           date: logDate,
         });
@@ -161,6 +166,7 @@ riderRoutes.post('/bikes/create', async (c) => {
   const plate = String(body['plate_number'] || '').trim().toUpperCase();
   const model = body['model_name'] ? String(body['model_name']).trim() : 'Bajaj Boxer 150';
   const owner = body['owner_name'] ? String(body['owner_name']).trim() : 'Dennis';
+  const powerType = (String(body['power_type'] || 'PETROL').toUpperCase() === 'ELECTRIC' ? 'ELECTRIC' : 'PETROL') as 'PETROL' | 'ELECTRIC';
   const rawTarget = parseFloat(String(body['daily_target'] || '2500.0')) || 2500.0;
 
   const cookie = c.req.header('cookie') || '';
@@ -176,6 +182,7 @@ riderRoutes.post('/bikes/create', async (c) => {
     plate_number: plate,
     model_name: model,
     owner_name: owner,
+    power_type: powerType,
     daily_target: targetUsd,
     is_active: 1,
   });

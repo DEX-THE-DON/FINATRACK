@@ -37,4 +37,13 @@ parsedBatch.forEach((t, i) => {
   console.log(`   [${i+1}] ${t.code}: ${t.type} Ksh ${t.amount_kes} (${t.party}) -> Category: ${t.suggested_category}`);
 });
 
+// Test 4: EV Battery Swap Station (Spiro / Roam / Ampersand)
+const evSms = 'QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.';
+const parsedEV = parseSingleMpesaMessage(evSms);
+if (!parsedEV || parsedEV.code !== 'QD44444444' || parsedEV.amount_kes !== 400 || parsedEV.suggested_category !== 'EV Battery Swap & Charging') {
+  console.error('❌ Failed Test 4: EV Battery Swap SMS', parsedEV);
+  process.exit(1);
+}
+console.log('✅ 4. EV Battery Swap SMS:', parsedEV.code, parsedEV.amount_kes, 'KES -> Category:', parsedEV.suggested_category);
+
 console.log('🎉 ALL M-PESA REGEX & BATCH SMS TESTS PASSED 100%!');

@@ -248,7 +248,7 @@ app.get('/rider', async (c) => {
   const { data: financing } = await supabase.from('bike_financings').select('*');
   const { data: allocationRules } = await supabase.from('allocation_rules').select('*');
 
-  const defaultBike = { id: 'default-bike', plate_number: 'KMDF 123A', model_name: 'Bajaj Boxer 150', owner_name: 'Captain Fleet', daily_target: 2500.0, is_active: 1 };
+  const defaultBike = { id: 'default-bike', plate_number: 'KMDF 123A', model_name: 'Bajaj Boxer 150', owner_name: 'Captain Fleet', power_type: 'PETROL', daily_target: 2500.0, is_active: 1 };
   const activeBikes = (bikes && bikes.length > 0) ? bikes : [defaultBike];
   const shiftLogs = logs || [];
 

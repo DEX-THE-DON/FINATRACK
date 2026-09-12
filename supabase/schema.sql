@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS bikes (
     plate_number TEXT NOT NULL,
     model_name TEXT,
     owner_name TEXT,
+    power_type TEXT NOT NULL DEFAULT 'PETROL', -- 'PETROL' or 'ELECTRIC'
     daily_target NUMERIC(12, 2) NOT NULL DEFAULT 2500.00,
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -120,6 +121,7 @@ CREATE TABLE IF NOT EXISTS rider_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     bike_id UUID REFERENCES bikes(id) ON DELETE SET NULL,
+    power_type TEXT NOT NULL DEFAULT 'PETROL', -- 'PETROL' or 'ELECTRIC'
     date DATE NOT NULL DEFAULT CURRENT_DATE,
     start_time TEXT, -- e.g. '11:00'
     end_time TEXT,   -- e.g. '22:00'
@@ -127,8 +129,9 @@ CREATE TABLE IF NOT EXISTS rider_logs (
     trips_completed INTEGER NOT NULL DEFAULT 0,
     kilometers NUMERIC(8, 2) NOT NULL DEFAULT 0.00,
     total_earned NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    fuel_station TEXT, -- 'RUBIS', 'TOTAL', 'SHELL', 'OLA', 'HASS', 'ASTROL', 'OTHER'
+    fuel_station TEXT, -- 'RUBIS', 'TOTAL', 'SHELL', 'OLA', 'HASS', 'SPIRO', 'ROAM', 'AMPERSAND', 'OTHER'
     fuel_litres NUMERIC(6, 2) DEFAULT 0.00,
+    swaps_count INTEGER DEFAULT 0,
     fuel_cost NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     food_spent NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     airtime_spent NUMERIC(12, 2) NOT NULL DEFAULT 0.00,

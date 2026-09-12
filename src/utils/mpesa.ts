@@ -28,7 +28,13 @@ export function categorizeMpesaParty(party: string, type: 'INCOME' | 'EXPENSE'):
   }
 
   // Expenses categorization
-  if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL') || p.includes('OIL') || p.includes('ASTON')) {
+  // 1. EV Battery Swap & Charging
+  if (p.includes('SPIRO') || p.includes('ROAM') || p.includes('AMPERSAND') || p.includes('KIRI') || p.includes('ARC RIDE') || p.includes('BASIGO') || p.includes('BATTERY') || p.includes('SWAP')) {
+    return 'EV Battery Swap & Charging';
+  }
+
+  // 2. Petrol & Fuel Stations
+  if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL') || p.includes('OIL') || p.includes('ASTON') || p.includes('HASS') || p.includes('OLA')) {
     return 'Fuel & Petrol';
   }
   if (p.includes('KPLC') || p.includes('WATER') || p.includes('INTERNET') || p.includes('SAFARICOM HOME') || p.includes('ZUKU')) {
