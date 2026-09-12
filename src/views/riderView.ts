@@ -274,16 +274,22 @@ export function renderRiderDashboard(data: any): string {
                 </div>
                 <div>
                     <h2 class="text-base sm:text-lg font-black text-gray-900 dark:text-white leading-tight">
-                        Welcome back, <span class="text-blue-600 dark:text-blue-400 font-extrabold">${username}</span>!
+                        ${is_logged_in ? `Welcome back, <span class="text-blue-600 dark:text-blue-400 font-extrabold">${username}</span>!` : `Welcome to <span class="text-blue-600 dark:text-blue-400 font-extrabold">Rider Fleet Tracker</span>!`}
                     </h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Fleet telemetry & time yield intelligence synchronized across your unified account.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">${is_logged_in ? 'Fleet telemetry & time yield intelligence synchronized across your unified account.' : 'Log shift working hours, analyze peak earning windows, and track fuel costs.'}</p>
                 </div>
             </div>
             <div class="flex items-center space-x-2 text-xs">
+                ${is_logged_in ? `
                 <span class="px-3 py-1 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 font-bold rounded-xl flex items-center gap-1.5 shadow-2xs">
                     <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                    <span>Rider Unified Sync</span>
+                    <span>Authenticated (${username})</span>
                 </span>
+                ` : `
+                <a href="/login" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition active:scale-95">
+                    <span>🔑 Sign In / Register</span>
+                </a>
+                `}
             </div>
         </div>
 

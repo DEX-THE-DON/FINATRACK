@@ -100,7 +100,7 @@ self.addEventListener('fetch', (event) => {
   });
 });
 
-// Helper to extract authenticated user from cookie / session
+// Helper to strictly verify authenticated user from Supabase session token
 async function getAuthenticatedUser(c: any, supabase: any) {
   const cookieHeader = c.req.header('cookie') || '';
   const cookies = Object.fromEntries(
@@ -110,30 +110,25 @@ async function getAuthenticatedUser(c: any, supabase: any) {
     })
   );
 
-  let username = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : '';
+  let username = '';
   let email = '';
   let isLoggedIn = false;
 
   const token = cookies['sb-access-token'];
   if (token) {
     try {
-      const { data: userData } = await supabase.auth.getUser(token);
-      if (userData?.user) {
+      const { data: userData, error } = await supabase.auth.getUser(token);
+      if (!error && userData?.user) {
         isLoggedIn = true;
         email = userData.user.email || '';
-        username = userData.user.user_metadata?.full_name || username || email.split('@')[0] || 'Captain';
+        username = userData.user.user_metadata?.full_name || email.split('@')[0] || 'Member';
       }
     } catch (e) {}
   }
 
-  if (!username && cookies['finatrack_user']) {
-    username = decodeURIComponent(cookies['finatrack_user']);
-    isLoggedIn = true;
-  }
-
   return {
     isLoggedIn,
-    username: username || 'Dennis',
+    username: isLoggedIn ? username : '',
     email,
   };
 }

@@ -13,7 +13,11 @@ authRoutes.post('/auth/signup', async (c) => {
   const redirectTo = String(body['redirect_to'] || '/');
 
   if (!email || !password) {
-    return c.redirect(`${redirectTo}?toast=Email+and+password+required`, 303);
+    return c.redirect(`/signup?toast=Email+and+password+are+required`, 303);
+  }
+
+  if (password.length < 6) {
+    return c.redirect(`/signup?toast=Password+must+be+at+least+6+characters`, 303);
   }
 
   const supabase = getSupabaseClient(c.env);
@@ -28,17 +32,21 @@ authRoutes.post('/auth/signup', async (c) => {
   });
 
   if (error) {
-    return c.redirect(`${redirectTo}?toast=${encodeURIComponent(error.message)}`, 303);
+    return c.redirect(`/signup?toast=${encodeURIComponent(error.message)}`, 303);
+  }
+
+  if (!data?.user) {
+    return c.redirect(`/signup?toast=Unable+to+create+account.+Please+try+again.`, 303);
   }
 
   if (data?.session) {
-    const uname = name || email.split('@')[0];
+    const uname = name || data.user.user_metadata?.full_name || email.split('@')[0];
     c.header('Set-Cookie', `sb-access-token=${data.session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${data.session.expires_in}`);
     c.header('Set-Cookie', `finatrack_user=${encodeURIComponent(uname)}; Path=/; SameSite=Lax; Max-Age=${data.session.expires_in}`, { append: true });
     return c.redirect(`${redirectTo}?toast=Welcome+to+Finatrack,+${encodeURIComponent(uname)}!`, 303);
   }
 
-  return c.redirect(`${redirectTo}?toast=Signup+successful!+Check+your+email+to+confirm`, 303);
+  return c.redirect(`/login?toast=Account+created!+Please+check+your+email+to+confirm+before+logging+in.`, 303);
 });
 
 authRoutes.post('/auth/login', async (c) => {
@@ -47,24 +55,26 @@ authRoutes.post('/auth/login', async (c) => {
   const password = String(body['password'] || '').trim();
   const redirectTo = String(body['redirect_to'] || '/');
 
+  if (!email || !password) {
+    return c.redirect(`/login?toast=Please+enter+both+email+and+password`, 303);
+  }
+
   const supabase = getSupabaseClient(c.env);
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
-  if (error) {
-    return c.redirect(`${redirectTo}?toast=${encodeURIComponent(error.message)}`, 303);
+  // Strict check: if error or no valid session, REJECT immediately back to /login with the error
+  if (error || !data?.session || !data?.user) {
+    const errorMsg = error?.message || 'Invalid email or password. Please check your credentials or register.';
+    return c.redirect(`/login?toast=${encodeURIComponent(errorMsg)}`, 303);
   }
 
-  if (data?.session) {
-    const uname = data.user?.user_metadata?.full_name || data.user?.email?.split('@')[0] || 'Member';
-    c.header('Set-Cookie', `sb-access-token=${data.session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${data.session.expires_in}`);
-    c.header('Set-Cookie', `finatrack_user=${encodeURIComponent(uname)}; Path=/; SameSite=Lax; Max-Age=${data.session.expires_in}`, { append: true });
-    return c.redirect(`${redirectTo}?toast=Welcome+back,+${encodeURIComponent(uname)}!`, 303);
-  }
-
-  return c.redirect(`${redirectTo}?toast=Logged+in+successfully`, 303);
+  const uname = data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'Member';
+  c.header('Set-Cookie', `sb-access-token=${data.session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${data.session.expires_in}`);
+  c.header('Set-Cookie', `finatrack_user=${encodeURIComponent(uname)}; Path=/; SameSite=Lax; Max-Age=${data.session.expires_in}`, { append: true });
+  return c.redirect(`${redirectTo}?toast=Welcome+back,+${encodeURIComponent(uname)}!`, 303);
 });
 
 authRoutes.post('/auth/logout', async (c) => {

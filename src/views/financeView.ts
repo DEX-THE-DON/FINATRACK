@@ -380,16 +380,22 @@ export function renderFinanceDashboard(data: any): string {
                 </div>
                 <div>
                     <h2 class="text-base sm:text-lg font-black text-gray-900 dark:text-white leading-tight">
-                        Welcome, <span class="text-emerald-600 dark:text-emerald-400 font-extrabold">${username}</span>!
+                        ${is_logged_in ? `Welcome back, <span class="text-emerald-600 dark:text-emerald-400 font-extrabold">${username}</span>!` : `Welcome to <span class="text-emerald-600 dark:text-emerald-400 font-extrabold">Finatrack</span>!`}
                     </h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Automated financial freedom waterfall & multi-account analytics active.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">${is_logged_in ? 'Your automated financial freedom waterfall & multi-account analytics are active.' : 'Track your MMF yields, savings goals, debts, and automated money waterfall in real-time.'}</p>
                 </div>
             </div>
             <div class="flex items-center space-x-2 text-xs">
+                ${is_logged_in ? `
                 <span class="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 font-bold rounded-xl flex items-center gap-1.5 shadow-2xs">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Edge Synchronized</span>
+                    <span>Authenticated (${username})</span>
                 </span>
+                ` : `
+                <a href="/login" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition active:scale-95">
+                    <span>🔑 Sign In / Register</span>
+                </a>
+                `}
             </div>
         </div>
 
