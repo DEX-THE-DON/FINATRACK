@@ -148,9 +148,17 @@ app.get('/', async (c) => {
   const { data: debts } = await supabase.from('debts').select('*').order('due_at', { ascending: true });
   const { data: bills } = await supabase.from('bills').select('*').order('due_day', { ascending: true });
   const { data: allocationRules } = await supabase.from('allocation_rules').select('*').order('percentage', { ascending: false });
+  const DEFAULT_RULES = [
+    { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
+    { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
+    { id: 'rule-3', bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
+    { id: 'rule-4', bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
+    { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
+  ];
 
   const accs = accounts || [];
   const txs = transactions || [];
+  const rules = (allocationRules && allocationRules.length > 0) ? allocationRules : DEFAULT_RULES;
 
   // Aggregations
   const totalBalance = accs.reduce((sum, a) => sum + Number(a.balance || 0), 0);
@@ -209,7 +217,7 @@ app.get('/', async (c) => {
     debts: debts || [],
     bills: bills || [],
     mmf_accounts: mmfAccounts,
-    allocation_rules: allocationRules || [],
+    allocation_rules: rules,
     total_balance: totalBalance,
     monthly_income: monthlyIncome,
     monthly_expenses: monthlyExpenses,
@@ -240,6 +248,8 @@ app.get('/rider', async (c) => {
   const { data: financing } = await supabase.from('bike_financings').select('*');
   const { data: allocationRules } = await supabase.from('allocation_rules').select('*');
 
+  const defaultBike = { id: 'default-bike', plate_number: 'KMDF 123A', model_name: 'Bajaj Boxer 150', owner_name: 'Captain Fleet', daily_target: 2500.0, is_active: 1 };
+  const activeBikes = (bikes && bikes.length > 0) ? bikes : [defaultBike];
   const shiftLogs = logs || [];
 
   // Shift & Time Intelligence Engine
@@ -335,14 +345,20 @@ app.get('/rider', async (c) => {
   };
 
   const html = renderRiderDashboard({
-    active_bike: (bikes || []).find((b) => b.is_active === 1) || (bikes || [])[0] || null,
-    bikes: bikes || [],
+    active_bike: (activeBikes || []).find((b: any) => b.is_active === 1) || activeBikes[0] || null,
+    bikes: activeBikes,
     rider_logs: shiftLogs,
     time_intelligence: timeIntelligence,
     maintenance_schedules: maintenance || [],
     compliance_deadlines: compliance || [],
     bike_financings: financing || [],
-    allocation_rules: allocationRules || [],
+    allocation_rules: (allocationRules && allocationRules.length > 0) ? allocationRules : [
+      { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
+      { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
+      { id: 'rule-3', bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
+      { id: 'rule-4', bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
+      { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
+    ],
     accounts: accounts || [],
     toast,
     usd_to_kes: USD_TO_KES,
