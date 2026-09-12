@@ -22,6 +22,79 @@ export const app = new Hono<{ Bindings: AppEnv }>();
 const USD_TO_KES = 129.0;
 
 // ------------------------------------------------------------------------------
+// PWA MANIFEST & SERVICE WORKER
+// ------------------------------------------------------------------------------
+app.get('/manifest.json', (c) => {
+  return c.body(JSON.stringify({
+    name: "Finatrack - Financial Freedom & Fleet Hub",
+    short_name: "Finatrack",
+    id: "/",
+    start_url: "/",
+    scope: "/",
+    description: "Smart personal finance management, MMF yields, savings goals, and rider fleet intelligence.",
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#0f172a",
+    theme_color: "#0f172a",
+    icons: [
+      { src: "/static/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: "/static/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+      { src: "/static/icons/icon.svg", sizes: "any", type: "image/svg+xml" }
+    ],
+    shortcuts: [
+      { name: "Finance Hub", url: "/", description: "Personal finance, balances & waterfall allocation" },
+      { name: "Rider Fleet", url: "/rider", description: "Shift intelligence, bike maintenance & earnings" }
+    ]
+  }), 200, {
+    'Content-Type': 'application/manifest+json; charset=utf-8',
+    'Cache-Control': 'public, max-age=3600'
+  });
+});
+
+app.get('/manifest.webmanifest', (c) => c.redirect('/manifest.json', 301));
+
+app.get('/sw.js', (c) => {
+  const swScript = `
+const CACHE_NAME = 'finatrack-v2';
+const STATIC_ASSETS = ['/manifest.json', '/static/icons/icon.svg'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k))))
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  if (req.mode === 'navigate') {
+    event.respondWith(fetch(req).catch(() => caches.match(req).then((res) => res || caches.match('/'))));
+    return;
+  }
+  event.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+      if (res.status === 200) {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+      }
+      return res;
+    }))
+  );
+});`;
+
+  return c.body(swScript, 200, {
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Service-Worker-Allowed': '/'
+  });
+});
+
+// ------------------------------------------------------------------------------
 // 1. FINANCE DASHBOARD (GET /)
 // ------------------------------------------------------------------------------
 app.get('/', async (c) => {

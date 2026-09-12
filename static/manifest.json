@@ -1,12 +1,14 @@
 {
-  "name": "Finatrack - Boda Boda Fleet & Finance",
+  "name": "Finatrack - Financial Freedom & Fleet Hub",
   "short_name": "Finatrack",
-  "description": "Smart fleet operations, shift logging, M-Pesa tracking, and finance manager for motorcycle riders.",
-  "start_url": "/rider",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "description": "Smart personal finance management, MMF yields, savings goals, and rider fleet intelligence.",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
-  "theme_color": "#1e3a8a",
+  "theme_color": "#0f172a",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
@@ -24,6 +26,18 @@
       "src": "/static/icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Finance Hub",
+      "url": "/",
+      "description": "Personal finance, balances & waterfall allocation"
+    },
+    {
+      "name": "Rider Fleet",
+      "url": "/rider",
+      "description": "Shift intelligence, bike maintenance & earnings"
     }
   ]
 }

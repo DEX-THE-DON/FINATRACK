@@ -26,6 +26,14 @@ export function renderFinanceDashboard(data: any): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Finatrack - Financial Freedom Hub</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Finatrack">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -48,6 +56,59 @@ export function renderFinanceDashboard(data: any): string {
     </style>
     <script>
         const USD_TO_KES = ${usd_to_kes};
+        let deferredPrompt = null;
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            showInstallUi();
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredPrompt = null;
+            hideInstallUi();
+        });
+
+        function isRunningStandalone() {
+            return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        }
+
+        function showInstallUi() {
+            if (isRunningStandalone()) return;
+            document.querySelectorAll('.pwa-install-trigger').forEach(el => el.classList.remove('hidden'));
+        }
+
+        function hideInstallUi() {
+            document.querySelectorAll('.pwa-install-trigger').forEach(el => el.classList.add('hidden'));
+            const banner = document.getElementById('pwa-bottom-banner');
+            if (banner) banner.classList.add('hidden');
+        }
+
+        function triggerAppInstall() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        hideInstallUi();
+                    }
+                    deferredPrompt = null;
+                });
+            } else {
+                const isIos = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+                if (isIos) {
+                    const modal = document.getElementById('ios-install-modal');
+                    if (modal) modal.classList.remove('hidden');
+                } else {
+                    alert('To install Finatrack:\\n1. Tap your browser menu (⋮ or ⋯)\\n2. Select "Install app" or "Add to Home screen"');
+                }
+            }
+        }
 
         function getCurrency() {
             return localStorage.getItem('finatrack_currency') || 'Ksh';
@@ -69,20 +130,9 @@ export function renderFinanceDashboard(data: any): string {
             document.querySelectorAll('.convertible-amount').forEach(el => {
                 const usdValue = parseFloat(el.getAttribute('data-usd')) || 0;
                 if (curr === 'Ksh') {
-                    const converted = (usdValue * USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                    el.innerText = 'Ksh ' + converted;
+                    el.innerText = 'Ksh ' + (usdValue * USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 } else {
-                    const converted = usdValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                    el.innerText = '$' + converted;
-                }
-            });
-
-            document.querySelectorAll('.convertible-input').forEach(el => {
-                const usdValue = parseFloat(el.getAttribute('data-usd')) || 0;
-                if (curr === 'Ksh') {
-                    el.value = (usdValue * USD_TO_KES).toFixed(2);
-                } else {
-                    el.value = usdValue.toFixed(2);
+                    el.innerText = '$' + usdValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 }
             });
 
@@ -91,8 +141,8 @@ export function renderFinanceDashboard(data: any): string {
             });
 
             document.querySelectorAll('.convertible-placeholder').forEach(el => {
-                const basePlaceholder = el.getAttribute('data-placeholder-base') || '';
-                el.placeholder = (curr === 'Ksh' ? 'Ksh ' : '$ ') + basePlaceholder;
+                const baseKes = parseFloat(el.getAttribute('data-placeholder-base')) || 0;
+                el.placeholder = curr === 'Ksh' ? baseKes.toString() : (baseKes / USD_TO_KES).toFixed(2);
             });
         }
 
@@ -125,6 +175,9 @@ export function renderFinanceDashboard(data: any): string {
             }
             applyConversion();
             updateSplitBreakdown();
+            if (!isRunningStandalone()) {
+                showInstallUi();
+            }
         });
 
         function updateSplitBreakdown() {
@@ -152,23 +205,29 @@ export function renderFinanceDashboard(data: any): string {
 
     <!-- Main Navigation Header -->
     <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-30 shadow-xs">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
             <div class="flex items-center space-x-3">
                 <span class="text-2xl">⚡</span>
                 <div>
                     <h1 class="font-extrabold text-lg text-gray-900 dark:text-white tracking-tight leading-none">Finatrack</h1>
-                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">TypeScript + Cloudflare Edge</span>
+                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">TypeScript + Edge</span>
                 </div>
             </div>
             
-            <div class="flex items-center space-x-2.5 sm:space-x-4">
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <button onclick="triggerAppInstall()" class="pwa-install-trigger px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-extrabold shadow-sm transition flex items-center space-x-1.5 hidden">
+                    <span>📲</span>
+                    <span class="hidden sm:inline">Install App</span>
+                    <span class="sm:hidden">Install</span>
+                </button>
+
                 <a href="/rider" class="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
-                    <span>🛵 Rider Fleet Tracker</span>
+                    <span>🛵 <span class="hidden md:inline">Rider Fleet</span></span>
                 </a>
 
                 <select id="currency-selector" onchange="setCurrency(this.value)" class="text-xs bg-gray-100 dark:bg-gray-800 border-0 rounded-lg px-2.5 py-1.5 font-bold text-gray-700 dark:text-gray-200 cursor-pointer">
-                    <option value="Ksh">KSH (KES)</option>
-                    <option value="USD">USD ($)</option>
+                    <option value="Ksh">KSH</option>
+                    <option value="USD">USD</option>
                 </select>
 
                 <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">
@@ -443,6 +502,57 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
     </main>
+
+    <!-- Mobile PWA Install Floating Banner -->
+    <div id="pwa-bottom-banner" class="pwa-install-trigger hidden fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-50 bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border border-gray-700/60 flex items-center justify-between gap-3 transition-all duration-300">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-inner">
+                ⚡
+            </div>
+            <div>
+                <p class="text-xs font-bold text-white">Install Finatrack App</p>
+                <p class="text-[11px] text-gray-300">Fast 1-tap launch & offline ready</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button onclick="triggerAppInstall()" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-black text-xs rounded-xl shadow-xs transition">
+                Install
+            </button>
+            <button onclick="document.getElementById('pwa-bottom-banner').remove()" class="p-1 text-gray-400 hover:text-gray-200 text-sm">
+                ✕
+            </button>
+        </div>
+    </div>
+
+    <!-- iOS Add to Home Screen Instructions Modal -->
+    <div id="ios-install-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+        <div class="bg-white dark:bg-gray-900 rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-800 space-y-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">📱</span>
+                    <h3 class="font-bold text-gray-900 dark:text-white">Install on iPhone / iPad</h3>
+                </div>
+                <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+            </div>
+            <div class="space-y-3 text-xs text-gray-600 dark:text-gray-300">
+                <div class="flex items-start space-x-3 bg-gray-50 dark:bg-gray-800/60 p-3 rounded-xl">
+                    <span class="text-base font-bold text-emerald-600">1</span>
+                    <p>Tap the <strong>Share</strong> button <span class="text-base">⎋</span> at the bottom of Safari.</p>
+                </div>
+                <div class="flex items-start space-x-3 bg-gray-50 dark:bg-gray-800/60 p-3 rounded-xl">
+                    <span class="text-base font-bold text-emerald-600">2</span>
+                    <p>Scroll down and tap <strong>"Add to Home Screen" ➕</strong>.</p>
+                </div>
+                <div class="flex items-start space-x-3 bg-gray-50 dark:bg-gray-800/60 p-3 rounded-xl">
+                    <span class="text-base font-bold text-emerald-600">3</span>
+                    <p>Tap <strong>"Add"</strong> in the top-right corner to finish installing!</p>
+                </div>
+            </div>
+            <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition">
+                Got It
+            </button>
+        </div>
+    </div>
 </body>
 </html>`;
 }
