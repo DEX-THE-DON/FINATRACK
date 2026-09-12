@@ -318,6 +318,7 @@ app.get('/rider', async (c) => {
     }
     return {
       day_name: d.name,
+      avg_earned: avg,
       avg_earned_display: avg.toLocaleString(),
       top_window: 'Midday (11am – 10pm)',
       is_best: false,

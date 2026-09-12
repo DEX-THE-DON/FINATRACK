@@ -142,12 +142,14 @@ export function renderFinanceDashboard(data: any): string {
         }
 
         function getCurrency() {
-            return localStorage.getItem('finatrack_currency') || 'Ksh';
+            const val = localStorage.getItem('finatrack_currency');
+            return val === 'USD' ? 'USD' : 'Ksh';
         }
 
         function setCurrency(curr) {
-            localStorage.setItem('finatrack_currency', curr);
-            document.cookie = "finatrack_currency=" + curr + ";path=/;max-age=31536000";
+            const validCurr = curr === 'USD' ? 'USD' : 'Ksh';
+            localStorage.setItem('finatrack_currency', validCurr);
+            document.cookie = "finatrack_currency=" + validCurr + ";path=/;max-age=31536000";
             applyConversion();
         }
 
@@ -203,6 +205,8 @@ export function renderFinanceDashboard(data: any): string {
             const theme = localStorage.getItem('theme');
             if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
             }
             applyConversion();
             updateSplitBreakdown();

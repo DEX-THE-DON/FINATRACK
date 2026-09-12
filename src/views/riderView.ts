@@ -138,12 +138,14 @@ export function renderRiderDashboard(data: any): string {
         }
 
         function getCurrency() {
-            return localStorage.getItem('finatrack_currency') || 'Ksh';
+            const val = localStorage.getItem('finatrack_currency');
+            return val === 'USD' ? 'USD' : 'Ksh';
         }
 
         function setCurrency(curr) {
-            localStorage.setItem('finatrack_currency', curr);
-            document.cookie = "finatrack_currency=" + curr + ";path=/;max-age=31536000";
+            const validCurr = curr === 'USD' ? 'USD' : 'Ksh';
+            localStorage.setItem('finatrack_currency', validCurr);
+            document.cookie = "finatrack_currency=" + validCurr + ";path=/;max-age=31536000";
             applyConversion();
         }
 
@@ -289,13 +291,16 @@ export function renderRiderDashboard(data: any): string {
         }
 
         function toggleDarkMode() {
-            document.documentElement.classList.toggle('dark');
-            localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            const theme = localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
             }
             applyConversion();
             calcDuration();
@@ -531,13 +536,13 @@ export function renderRiderDashboard(data: any): string {
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div class="p-4 bg-slate-950/70 border border-blue-900/60 rounded-2xl">
                     <p class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">⚡ Gross Hourly Rate</p>
-                    <p class="text-2xl font-black text-emerald-400 mt-1"><span class="curr-symbol-label">Ksh</span> ${ti.overall_avg_gross_hourly || '0.00'} <span class="text-xs font-normal text-gray-400">/ hr</span></p>
+                    <p class="text-2xl font-black text-emerald-400 mt-1"><span class="convertible-amount" data-kes="${ti.overall_avg_gross_hourly || 0}">Ksh ${(Number(ti.overall_avg_gross_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> <span class="text-xs font-normal text-gray-400">/ hr</span></p>
                     <p class="text-[10px] text-gray-400 mt-0.5">Overall gross yield per active hour</p>
                 </div>
 
                 <div class="p-4 bg-slate-950/70 border border-blue-900/60 rounded-2xl">
                     <p class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">💵 Net Hourly Take-Home</p>
-                    <p class="text-2xl font-black text-cyan-400 mt-1"><span class="curr-symbol-label">Ksh</span> ${ti.overall_avg_net_hourly || '0.00'} <span class="text-xs font-normal text-gray-400">/ hr</span></p>
+                    <p class="text-2xl font-black text-cyan-400 mt-1"><span class="convertible-amount" data-kes="${ti.overall_avg_net_hourly || 0}">Ksh ${(Number(ti.overall_avg_net_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> <span class="text-xs font-normal text-gray-400">/ hr</span></p>
                     <p class="text-[10px] text-gray-400 mt-0.5">After fuel/swaps, lunch & upkeep</p>
                 </div>
 
@@ -570,8 +575,8 @@ export function renderRiderDashboard(data: any): string {
                         <span class="font-bold text-blue-200">${w.window_label}</span>
                         <span class="text-[10px] px-1.5 py-0.5 bg-blue-900/60 rounded text-blue-300 font-semibold">${w.share_pct}% share</span>
                     </div>
-                    <p class="text-lg font-black text-emerald-400"><span class="curr-symbol-label">Ksh</span> ${w.gross_hourly} <span class="text-xs font-normal text-gray-400">/ hr</span></p>
-                    <p class="text-[11px] text-gray-400">Net: <strong class="text-cyan-300">Ksh ${w.net_hourly}/hr</strong> • ${w.shifts_count} shifts</p>
+                    <p class="text-lg font-black text-emerald-400"><span class="convertible-amount" data-kes="${w.gross_hourly || 0}">Ksh ${(Number(w.gross_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> <span class="text-xs font-normal text-gray-400">/ hr</span></p>
+                    <p class="text-[11px] text-gray-400">Net: <strong class="text-cyan-300 convertible-amount" data-kes="${w.net_hourly || 0}">Ksh ${(Number(w.net_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>/hr • ${w.shifts_count} shifts</p>
                 </div>`).join('')}
             </div>
 
@@ -583,7 +588,7 @@ export function renderRiderDashboard(data: any): string {
                         <span class="font-bold text-blue-200">${d.day_name}</span>
                         ${d.is_best ? `<span class="text-[10px] px-2 py-0.5 bg-amber-500/40 text-amber-200 border border-amber-400/40 rounded-full font-bold">🏆 Top Day</span>` : ''}
                     </div>
-                    <p class="text-base font-black text-emerald-400"><span class="curr-symbol-label">Ksh</span> ${d.avg_earned_display} <span class="text-xs font-normal text-gray-400">/ shift</span></p>
+                    <p class="text-base font-black text-emerald-400"><span class="convertible-amount" data-kes="${d.avg_earned || 0}">Ksh ${(Number(d.avg_earned) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> <span class="text-xs font-normal text-gray-400">/ shift</span></p>
                     <p class="text-[11px] text-gray-400">Top Window: <strong class="text-indigo-300">${d.top_window}</strong></p>
                 </div>`).join('')}
             </div>
@@ -597,8 +602,8 @@ export function renderRiderDashboard(data: any): string {
                         <span class="text-gray-400 ml-2">(${wk.shifts_count} shifts • ${wk.total_hours} hrs worked)</span>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <span>Gross: <strong class="text-emerald-400">Ksh ${wk.gross_display}</strong></span>
-                        <span>Net: <strong class="text-cyan-400">Ksh ${wk.net_display}</strong></span>
+                        <span>Gross: <strong class="text-emerald-400 convertible-amount" data-kes="${wk.gross || 0}">Ksh ${(Number(wk.gross) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></span>
+                        <span>Net: <strong class="text-cyan-400 convertible-amount" data-kes="${wk.net || 0}">Ksh ${(Number(wk.net) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></span>
                         <span class="text-amber-300">Top: <strong>${wk.top_day}</strong></span>
                     </div>
                 </div>`).join('')}
@@ -613,8 +618,8 @@ export function renderRiderDashboard(data: any): string {
                         <span class="text-gray-400 ml-2">(${m.shifts_count} shifts • ${m.total_hours} hrs)</span>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <span>Net Remittance: <strong class="text-emerald-400">Ksh ${m.net_display}</strong></span>
-                        <span>Efficiency: <strong class="text-indigo-300">Ksh ${m.avg_hourly_display}/hr</strong></span>
+                        <span>Net Remittance: <strong class="text-emerald-400 convertible-amount" data-kes="${m.net || 0}">Ksh ${(Number(m.net) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></span>
+                        <span>Efficiency: <strong class="text-indigo-300 convertible-amount" data-kes="${m.avg_hourly || 0}">Ksh ${(Number(m.avg_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>/hr</span>
                     </div>
                 </div>`).join('')}
             </div>
@@ -853,7 +858,7 @@ export function renderRiderDashboard(data: any): string {
                                 </span>
                             </td>
                             <td class="p-4 font-bold text-amber-600 dark:text-amber-400">
-                                ⚡ Ksh ${Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))}/hr
+                                ⚡ <span class="convertible-amount" data-kes="${Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))}">Ksh ${(Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>/hr
                             </td>
                             <td class="p-4 font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${l.total_earned}">Ksh ${(Number(l.total_earned) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td class="p-4 text-rose-500 font-medium convertible-amount" data-kes="${Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0)}">Ksh ${(Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
