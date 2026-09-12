@@ -69,24 +69,18 @@ riderRoutes.post('/rider/logs', async (c) => {
   const earningsAccId = body['earnings_account_id'] ? String(body['earnings_account_id']) : null;
   const expenseAccId = body['expense_account_id'] ? String(body['expense_account_id']) : null;
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
+  const totalEarnedKes = rawEarned;
+  const fuelCostKes = rawFuelCost;
+  const foodSpentKes = rawFood;
+  const maintCostKes = rawMaint;
+  const airtimeSpentKes = rawAirtime;
+  const miscExpensesKes = rawMisc;
 
-  const toUsd = (val: number) => (currencyPref === 'Ksh' ? toDecimal(val).dividedBy(liveRate).toNumber() : val);
-
-  const totalEarnedUsd = toUsd(rawEarned);
-  const fuelCostUsd = toUsd(rawFuelCost);
-  const foodSpentUsd = toUsd(rawFood);
-  const maintCostUsd = toUsd(rawMaint);
-  const airtimeSpentUsd = toUsd(rawAirtime);
-  const miscExpensesUsd = toUsd(rawMisc);
-
-  const totalExpensesUsd = toDecimal(fuelCostUsd)
-    .plus(foodSpentUsd)
-    .plus(maintCostUsd)
-    .plus(airtimeSpentUsd)
-    .plus(miscExpensesUsd)
+  const totalExpensesKes = toDecimal(fuelCostKes)
+    .plus(foodSpentKes)
+    .plus(maintCostKes)
+    .plus(airtimeSpentKes)
+    .plus(miscExpensesKes)
     .toNumber();
 
   const insertPayload: any = {
@@ -98,15 +92,15 @@ riderRoutes.post('/rider/logs', async (c) => {
     shift_hours: shiftHours,
     trips_completed: trips,
     kilometers: km,
-    total_earned: totalEarnedUsd,
+    total_earned: totalEarnedKes,
     fuel_station: fuelStation,
     fuel_litres: fuelLitres,
     swaps_count: swapsCount,
-    fuel_cost: fuelCostUsd,
-    food_spent: foodSpentUsd,
-    airtime_spent: airtimeSpentUsd,
-    maintenance_cost: maintCostUsd,
-    misc_expenses: miscExpensesUsd,
+    fuel_cost: fuelCostKes,
+    food_spent: foodSpentKes,
+    airtime_spent: airtimeSpentKes,
+    maintenance_cost: maintCostKes,
+    misc_expenses: miscExpensesKes,
     earnings_account_id: earningsAccId || null,
     expense_account_id: expenseAccId || null,
   };
@@ -131,16 +125,16 @@ riderRoutes.post('/rider/logs', async (c) => {
 
   // Automatic Finance Ledger Integration
   if (newLog) {
-    if (earningsAccId && totalEarnedUsd > 0) {
+    if (earningsAccId && totalEarnedKes > 0) {
       const { data: acc } = await supabase.from('accounts').select('*').eq('id', earningsAccId).single();
       if (acc) {
-        await supabase.from('accounts').update({ balance: toDecimal(acc.balance).plus(totalEarnedUsd).toNumber() }).eq('id', earningsAccId);
+        await supabase.from('accounts').update({ balance: toDecimal(acc.balance).plus(totalEarnedKes).toNumber() }).eq('id', earningsAccId);
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
           account_id: earningsAccId,
           transaction_type: 'INCOME',
           category: 'Rider Revenue',
-          amount: totalEarnedUsd,
+          amount: totalEarnedKes,
           description: `Rider Shift Income (${logDate} • ${shiftHours}h shift)`,
           rider_log_id: newLog.id,
           date: logDate,
@@ -148,17 +142,17 @@ riderRoutes.post('/rider/logs', async (c) => {
       }
     }
 
-    if (expenseAccId && totalExpensesUsd > 0) {
+    if (expenseAccId && totalExpensesKes > 0) {
       const { data: acc } = await supabase.from('accounts').select('*').eq('id', expenseAccId).single();
       if (acc) {
-        await supabase.from('accounts').update({ balance: toDecimal(acc.balance).minus(totalExpensesUsd).toNumber() }).eq('id', expenseAccId);
+        await supabase.from('accounts').update({ balance: toDecimal(acc.balance).minus(totalExpensesKes).toNumber() }).eq('id', expenseAccId);
         const energyLabel = powerType === 'ELECTRIC' ? `${fuelStation} Battery Swap` : `${fuelStation} Fuel`;
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
           account_id: expenseAccId,
           transaction_type: 'EXPENSE',
           category: powerType === 'ELECTRIC' ? 'EV Battery Swap & Upkeep' : 'Rider Shift Upkeep',
-          amount: totalExpensesUsd,
+          amount: totalExpensesKes,
           description: `Rider Shift Expenses (${energyLabel}, Lunch & Upkeep)`,
           rider_log_id: newLog.id,
           date: logDate,
@@ -196,15 +190,7 @@ riderRoutes.post('/bikes/create', async (c) => {
   const model = body['model_name'] ? String(body['model_name']).trim() : 'Boda Boda';
   const owner = body['owner_name'] ? String(body['owner_name']).trim() : (username || 'Dennis');
   const powerType = (String(body['power_type'] || 'PETROL').toUpperCase() === 'ELECTRIC' ? 'ELECTRIC' : 'PETROL') as 'PETROL' | 'ELECTRIC';
-  const rawTarget = parseFloat(String(body['daily_target'] || '2500.0')) || 2500.0;
-
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const targetUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawTarget).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawTarget;
+  const targetKes = parseFloat(String(body['daily_target'] || '2500.0')) || 2500.0;
 
   // Deactivate existing bikes so the new bike becomes active
   try {
@@ -222,7 +208,7 @@ riderRoutes.post('/bikes/create', async (c) => {
     model_name: model,
     owner_name: owner,
     power_type: powerType,
-    daily_target: targetUsd,
+    daily_target: targetKes,
     is_active: 1,
   };
   if (userId) {

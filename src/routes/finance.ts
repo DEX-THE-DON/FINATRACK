@@ -28,15 +28,7 @@ financeRoutes.post('/accounts/create', async (c) => {
   const accountNumber = body['account_number'] ? String(body['account_number']).trim() : null;
   const accountType = String(body['account_type'] || 'BANK');
   const interestRate = parseFloat(String(body['interest_rate_p_a'] || '0.0')) || 0.0;
-  const rawBalance = parseFloat(String(body['balance'] || '0.0')) || 0.0;
-
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const finalBalance = currencyPref === 'Ksh'
-    ? toDecimal(rawBalance).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawBalance;
+  const finalBalance = parseFloat(String(body['balance'] || '0.0')) || 0.0;
 
   const { error } = await supabase.from('accounts').insert({
     ...(userId ? { user_id: userId } : {}),
@@ -63,15 +55,7 @@ financeRoutes.post('/accounts/update/:id', async (c) => {
   const accountNumber = body['account_number'] ? String(body['account_number']).trim() : null;
   const accountType = String(body['account_type'] || 'BANK');
   const interestRate = parseFloat(String(body['interest_rate_p_a'] || '0.0')) || 0.0;
-  const rawBalance = parseFloat(String(body['balance'] || '0.0')) || 0.0;
-
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const finalBalance = currencyPref === 'Ksh'
-    ? toDecimal(rawBalance).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawBalance;
+  const finalBalance = parseFloat(String(body['balance'] || '0.0')) || 0.0;
 
   const { error } = await supabase.from('accounts').update({
     name,
@@ -136,23 +120,15 @@ financeRoutes.post('/transfers/create', async (c) => {
   const body = await c.req.parseBody();
   const fromId = String(body['from_account_id'] || '');
   const toId = String(body['to_account_id'] || '');
-  const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const amtKes = parseFloat(String(body['amount'] || '0.0')) || 0.0;
 
-  if (fromId && toId && fromId !== toId && rawAmt > 0) {
-    const cookie = c.req.header('cookie') || '';
-    const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-    const liveRate = getExchangeRate();
-
-    const amtUsd = currencyPref === 'Ksh'
-      ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-      : rawAmt;
-
+  if (fromId && toId && fromId !== toId && amtKes > 0) {
     const { data: fromAcc } = await supabase.from('accounts').select('*').eq('id', fromId).single();
     const { data: toAcc } = await supabase.from('accounts').select('*').eq('id', toId).single();
 
-    if (fromAcc && toAcc && Number(fromAcc.balance) >= amtUsd) {
-      await supabase.from('accounts').update({ balance: toDecimal(fromAcc.balance).minus(amtUsd).toNumber() }).eq('id', fromId);
-      await supabase.from('accounts').update({ balance: toDecimal(toAcc.balance).plus(amtUsd).toNumber() }).eq('id', toId);
+    if (fromAcc && toAcc && Number(fromAcc.balance) >= amtKes) {
+      await supabase.from('accounts').update({ balance: toDecimal(fromAcc.balance).minus(amtKes).toNumber() }).eq('id', fromId);
+      await supabase.from('accounts').update({ balance: toDecimal(toAcc.balance).plus(amtKes).toNumber() }).eq('id', toId);
 
       const today = new Date().toISOString().slice(0, 10);
       await supabase.from('transactions').insert([
@@ -161,7 +137,7 @@ financeRoutes.post('/transfers/create', async (c) => {
           account_id: fromId,
           transaction_type: 'EXPENSE',
           category: 'Transfer',
-          amount: amtUsd,
+          amount: amtKes,
           description: `Transfer to ${toAcc.name}`,
           date: today,
         },
@@ -170,7 +146,7 @@ financeRoutes.post('/transfers/create', async (c) => {
           account_id: toId,
           transaction_type: 'INCOME',
           category: 'Transfer',
-          amount: amtUsd,
+          amount: amtKes,
           description: `Transfer from ${fromAcc.name}`,
           date: today,
         }
@@ -190,24 +166,16 @@ financeRoutes.post('/transactions/create', async (c) => {
   const accountId = String(body['account_id'] || '');
   const txType = String(body['transaction_type'] || 'EXPENSE').toUpperCase();
   const category = String(body['category'] || 'General').trim();
-  const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const amtKes = parseFloat(String(body['amount'] || '0.0')) || 0.0;
   const tDate = String(body['t_date'] || new Date().toISOString().slice(0, 10));
   const description = body['description'] ? String(body['description']).trim() : null;
-
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const amtUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawAmt;
 
   const { error } = await supabase.from('transactions').insert({
     ...(userId ? { user_id: userId } : {}),
     account_id: accountId || null,
     transaction_type: txType,
     category,
-    amount: amtUsd,
+    amount: amtKes,
     date: tDate,
     description,
   });
@@ -222,7 +190,7 @@ financeRoutes.post('/transactions/create', async (c) => {
     const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
     if (acc) {
       const curBal = toDecimal(acc.balance);
-      const newBal = txType === 'INCOME' ? curBal.plus(amtUsd) : curBal.minus(amtUsd);
+      const newBal = txType === 'INCOME' ? curBal.plus(amtKes) : curBal.minus(amtKes);
       await supabase.from('accounts').update({ balance: newBal.toNumber() }).eq('id', accountId);
     }
   }
@@ -249,18 +217,10 @@ financeRoutes.post('/budgets/create', async (c) => {
   const category = String(body['category'] || '').trim();
   const rawLimit = parseFloat(String(body['limit_amount'] || '0.0')) || 0.0;
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const limitUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawLimit).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawLimit;
-
   const { error } = await supabase.from('budgets').upsert({
     ...(userId ? { user_id: userId } : {}),
     category,
-    limit_amount: limitUsd,
+    limit_amount: rawLimit,
   }, { onConflict: 'user_id, category' });
 
   if (error) {
@@ -292,18 +252,10 @@ financeRoutes.post('/goals/create', async (c) => {
   const targetDate = body['target_date'] ? String(body['target_date']) : null;
   const addToSplit = body['add_to_split'] === '1' || body['add_to_split'] === 'on';
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const targetUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawTarget).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawTarget;
-
   const { data: goal, error } = await supabase.from('goals').insert({
     ...(userId ? { user_id: userId } : {}),
     title,
-    target_amount: targetUsd,
+    target_amount: rawTarget,
     current_amount: 0.00,
     target_date: targetDate,
   }).select().single();
@@ -334,17 +286,9 @@ financeRoutes.post('/goals/fund/:id', async (c) => {
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const amtUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawAmt;
-
   const { data: goal } = await supabase.from('goals').select('*').eq('id', id).single();
   if (goal) {
-    const newAmt = toDecimal(goal.current_amount).plus(amtUsd).toNumber();
+    const newAmt = toDecimal(goal.current_amount).plus(rawAmt).toNumber();
     await supabase.from('goals').update({ current_amount: newAmt }).eq('id', id);
   }
 
@@ -357,17 +301,9 @@ financeRoutes.post('/goals/withdraw/:id', async (c) => {
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const amtUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawAmt;
-
   const { data: goal } = await supabase.from('goals').select('*').eq('id', id).single();
   if (goal) {
-    const newAmt = Decimal.max(0, toDecimal(goal.current_amount).minus(amtUsd)).toNumber();
+    const newAmt = Decimal.max(0, toDecimal(goal.current_amount).minus(rawAmt)).toNumber();
     await supabase.from('goals').update({ current_amount: newAmt }).eq('id', id);
   }
 
@@ -398,19 +334,11 @@ financeRoutes.post('/debts/create', async (c) => {
   const dueAt = String(body['due_at'] || new Date(Date.now() + 30 * 86400000).toISOString());
   const description = body['description'] ? String(body['description']).trim() : null;
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const totalUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawTotal).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawTotal;
-
   const { error } = await supabase.from('debts').insert({
     ...(userId ? { user_id: userId } : {}),
     person_name: personName,
     debt_type: debtType,
-    total_amount: totalUsd,
+    total_amount: rawTotal,
     paid_amount: 0.00,
     issued_at: issuedAt,
     due_at: dueAt,
@@ -432,17 +360,9 @@ financeRoutes.post('/debts/repay/:id', async (c) => {
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const amtUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawAmt;
-
   const { data: debt } = await supabase.from('debts').select('*').eq('id', id).single();
   if (debt) {
-    const newPaid = toDecimal(debt.paid_amount).plus(amtUsd).toNumber();
+    const newPaid = toDecimal(debt.paid_amount).plus(rawAmt).toNumber();
     const isPaid = newPaid >= Number(debt.total_amount);
     await supabase.from('debts').update({
       paid_amount: newPaid,
@@ -477,19 +397,11 @@ financeRoutes.post('/bills/create', async (c) => {
   const paymentAccountId = body['payment_account_id'] ? String(body['payment_account_id']) : null;
   const notes = body['notes'] ? String(body['notes']).trim() : null;
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const amtUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawAmt;
-
   const { error } = await supabase.from('bills').insert({
     ...(userId ? { user_id: userId } : {}),
     title,
     category,
-    amount: amtUsd,
+    amount: rawAmt,
     due_day: dueDay,
     payment_account_id: paymentAccountId,
     is_recurring: 1,
@@ -558,19 +470,11 @@ financeRoutes.post('/split/distribute', async (c) => {
 
   if (rawAmt <= 0) return c.redirect('/?toast=Please+enter+a+valid+amount', 303);
 
-  const cookie = c.req.header('cookie') || '';
-  const currencyPref = cookie.includes('finatrack_currency=USD') ? 'USD' : 'Ksh';
-  const liveRate = getExchangeRate();
-
-  const totalUsd = currencyPref === 'Ksh'
-    ? toDecimal(rawAmt).dividedBy(liveRate).toDecimalPlaces(2).toNumber()
-    : rawAmt;
-
   const { data: rules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
 
   if (rules && rules.length > 0) {
     const splitResults = allocateWaterfallSplit(
-      totalUsd,
+      rawAmt,
       rules.map((r) => ({
         id: r.id,
         bucket_name: r.bucket_name,
@@ -687,7 +591,6 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
   const body = await c.req.parseBody();
   const accountId = String(body['account_id'] || '');
   const rawText = String(body['raw_sms'] || '');
-  const liveRate = getExchangeRate();
 
   if (!accountId) {
     return c.redirect('/?toast=Please+select+an+account+to+import+into', 303);
@@ -699,16 +602,16 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
   }
 
   const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
-  let currentBalanceUsd = acc ? toDecimal(acc.balance) : new Decimal(0);
+  let currentBalance = acc ? toDecimal(acc.balance) : new Decimal(0);
 
   let importedCount = 0;
   for (const t of parsedList) {
-    const amountUsd = toDecimal(t.amount_kes).dividedBy(liveRate).toDecimalPlaces(2).toNumber();
+    const amountKes = t.amount_kes;
     
     const { error: txError } = await supabase.from('transactions').insert({
       ...(userId ? { user_id: userId } : {}),
       account_id: accountId,
-      amount: amountUsd,
+      amount: amountKes,
       transaction_type: t.type,
       category: t.suggested_category,
       description: t.description,
@@ -717,16 +620,16 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
 
     if (!txError) {
       if (t.type === 'INCOME') {
-        currentBalanceUsd = currentBalanceUsd.plus(amountUsd);
+        currentBalance = currentBalance.plus(amountKes);
       } else {
-        currentBalanceUsd = currentBalanceUsd.minus(amountUsd);
+        currentBalance = currentBalance.minus(amountKes);
       }
       importedCount++;
     }
   }
 
   if (acc) {
-    await supabase.from('accounts').update({ balance: currentBalanceUsd.toNumber() }).eq('id', accountId);
+    await supabase.from('accounts').update({ balance: currentBalance.toNumber() }).eq('id', accountId);
   }
 
   return c.redirect(`/?toast=Successfully+imported+${importedCount}+M-Pesa+transactions!`, 303);

@@ -257,10 +257,10 @@ app.get('/rider', async (c) => {
   const activeBikes = bikes;
   const shiftLogs = logs;
 
-  // Shift & Time Intelligence Engine
+  // Shift & Time Intelligence Engine (in KES)
   let totalHours = 0;
-  let totalEarnedUsd = 0;
-  let totalExpensesUsd = 0;
+  let totalEarnedKes = 0;
+  let totalExpensesKes = 0;
 
   const windowMap: Record<string, { label: string; hours: number; gross: number; net: number; count: number }> = {
     MORNING: { label: '🌅 Early Morning (05:00 – 11:00)', hours: 0, gross: 0, net: 0, count: 0 },
@@ -286,8 +286,8 @@ app.get('/rider', async (c) => {
     const net = gross - exp;
 
     totalHours += hrs;
-    totalEarnedUsd += gross;
-    totalExpensesUsd += exp;
+    totalEarnedKes += gross;
+    totalExpensesKes += exp;
 
     const win = classifyShiftWindow(l.start_time, l.end_time);
     if (windowMap[win.windowKey]) {
@@ -304,14 +304,14 @@ app.get('/rider', async (c) => {
     }
   }
 
-  const grossHourlyRate = totalHours > 0 ? ((totalEarnedUsd * USD_TO_KES) / totalHours).toFixed(2) : '0.00';
-  const netHourlyRate = totalHours > 0 ? (((totalEarnedUsd - totalExpensesUsd) * USD_TO_KES) / totalHours).toFixed(2) : '0.00';
+  const grossHourlyRate = totalHours > 0 ? (totalEarnedKes / totalHours).toFixed(2) : '0.00';
+  const netHourlyRate = totalHours > 0 ? ((totalEarnedKes - totalExpensesKes) / totalHours).toFixed(2) : '0.00';
 
   // Best day computation
   let bestDayName = 'Friday';
   let bestDayAvg = 0;
   const dayAnalysis = Object.values(dayMap).map((d) => {
-    const avg = d.count > 0 ? Math.round((d.gross * USD_TO_KES) / d.count) : 0;
+    const avg = d.count > 0 ? Math.round(d.gross / d.count) : 0;
     if (avg > bestDayAvg) {
       bestDayAvg = avg;
       bestDayName = d.name;
@@ -326,9 +326,9 @@ app.get('/rider', async (c) => {
   dayAnalysis.forEach((d) => { if (d.day_name === bestDayName) d.is_best = true; });
 
   const timeWindowAnalysis = Object.entries(windowMap).map(([_, w]) => {
-    const gRate = w.hours > 0 ? Math.round((w.gross * USD_TO_KES) / w.hours) : 0;
-    const nRate = w.hours > 0 ? Math.round((w.net * USD_TO_KES) / w.hours) : 0;
-    const share = totalEarnedUsd > 0 ? Math.round((w.gross / totalEarnedUsd) * 100) : 0;
+    const gRate = w.hours > 0 ? Math.round(w.gross / w.hours) : 0;
+    const nRate = w.hours > 0 ? Math.round(w.net / w.hours) : 0;
+    const share = totalEarnedKes > 0 ? Math.round((w.gross / totalEarnedKes) * 100) : 0;
     return {
       window_label: w.label,
       gross_hourly: gRate,

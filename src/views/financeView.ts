@@ -22,6 +22,9 @@ export function renderFinanceDashboard(data: any): string {
     is_logged_in = false,
   } = data;
 
+  const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -45,6 +48,16 @@ export function renderFinanceDashboard(data: any): string {
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -140,17 +153,16 @@ export function renderFinanceDashboard(data: any): string {
 
         function applyConversion() {
             const curr = getCurrency();
-            document.cookie = "finatrack_currency=" + curr + ";path=/;max-age=31536000";
-            
             const selectEl = document.getElementById('currency-selector');
             if (selectEl) selectEl.value = curr;
 
             document.querySelectorAll('.convertible-amount').forEach(el => {
-                const usdValue = parseFloat(el.getAttribute('data-usd')) || 0;
+                const kesValue = parseFloat(el.getAttribute('data-kes')) || 0;
+                const prefix = el.getAttribute('data-prefix') || '';
                 if (curr === 'Ksh') {
-                    el.innerText = 'Ksh ' + (usdValue * USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    el.innerText = prefix + 'Ksh ' + kesValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 } else {
-                    el.innerText = '$' + usdValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    el.innerText = prefix + '$' + (kesValue / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 }
             });
 
@@ -170,9 +182,9 @@ export function renderFinanceDashboard(data: any): string {
             if (editDiv.classList.contains('hidden')) {
                 const curr = getCurrency();
                 const balInput = editDiv.querySelector('input[name="balance"]');
-                if (balInput && balInput.hasAttribute('data-usd')) {
-                    const usd = parseFloat(balInput.getAttribute('data-usd')) || 0;
-                    balInput.value = curr === 'Ksh' ? (usd * USD_TO_KES).toFixed(2) : usd.toFixed(2);
+                if (balInput && balInput.hasAttribute('data-kes')) {
+                    const kes = parseFloat(balInput.getAttribute('data-kes')) || 0;
+                    balInput.value = curr === 'Ksh' ? kes.toFixed(2) : (kes / USD_TO_KES).toFixed(2);
                 }
                 editDiv.classList.remove('hidden');
                 displayDiv.classList.add('hidden');
@@ -183,12 +195,13 @@ export function renderFinanceDashboard(data: any): string {
         }
 
         function toggleDarkMode() {
-            document.documentElement.classList.toggle('dark');
-            localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            const theme = localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
             }
             applyConversion();
@@ -450,25 +463,25 @@ export function renderFinanceDashboard(data: any): string {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-gradient-to-br from-emerald-600 to-teal-700 p-5 rounded-2xl text-white shadow-sm space-y-1">
                 <p class="text-xs font-semibold text-emerald-100 uppercase tracking-wider">Total Net Balance</p>
-                <p class="text-2xl sm:text-3xl font-black convertible-amount" data-usd="${total_balance}">${total_balance}</p>
+                <p class="text-2xl sm:text-3xl font-black convertible-amount" data-kes="${total_balance}">${formatKes(total_balance)}</p>
                 <p class="text-[11px] text-emerald-200">${accounts.length} Active Accounts Connected</p>
             </div>
 
             <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xs space-y-1">
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">This Month's Income</p>
-                <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-usd="${monthly_income}">${monthly_income}</p>
+                <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${monthly_income}">${formatKes(monthly_income)}</p>
                 <p class="text-[11px] text-gray-500">From shifts, interest & transfers</p>
             </div>
 
             <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xs space-y-1">
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">This Month's Expenses</p>
-                <p class="text-2xl font-bold text-rose-600 dark:text-rose-400 convertible-amount" data-usd="${monthly_expenses}">${monthly_expenses}</p>
+                <p class="text-2xl font-bold text-rose-600 dark:text-rose-400 convertible-amount" data-kes="${monthly_expenses}">${formatKes(monthly_expenses)}</p>
                 <p class="text-[11px] text-gray-500">Fuel, food, utilities & bills</p>
             </div>
 
             <div class="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xs space-y-1">
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Monthly Passive Yield</p>
-                <p class="text-2xl font-bold text-amber-600 dark:text-amber-400 convertible-amount" data-usd="${total_monthly_passive_income}">${total_monthly_passive_income}</p>
+                <p class="text-2xl font-bold text-amber-600 dark:text-amber-400 convertible-amount" data-kes="${total_monthly_passive_income}">${formatKes(total_monthly_passive_income)}</p>
                 <p class="text-[11px] text-amber-700 dark:text-amber-300">From MMF & Sacco high yields</p>
             </div>
         </div>
@@ -624,15 +637,15 @@ export function renderFinanceDashboard(data: any): string {
                     <div class="grid grid-cols-2 gap-2 text-xs">
                         <div class="p-2 bg-gray-50 dark:bg-gray-800/80 rounded-lg">
                             <p class="text-[10px] text-gray-400">Current Balance</p>
-                            <p class="font-bold text-gray-900 dark:text-white convertible-amount" data-usd="${m.balance}">${m.balance}</p>
+                            <p class="font-bold text-gray-900 dark:text-white convertible-amount" data-kes="${m.balance}">${formatKes(m.balance)}</p>
                         </div>
                         <div class="p-2 bg-amber-50 dark:bg-amber-950/40 rounded-lg">
                             <p class="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Monthly Yield</p>
-                            <p class="font-bold text-amber-700 dark:text-amber-400 convertible-amount" data-usd="${m.monthly_return}">${m.monthly_return}</p>
+                            <p class="font-bold text-amber-700 dark:text-amber-400 convertible-amount" data-kes="${m.monthly_return}">${formatKes(m.monthly_return)}</p>
                         </div>
                     </div>
                     <p class="text-[10px] text-gray-400">
-                        Daily: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400" data-usd="${m.daily_return}"></strong> &nbsp;•&nbsp; Annual: <strong class="convertible-amount" data-usd="${m.annual_return}"></strong>
+                        Daily: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${m.daily_return}">${formatKes(m.daily_return)}</strong> &nbsp;•&nbsp; Annual: <strong class="convertible-amount" data-kes="${m.annual_return}">${formatKes(m.annual_return)}</strong>
                     </p>
                     <form action="/accounts/interest/log/${m.id}" method="POST">
                         <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-lg text-xs transition shadow-xs flex items-center justify-center space-x-1.5">
@@ -670,7 +683,7 @@ export function renderFinanceDashboard(data: any): string {
                             </div>
                             <div class="pt-2">
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Balance</p>
-                                <p class="font-bold text-xl text-emerald-600 dark:text-emerald-400 convertible-amount" data-usd="${acc.balance}">${acc.balance}</p>
+                                <p class="font-bold text-xl text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${acc.balance}">${formatKes(acc.balance)}</p>
                             </div>
                             <button onclick="toggleEdit('${acc.id}')" class="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-semibold py-1.5 rounded-lg transition mt-2">Edit Account</button>
                         </div>
@@ -701,8 +714,8 @@ export function renderFinanceDashboard(data: any): string {
                                     <input type="number" step="any" name="interest_rate_p_a" value="${acc.interest_rate_p_a || 0.0}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance</label>
-                                    <input type="number" step="any" name="balance" value="${acc.balance}" data-usd="${acc.balance}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-input" required>
+                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance (Ksh)</label>
+                                    <input type="number" step="any" name="balance" value="${acc.balance}" data-kes="${acc.balance}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-input" required>
                                 </div>
                                 <div class="flex space-x-2 pt-1">
                                     <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1 rounded text-xs font-semibold">Save</button>
@@ -848,8 +861,8 @@ export function renderFinanceDashboard(data: any): string {
                                     </span>
                                 </td>
                                 <td class="py-2.5 px-3 font-medium text-gray-800 dark:text-gray-200">${t.category}</td>
-                                <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount" data-usd="${t.amount}">
-                                    ${t.amount}
+                                <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount" data-kes="${t.amount}" data-prefix="${t.transaction_type === 'INCOME' ? '+' : '-'}">
+                                    ${t.transaction_type === 'INCOME' ? '+' : '-'}${formatKes(t.amount)}
                                 </td>
                                 <td class="py-2.5 px-3 text-center">
                                     <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">

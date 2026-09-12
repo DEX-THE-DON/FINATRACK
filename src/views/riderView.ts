@@ -42,6 +42,16 @@ export function renderRiderDashboard(data: any): string {
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -143,11 +153,12 @@ export function renderRiderDashboard(data: any): string {
             if (selectEl) selectEl.value = curr;
 
             document.querySelectorAll('.convertible-amount').forEach(el => {
-                const usdValue = parseFloat(el.getAttribute('data-usd')) || 0;
+                const kesValue = parseFloat(el.getAttribute('data-kes')) || 0;
+                const prefix = el.getAttribute('data-prefix') || '';
                 if (curr === 'Ksh') {
-                    el.innerText = 'Ksh ' + (usdValue * USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    el.innerText = prefix + 'Ksh ' + kesValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 } else {
-                    el.innerText = '$' + usdValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    el.innerText = prefix + '$' + (kesValue / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 }
             });
 
@@ -420,7 +431,7 @@ export function renderRiderDashboard(data: any): string {
                                 Quick Setup
                             </span>`}
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${active_bike ? `Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-usd="${active_bike?.daily_target || 2500}"></strong> • Managed by ${active_bike?.owner_name || username}` : 'Register your motorbike or electric bike below to start tracking shifts & finance.'}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${active_bike ? `Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-kes="${active_bike?.daily_target || 2500}">Ksh ${(Number(active_bike?.daily_target) || 2500).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong> • Managed by ${active_bike?.owner_name || username}` : 'Register your motorbike or electric bike below to start tracking shifts & finance.'}</p>
                     </div>
                 </div>
 
@@ -473,7 +484,7 @@ export function renderRiderDashboard(data: any): string {
                                 ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}
                             </span>
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${b.model_name || 'Motorbike'} • Target: <strong class="convertible-amount font-bold text-gray-800 dark:text-gray-200" data-usd="${b.daily_target}"></strong></p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${b.model_name || 'Motorbike'} • Target: <strong class="convertible-amount font-bold text-gray-800 dark:text-gray-200" data-kes="${b.daily_target}">Ksh ${(Number(b.daily_target) || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></p>
                     </div>
                     <div class="flex items-center space-x-1.5">
                         ${b.is_active ? `
@@ -842,11 +853,11 @@ export function renderRiderDashboard(data: any): string {
                                 </span>
                             </td>
                             <td class="p-4 font-bold text-amber-600 dark:text-amber-400">
-                                ⚡ Ksh ${Math.round((Number(l.total_earned) * usd_to_kes) / (Number(l.shift_hours) || 1))}/hr
+                                ⚡ Ksh ${Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))}/hr
                             </td>
-                            <td class="p-4 font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-usd="${l.total_earned}">${l.total_earned}</td>
-                            <td class="p-4 text-rose-500 font-medium convertible-amount" data-usd="${Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0)}"></td>
-                            <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400 convertible-amount" data-usd="${Number(l.total_earned || 0) - (Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0))}"></td>
+                            <td class="p-4 font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${l.total_earned}">Ksh ${(Number(l.total_earned) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td class="p-4 text-rose-500 font-medium convertible-amount" data-kes="${Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0)}">Ksh ${(Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400 convertible-amount" data-kes="${Number(l.total_earned || 0) - (Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0))}">Ksh ${(Number(l.total_earned || 0) - (Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td class="p-4 text-center">
                                 <form action="/rider/logs/delete/${l.id}" method="POST" onsubmit="return confirm('Delete shift log?');">
                                     <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold">Delete</button>
