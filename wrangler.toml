@@ -5,3 +5,5 @@ pages_build_output_dir = "static"
 
 [vars]
 ENVIRONMENT = "production"
+SUPABASE_URL = "https://ynqinvzopesauljdgjoo.supabase.co"
+SUPABASE_ANON_KEY = "sb_publishable_ROu6-kwidZFNH-d2RermBg_z_zx5gPI"

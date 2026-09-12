@@ -10,6 +10,15 @@ export interface AppEnv {
 
 // In-memory store for local testing when cloud Supabase credentials are not yet supplied
 const inMemoryStore: Record<string, any[]> = {
+  users: [
+    {
+      id: 'usr-dex',
+      email: 'dex@gmail.com',
+      password: '', // will accept initial password or matched password
+      user_metadata: { full_name: 'Dex', name: 'Dex' },
+      created_at: new Date().toISOString(),
+    }
+  ],
   accounts: [],
   transactions: [],
   goals: [],
@@ -33,8 +42,48 @@ const inMemoryStore: Record<string, any[]> = {
 function createMockClient() {
   return {
     auth: {
-      async signUp({ email, password }: any) { return { data: { user: { id: 'local-user', email } }, error: null }; },
-      async signInWithPassword({ email, password }: any) { return { data: { session: { access_token: 'mock-token', expires_in: 3600 } }, error: null }; },
+      async signUp({ email, password, options }: any) {
+        const normEmail = String(email || '').toLowerCase().trim();
+        const existing = (inMemoryStore.users || []).find((u: any) => u.email.toLowerCase() === normEmail);
+        if (existing && existing.password && existing.password !== password) {
+          return { data: { user: null, session: null }, error: { message: 'Email already registered. Please log in.' } };
+        }
+        const user = existing || {
+          id: `usr-${Date.now()}`,
+          email: normEmail,
+          password,
+          user_metadata: options?.data || { full_name: normEmail.split('@')[0] },
+          created_at: new Date().toISOString(),
+        };
+        user.password = password;
+        if (!existing) inMemoryStore.users.push(user);
+        const session = { access_token: `mock-token-${user.id}`, expires_in: 604800 };
+        return { data: { user, session }, error: null };
+      },
+      async signInWithPassword({ email, password }: any) {
+        const normEmail = String(email || '').toLowerCase().trim();
+        const user = (inMemoryStore.users || []).find((u: any) => u.email.toLowerCase() === normEmail);
+        if (!user) {
+          return { data: { user: null, session: null }, error: { message: 'Invalid login credentials. User not found.' } };
+        }
+        if (user.password && user.password !== password) {
+          return { data: { user: null, session: null }, error: { message: 'Invalid login credentials. Incorrect password.' } };
+        }
+        if (!user.password) {
+          user.password = password; // bind initial password
+        }
+        const session = { access_token: `mock-token-${user.id}`, expires_in: 604800 };
+        return { data: { user, session }, error: null };
+      },
+      async getUser(token: string) {
+        if (!token) return { data: { user: null }, error: { message: 'Invalid token' } };
+        const userId = token.replace(/^mock-token-/, '');
+        const user = (inMemoryStore.users || []).find((u: any) => u.id === userId || token.includes(u.id)) || inMemoryStore.users[0];
+        if (user) {
+          return { data: { user }, error: null };
+        }
+        return { data: { user: null }, error: { message: 'User not found' } };
+      }
     },
     from(table: string) {
       if (!inMemoryStore[table]) inMemoryStore[table] = [];
