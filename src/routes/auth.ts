@@ -32,7 +32,11 @@ authRoutes.post('/auth/signup', async (c) => {
   });
 
   if (error) {
-    return c.redirect(`/signup?toast=${encodeURIComponent(error.message)}`, 303);
+    let msg = error.message;
+    if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('email')) {
+      msg = 'Email rate limit reached on Supabase. Disable "Confirm email" in your Supabase Auth settings for instant 1-second signups, or log in directly.';
+    }
+    return c.redirect(`/signup?toast=${encodeURIComponent(msg)}`, 303);
   }
 
   if (!data?.user) {
