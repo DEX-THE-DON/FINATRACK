@@ -159,12 +159,51 @@ self.addEventListener('fetch', (event) => {
   });
 });
 
+// Helper to extract authenticated user from cookie / session
+async function getAuthenticatedUser(c: any, supabase: any) {
+  const cookieHeader = c.req.header('cookie') || '';
+  const cookies = Object.fromEntries(
+    cookieHeader.split(';').map((s: string) => {
+      const idx = s.indexOf('=');
+      return idx > -1 ? [s.slice(0, idx).trim(), s.slice(idx + 1).trim()] : [s.trim(), ''];
+    })
+  );
+
+  let username = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : '';
+  let email = '';
+  let isLoggedIn = false;
+
+  const token = cookies['sb-access-token'];
+  if (token) {
+    try {
+      const { data: userData } = await supabase.auth.getUser(token);
+      if (userData?.user) {
+        isLoggedIn = true;
+        email = userData.user.email || '';
+        username = userData.user.user_metadata?.full_name || username || email.split('@')[0] || 'Captain';
+      }
+    } catch (e) {}
+  }
+
+  if (!username && cookies['finatrack_user']) {
+    username = decodeURIComponent(cookies['finatrack_user']);
+    isLoggedIn = true;
+  }
+
+  return {
+    isLoggedIn,
+    username: username || 'Dennis',
+    email,
+  };
+}
+
 // ------------------------------------------------------------------------------
 // 1. FINANCE DASHBOARD (GET /)
 // ------------------------------------------------------------------------------
 app.get('/', async (c) => {
   const supabase = getSupabaseClient(c.env);
   const toast = c.req.query('toast') || '';
+  const authUser = await getAuthenticatedUser(c, supabase);
 
   const { data: accounts } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
   const { data: transactions } = await supabase.from('transactions').select('*').order('date', { ascending: false }).limit(50);
@@ -242,6 +281,8 @@ app.get('/', async (c) => {
     total_monthly_passive_income: totalMonthlyPassive.toFixed(2),
     usd_to_kes: USD_TO_KES,
     toast,
+    username: authUser.username,
+    is_logged_in: authUser.isLoggedIn,
   });
 
   return c.html(html);
@@ -253,6 +294,7 @@ app.get('/', async (c) => {
 app.get('/rider', async (c) => {
   const supabase = getSupabaseClient(c.env);
   const toast = c.req.query('toast') || '';
+  const authUser = await getAuthenticatedUser(c, supabase);
 
   const { data: bikes } = await supabase.from('bikes').select('*');
   const { data: logs } = await supabase.from('rider_logs').select('*').order('date', { ascending: false });
@@ -368,6 +410,8 @@ app.get('/rider', async (c) => {
     accounts: accounts || [],
     toast,
     usd_to_kes: USD_TO_KES,
+    username: authUser.username,
+    is_logged_in: authUser.isLoggedIn,
   });
 
   return c.html(html);

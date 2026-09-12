@@ -17,7 +17,9 @@ export function renderFinanceDashboard(data: any): string {
     toast = '',
     today = new Date().toISOString().slice(0, 10),
     now_iso = new Date().toISOString().slice(0, 16),
-    unique_categories = []
+    unique_categories = [],
+    username = 'Dennis',
+    is_logged_in = false,
   } = data;
 
   return `<!DOCTYPE html>
@@ -346,9 +348,20 @@ export function renderFinanceDashboard(data: any): string {
                     <option value="USD">USD</option>
                 </select>
 
+                ${is_logged_in ? `
+                <div class="flex items-center space-x-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 px-2.5 py-1.5 rounded-xl shadow-xs">
+                    <span class="text-xs">👤</span>
+                    <span class="text-xs font-bold text-emerald-800 dark:text-emerald-300 max-w-[100px] truncate hidden sm:inline">${username}</span>
+                    <form action="/auth/logout" method="POST" class="inline m-0 p-0">
+                        <input type="hidden" name="redirect_to" value="/">
+                        <button type="submit" title="Logout" class="text-[10px] text-rose-500 dark:text-rose-400 font-bold hover:underline ml-1">✕</button>
+                    </form>
+                </div>
+                ` : `
                 <a href="/login" class="px-3 py-1.5 bg-gradient-to-r from-pink-500/10 to-purple-500/10 hover:from-pink-500/20 hover:to-purple-500/20 text-pink-600 dark:text-pink-400 border border-pink-500/30 rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs">
                     <span>🔑 <span class="hidden sm:inline">Sign In</span></span>
                 </a>
+                `}
 
                 <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">
                     🌙
@@ -359,6 +372,27 @@ export function renderFinanceDashboard(data: any): string {
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 flex-1 w-full pb-28 sm:pb-8">
         
+        <!-- 👋 Welcome Greeting Hero Banner -->
+        <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-5 border border-gray-100 dark:border-gray-800 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center space-x-3.5">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-2xl text-white shadow-md">
+                    👋
+                </div>
+                <div>
+                    <h2 class="text-base sm:text-lg font-black text-gray-900 dark:text-white leading-tight">
+                        Welcome, <span class="text-emerald-600 dark:text-emerald-400 font-extrabold">${username}</span>!
+                    </h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Automated financial freedom waterfall & multi-account analytics active.</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 text-xs">
+                <span class="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 font-bold rounded-xl flex items-center gap-1.5 shadow-2xs">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Edge Synchronized</span>
+                </span>
+            </div>
+        </div>
+
         <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
         <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
             <button onclick="document.getElementById('tx-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
