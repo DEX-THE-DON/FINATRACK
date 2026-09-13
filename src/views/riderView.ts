@@ -20,6 +20,21 @@ export function renderRiderDashboard(data: any): string {
   const ti = time_intelligence;
   const activePowerType = (active_bike && active_bike.power_type) || 'PETROL';
 
+  const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const getDaysDiff = (targetDateStr?: string | null): { days: number; label: string; status: 'EXPIRED' | 'URGENT' | 'SOON' | 'GOOD' } => {
+    if (!targetDateStr) return { days: 999, label: 'No date set', status: 'GOOD' };
+    const target = new Date(targetDateStr).getTime();
+    const now = new Date().setHours(0,0,0,0);
+    const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+    if (diff < 0) return { days: diff, label: `EXPIRED (${Math.abs(diff)} days ago)`, status: 'EXPIRED' };
+    if (diff === 0) return { days: 0, label: 'Expires TODAY!', status: 'EXPIRED' };
+    if (diff <= 30) return { days: diff, label: `⏳ Expiring in ${diff} days! (Renew soon)`, status: 'URGENT' };
+    if (diff <= 95) return { days: diff, label: `⏳ Expiring in ~${Math.round(diff/30)} months (${diff} days)`, status: 'SOON' };
+    return { days: diff, label: `✅ Valid (${diff} days remaining)`, status: 'GOOD' };
+  };
+
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -224,6 +239,32 @@ export function renderRiderDashboard(data: any): string {
             }
         }
 
+        function calcServiceTotal() {
+            const oil = parseFloat(document.getElementById('service_oil_cost')?.value) || 0;
+            const pads = parseFloat(document.getElementById('service_brake_pad_cost')?.value) || 0;
+            const plug = parseFloat(document.getElementById('service_spark_plug_cost')?.value) || 0;
+            const labor = parseFloat(document.getElementById('service_labor_cost')?.value) || 0;
+            const other = parseFloat(document.getElementById('service_other_cost')?.value) || 0;
+            const total = oil + pads + plug + labor + other;
+            const totalInput = document.getElementById('service_total_cost');
+            if (totalInput) totalInput.value = total > 0 ? total.toFixed(2) : '';
+            const badge = document.getElementById('service_total_badge');
+            if (badge) {
+                const curr = getCurrency();
+                badge.innerText = curr === 'Ksh' ? 'Ksh ' + total.toLocaleString(undefined, {minimumFractionDigits: 2}) : '$' + (total / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2});
+            }
+        }
+
+        function toggleComplianceDrawer(id) {
+            const drawer = document.getElementById('comp-drawer-' + id);
+            if (drawer) drawer.classList.toggle('hidden');
+        }
+
+        function toggleMaintDrawer() {
+            const container = document.getElementById('maint-log-form-container');
+            if (container) container.classList.toggle('hidden');
+        }
+
         // ==========================================
         // ⚡ DYNAMIC EV VS PETROL ADAPTATION ENGINE
         // ==========================================
@@ -418,17 +459,17 @@ export function renderRiderDashboard(data: any): string {
             <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>⏱️ Log Shift</span>
             </button>
-            <button onclick="document.getElementById('fleet-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-slate-700 transition">
-                <span>🛵 Fleet & EV</span>
-            </button>
             <button onclick="document.getElementById('maint-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
-                <span>🛠️ Maintenance</span>
+                <span>🛠️ Service</span>
+            </button>
+            <button onclick="document.getElementById('compliance-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-amber-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🛡️ Insurance</span>
+            </button>
+            <button onclick="document.getElementById('fleet-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-slate-700 transition">
+                <span>🛵 Fleet</span>
             </button>
             <a href="/" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>⚡ Finance</span>
-            </a>
-            <a href="/#mpesa-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gray-900 dark:bg-gray-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
-                <span>📲 M-Pesa</span>
             </a>
             <button onclick="triggerAppInstall()" class="pwa-install-trigger flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-pink-600 to-rose-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>📲 Install</span>
@@ -767,76 +808,315 @@ export function renderRiderDashboard(data: any): string {
             </form>
         </div>
 
-        <!-- 🛠️ Maintenance & Fleet Health Intelligence Card -->
-        <div id="maint-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
-            <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
+        <!-- 🛠️ Motorbike Maintenance & Service Log System -->
+        <div id="maint-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b dark:border-gray-800 pb-3">
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl shadow-xs">
                         🛠️
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Maintenance & Vehicle Health Checklist</h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Custom preventive maintenance schedules tailored for Electric EV vs Petrol engines.</p>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>Motorbike Maintenance & Service Tracker</span>
+                            <span class="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Fleet Health</span>
+                        </h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Record oil changes, brake pads, spark plugs, mechanic labor, and prevent costly breakdowns.</p>
                     </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="toggleMaintDrawer()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5">
+                        <span>➕ Log Service / Repair</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- Electric EV Maintenance Checklist -->
-            <div id="maint-checklist-electric" class="${activePowerType === 'ELECTRIC' ? '' : 'hidden'} space-y-3">
-                <div class="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl flex items-center justify-between">
-                    <div class="flex items-center space-x-2.5">
-                        <span class="text-2xl">🔋</span>
-                        <div>
-                            <h4 class="font-bold text-sm text-emerald-950 dark:text-emerald-200">Battery State-of-Health (SOH) & Contacts</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Inspect battery swap terminals, latch cleanliness, and BMS firmware.</p>
-                        </div>
-                    </div>
-                    <span class="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold rounded-lg">Every 4 Weeks</span>
+            <!-- ➕ Log Service & Repair Collapsible Form -->
+            <div id="maint-log-form-container" class="hidden bg-indigo-50/40 dark:bg-indigo-950/30 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-md space-y-4">
+                <div class="flex justify-between items-center border-b border-indigo-100 dark:border-indigo-900/60 pb-2">
+                    <h3 class="text-sm font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                        <span>🔧 Record Bike Service & Maintenance Details</span>
+                    </h3>
+                    <button type="button" onclick="toggleMaintDrawer()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
-                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">⚡ Motor Controller & Throttle</p>
-                        <p class="text-[11px] text-gray-500">Inspect wiring harness, torque sensor, and water seals.</p>
+                <form action="/rider/maintenance/log" method="POST" class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Date</label>
+                            <input type="date" name="service_date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-semibold" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Vehicle / Bike</label>
+                            <select name="bike_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                ${bikes.length > 0 ? bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'})</option>`).join('') : '<option value="">-- No Vehicle Selected --</option>'}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Summary Title</label>
+                            <input type="text" name="service_type" value="Oil Change, Brake Pads & Labor Service" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold" required>
+                        </div>
                     </div>
-                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
-                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">🛑 Regenerative Braking & Pads</p>
-                        <p class="text-[11px] text-gray-500">Check regen calibration & mechanical brake pad thickness.</p>
+
+                    <!-- Itemized Cost Breakdown -->
+                    <div class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Itemized Costs (<span class="curr-symbol-label">Ksh</span>)</span>
+                            <span class="text-xs text-gray-400">Leave 0 if not replaced / inspected & good</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+                            <div>
+                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🛢️ Engine Oil & Filter</label>
+                                <input type="number" step="any" inputmode="decimal" id="service_oil_cost" name="oil_cost" placeholder="e.g. 500" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🛑 Brake Pads / Shoes</label>
+                                <input type="number" step="any" inputmode="decimal" id="service_brake_pad_cost" name="brake_pad_cost" placeholder="e.g. 350" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">⚡ Spark Plug (0 if OK)</label>
+                                <input type="number" step="any" inputmode="decimal" id="service_spark_plug_cost" name="spark_plug_cost" placeholder="0" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">👨‍🔧 Mechanic Labor Fee</label>
+                                <input type="number" step="any" inputmode="decimal" id="service_labor_cost" name="labor_cost" placeholder="e.g. 200" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🔩 Other Spares / Chain</label>
+                                <input type="number" step="any" inputmode="decimal" id="service_other_cost" name="other_cost" placeholder="0" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
+                            </div>
+                        </div>
                     </div>
-                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
-                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">🛵 Drive Belt & Tyre Pressure</p>
-                        <p class="text-[11px] text-gray-500">Check drive belt tension, alignment, and 32 PSI pressure.</p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Total Service Cost (<span class="curr-symbol-label">Ksh</span>)</label>
+                            <div class="relative">
+                                <input type="number" step="any" inputmode="decimal" id="service_total_cost" name="total_cost" placeholder="Total Cost" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-black text-rose-600 dark:text-rose-400" required>
+                                <span id="service_total_badge" class="absolute right-3 top-2.5 text-xs font-extrabold text-rose-500 pointer-events-none"></span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Deduct from Account (Optional)</label>
+                            <select name="account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-semibold">
+                                <option value="">-- No Ledger Deduction (Cash / Outside) --</option>
+                                ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Next Service Interval</label>
+                            <select name="interval_weeks" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-semibold">
+                                <option value="3" selected>Every 3 Weeks (~1,500 km)</option>
+                                <option value="2">Every 2 Weeks (High Mileage)</option>
+                                <option value="4">Every 4 Weeks (Monthly)</option>
+                                <option value="6">Every 6 Weeks</option>
+                            </select>
+                        </div>
                     </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Notes & Part Details</label>
+                        <input type="text" name="notes" placeholder="e.g. Changed oil (20W-50) & brake pads. Spark plug was good so did not buy new one. Paid mechanic labor." value="Oil plus brakepads changed, spark plug inspected (in good condition), labor paid." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-medium">
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-1">
+                        <button type="button" onclick="toggleMaintDrawer()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold">Cancel</button>
+                        <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition shadow-xs active:scale-95">💾 Save Service & Update Ledger</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Active Maintenance Schedules Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                ${maintenance_schedules.length > 0 ? maintenance_schedules.map((m: any) => {
+                    const nextDiff = getDaysDiff(m.next_due_date);
+                    const isUrgent = nextDiff.status === 'EXPIRED' || nextDiff.status === 'URGENT';
+                    return `
+                    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border ${isUrgent ? 'border-amber-300 dark:border-amber-700/80 bg-amber-50/20' : 'border-gray-200 dark:border-gray-700'} space-y-3 flex flex-col justify-between shadow-2xs">
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h4 class="font-bold text-gray-900 dark:text-white text-sm">${m.service_type}</h4>
+                                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Interval: Every ${m.interval_weeks || 3} Weeks</span>
+                                </div>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isUrgent ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 animate-pulse' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'}">
+                                    ${nextDiff.label}
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div class="p-2 bg-gray-50 dark:bg-gray-900 rounded-xl">
+                                    <p class="text-[10px] text-gray-400">Last Serviced</p>
+                                    <p class="font-bold text-gray-800 dark:text-gray-200">${m.last_service_date || 'N/A'}</p>
+                                </div>
+                                <div class="p-2 bg-gray-50 dark:bg-gray-900 rounded-xl">
+                                    <p class="text-[10px] text-gray-400">Next Due Date</p>
+                                    <p class="font-bold ${isUrgent ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}">${m.next_due_date || 'N/A'}</p>
+                                </div>
+                            </div>
+
+                            ${m.notes ? `<p class="text-[11px] text-gray-600 dark:text-gray-300 bg-gray-50/70 dark:bg-gray-900/70 p-2 rounded-lg border dark:border-gray-800 font-mono">📝 ${m.notes}</p>` : ''}
+                        </div>
+
+                        <div class="flex items-center justify-between pt-2 border-t dark:border-gray-700/60 text-xs">
+                            <form action="/rider/maintenance/service/${m.id}" method="POST">
+                                <button type="submit" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition active:scale-95">
+                                    ✓ Done Today
+                                </button>
+                            </form>
+                            <form action="/rider/maintenance/delete/${m.id}" method="POST" onsubmit="return confirm('Delete this maintenance schedule?');">
+                                <button type="submit" class="text-gray-400 hover:text-rose-500 text-xs p-1">Delete</button>
+                            </form>
+                        </div>
+                    </div>`;
+                }).join('') : `
+                <div class="col-span-full p-4 text-center rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-300 dark:border-gray-700">
+                    <p class="text-xs text-gray-500">No active maintenance records. Click "➕ Log Service / Repair" above to log yesterday's service!</p>
+                </div>`}
+            </div>
+        </div>
+
+        <!-- 🛡️ Statutory Compliance & Insurance Expiry Tracker Card -->
+        <div id="compliance-card" class="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent dark:from-amber-950/30 rounded-3xl p-6 shadow-sm border border-amber-200 dark:border-amber-900/50 space-y-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-amber-100 dark:border-amber-900/40 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-xl shadow-xs">
+                        🛡️
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>Statutory Compliance & Insurance Tracker</span>
+                            <span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">${compliance_deadlines.length} Documents Registered</span>
+                        </h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Keep your boda road-legal with automated countdowns for Insurance, Driving License, and County PSV permits.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5">
+                        <span>➕ Add Document</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- Petrol ICE Maintenance Checklist -->
-            <div id="maint-checklist-petrol" class="${activePowerType === 'PETROL' ? '' : 'hidden'} space-y-3">
-                <div class="p-3 bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-2xl flex items-center justify-between">
-                    <div class="flex items-center space-x-2.5">
-                        <span class="text-2xl">🛢️</span>
-                        <div>
-                            <h4 class="font-bold text-sm text-amber-950 dark:text-amber-200">Engine Oil Change & Filter</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Drain and replace 20W-50 oil every 3 weeks or 1,500 km.</p>
-                        </div>
-                    </div>
-                    <span class="px-2.5 py-1 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-xs font-extrabold rounded-lg">Every 3 Weeks</span>
+            <!-- ➕ Add New Compliance Document Form -->
+            <div id="new-comp-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-amber-200 dark:border-amber-900 shadow-md space-y-3">
+                <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>➕ Register Compliance Document / Permit</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
+                <form action="/rider/compliance/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="sm:col-span-2 lg:col-span-1">
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Title</label>
+                        <input type="text" name="title" placeholder="e.g. Motorbike Insurance, PSV Sticker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Expiry Date</label>
+                        <input type="date" name="expiry_date" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-bold" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Renewal Interval</label>
+                        <select name="interval_months" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold">
+                            <option value="12" selected>12 Months (Annual)</option>
+                            <option value="3">3 Months (Quarterly)</option>
+                            <option value="6">6 Months (Semi-Annual)</option>
+                            <option value="36">36 Months (3 Years - DL)</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs active:scale-95">
+                            Save Compliance Record
+                        </button>
+                    </div>
+                </form>
+            </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
-                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">⚡ Spark Plug & Carburetor</p>
-                        <p class="text-[11px] text-gray-500">Clean electrode gap and tune idle fuel/air ratio.</p>
-                    </div>
-                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
-                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">🛑 Front & Rear Brake Shoes</p>
-                        <p class="text-[11px] text-gray-500">Inspect brake shoe wear and adjust drum cable play.</p>
-                    </div>
-                    <div class="p-3.5 bg-gray-50 dark:bg-gray-800 rounded-2xl space-y-1">
-                        <p class="text-xs font-bold text-gray-800 dark:text-gray-200">⛓️ Chain Tension & Lube</p>
-                        <p class="text-[11px] text-gray-500">Clean chain with diesel and apply heavy gear lube.</p>
-                    </div>
-                </div>
+            <!-- Compliance Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${compliance_deadlines.length > 0 ? compliance_deadlines.map((c: any) => {
+                    const diff = getDaysDiff(c.expiry_date);
+                    const isUrgent = diff.status === 'EXPIRED' || diff.status === 'URGENT';
+                    const isSoon = diff.status === 'SOON';
+                    const badgeColor = isUrgent ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-black animate-pulse' : (isSoon ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold');
+                    const icon = c.title.toLowerCase().includes('insurance') ? '🛡️' : (c.title.toLowerCase().includes('license') || c.title.toLowerCase().includes('dl') ? '🪪' : '🎫');
+
+                    return `
+                    <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border ${isUrgent ? 'border-rose-300 dark:border-rose-900 shadow-sm' : (isSoon ? 'border-amber-300 dark:border-amber-900/60' : 'border-gray-200 dark:border-gray-800')} space-y-3 flex flex-col justify-between shadow-xs">
+                        <div class="space-y-2.5">
+                            <div class="flex justify-between items-start">
+                                <div class="flex items-center space-x-2.5">
+                                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl shadow-xs shrink-0">
+                                        ${icon}
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug">${c.title}</h3>
+                                        <span class="text-[10px] text-gray-500 dark:text-gray-400">Renewal Cycle: ${c.interval_months || 12} Mos</span>
+                                    </div>
+                                </div>
+                                <form action="/rider/compliance/delete/${c.id}" method="POST" onsubmit="return confirm('Delete compliance record?');">
+                                    <button type="submit" title="Delete" class="text-gray-400 hover:text-rose-500 text-xs p-1">✕</button>
+                                </form>
+                            </div>
+
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl space-y-1.5">
+                                <div class="flex justify-between items-center text-xs">
+                                    <span class="text-gray-400 font-medium">Expiry Date:</span>
+                                    <span class="font-extrabold text-gray-800 dark:text-gray-200">${c.expiry_date || 'N/A'}</span>
+                                </div>
+                                <div class="text-center">
+                                    <span class="inline-block px-2.5 py-1 rounded-lg text-xs ${badgeColor}">
+                                        ${diff.label}
+                                    </span>
+                                </div>
+                            </div>
+
+                            ${c.notes ? `<p class="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/60 p-2 rounded-lg font-mono">ℹ️ ${c.notes}</p>` : ''}
+                        </div>
+
+                        <!-- Action Drawers & Buttons -->
+                        <div class="space-y-2 pt-1 border-t dark:border-gray-800">
+                            <div class="flex gap-2">
+                                <button type="button" onclick="toggleComplianceDrawer('${c.id}')" class="flex-1 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 text-xs font-bold rounded-lg border border-amber-200 dark:border-amber-800 transition active:scale-95 flex items-center justify-center gap-1">
+                                    <span>🔄 Set Expiry / Renew</span>
+                                </button>
+                            </div>
+
+                            <!-- Inline Renew Drawer -->
+                            <div id="comp-drawer-${c.id}" class="hidden p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl space-y-2 text-xs">
+                                <form action="/rider/compliance/update/${c.id}" method="POST" class="space-y-2">
+                                    <div>
+                                        <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">New Expiry Date</label>
+                                        <input type="date" name="expiry_date" value="${c.expiry_date || ''}" class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg font-bold" required>
+                                    </div>
+                                    <div>
+                                        <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">Renewal Cost (<span class="curr-symbol-label">Ksh</span>)</label>
+                                        <input type="number" step="any" inputmode="decimal" name="renewal_cost" placeholder="0.00" class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg font-bold">
+                                    </div>
+                                    <div>
+                                        <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">Deduct Account (Optional)</label>
+                                        <select name="account_id" class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg">
+                                            <option value="">-- No Ledger Deduction --</option>
+                                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">Policy / Notes</label>
+                                        <input type="text" name="notes" value="${c.notes || ''}" placeholder="Policy number, provider details..." class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg font-medium">
+                                    </div>
+                                    <div class="flex gap-2 pt-1">
+                                        <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 rounded-lg transition shadow-2xs active:scale-95">Save Update</button>
+                                        <button type="button" onclick="toggleComplianceDrawer('${c.id}')" class="px-2.5 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-semibold">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('') : `
+                <div class="col-span-full p-4 text-center rounded-xl bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700">
+                    <p class="text-xs text-gray-500">No compliance records registered yet. Click "➕ Add Document" above to register your Insurance!</p>
+                </div>`}
             </div>
         </div>
 

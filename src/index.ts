@@ -294,6 +294,107 @@ app.get('/rider', async (c) => {
     compliance = compRes.data || [];
     financing = finRes.data || [];
     allocationRules = ruleRes.data || [];
+
+    if (maintenance.length === 0) {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const nextDue = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+      const defaultMaint = [
+        {
+          user_id: userId,
+          service_type: 'Engine Oil, Brake Pads & Labor Service',
+          interval_weeks: 3,
+          last_service_date: yesterday,
+          next_due_date: nextDue,
+          last_brake_pad_date: yesterday,
+          brake_pad_cost_last: 350.00,
+          notes: 'Oil change + brake pads replaced, spark plug inspected (still good - no cost), mechanic labor paid.',
+        }
+      ];
+      try {
+        const { data: insM } = await supabase.from('maintenance_schedules').insert(defaultMaint).select();
+        maintenance = (insM && insM.length > 0) ? insM : defaultMaint.map((m, i) => ({ id: `default-maint-${i + 1}`, ...m }));
+      } catch (e) {
+        maintenance = defaultMaint.map((m, i) => ({ id: `default-maint-${i + 1}`, ...m }));
+      }
+    }
+
+    if (compliance.length === 0) {
+      const threeMonthsAhead = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+      const defaultComp = [
+        {
+          user_id: userId,
+          title: 'Motorbike Third-Party / Comprehensive Insurance',
+          interval_months: 12,
+          last_renewed_date: new Date(Date.now() - 275 * 86400000).toISOString().slice(0, 10),
+          expiry_date: threeMonthsAhead,
+          notes: 'Active policy - expiring in 3 months. Set reminder for renewal.',
+        },
+        {
+          user_id: userId,
+          title: 'NTSA Smart Driving License (Class A2 Endorsement)',
+          interval_months: 36,
+          last_renewed_date: new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10),
+          expiry_date: new Date(Date.now() + 730 * 86400000).toISOString().slice(0, 10),
+          notes: 'Valid 3-year DL.',
+        },
+        {
+          user_id: userId,
+          title: 'County Boda Operations Sticker / PSV Badge',
+          interval_months: 12,
+          last_renewed_date: new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10),
+          expiry_date: new Date(Date.now() + 185 * 86400000).toISOString().slice(0, 10),
+          notes: 'Annual county rider permit.',
+        }
+      ];
+      try {
+        const { data: insC } = await supabase.from('compliance_deadlines').insert(defaultComp).select();
+        compliance = (insC && insC.length > 0) ? insC : defaultComp.map((c, i) => ({ id: `default-comp-${i + 1}`, ...c }));
+      } catch (e) {
+        compliance = defaultComp.map((c, i) => ({ id: `default-comp-${i + 1}`, ...c }));
+      }
+    }
+  } else {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const nextDue = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+    const threeMonthsAhead = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+    maintenance = [
+      {
+        id: 'default-maint-1',
+        service_type: 'Engine Oil, Brake Pads & Labor Service',
+        interval_weeks: 3,
+        last_service_date: yesterday,
+        next_due_date: nextDue,
+        last_brake_pad_date: yesterday,
+        brake_pad_cost_last: 350.00,
+        notes: 'Oil change + brake pads replaced, spark plug inspected (still good - no cost), mechanic labor paid.',
+      }
+    ];
+    compliance = [
+      {
+        id: 'default-comp-1',
+        title: 'Motorbike Third-Party / Comprehensive Insurance',
+        interval_months: 12,
+        last_renewed_date: new Date(Date.now() - 275 * 86400000).toISOString().slice(0, 10),
+        expiry_date: threeMonthsAhead,
+        notes: 'Active policy - expiring in 3 months. Set reminder for renewal.',
+      },
+      {
+        id: 'default-comp-2',
+        title: 'NTSA Smart Driving License (Class A2 Endorsement)',
+        interval_months: 36,
+        last_renewed_date: new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10),
+        expiry_date: new Date(Date.now() + 730 * 86400000).toISOString().slice(0, 10),
+        notes: 'Valid 3-year DL.',
+      },
+      {
+        id: 'default-comp-3',
+        title: 'County Boda Operations Sticker / PSV Badge',
+        interval_months: 12,
+        last_renewed_date: new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10),
+        expiry_date: new Date(Date.now() + 185 * 86400000).toISOString().slice(0, 10),
+        notes: 'Annual county rider permit.',
+      }
+    ];
   }
 
   const activeBikes = bikes;

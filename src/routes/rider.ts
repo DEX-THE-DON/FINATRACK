@@ -314,22 +314,168 @@ riderRoutes.post('/bikes/delete/:id', async (c) => {
 // ------------------------------------------------------------------------------
 // MAINTENANCE & COMPLIANCE
 // ------------------------------------------------------------------------------
-riderRoutes.post('/rider/maintenance/service/:id', async (c) => {
-  const { supabase } = await getRequestContext(c);
-  const id = c.req.param('id');
-  const today = new Date();
-  const nextDate = new Date(today.getTime() + 21 * 86400000); // 3 weeks
+riderRoutes.post('/rider/maintenance/log', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const bikeId = body['bike_id'] ? String(body['bike_id']) : null;
+  const serviceType = String(body['service_type'] || 'Oil Change & Brake Service').trim();
+  const serviceDate = String(body['service_date'] || new Date().toISOString().slice(0, 10));
+  const intervalWeeks = parseInt(String(body['interval_weeks'] || '3'), 10) || 3;
 
-  const { error } = await supabase.from('maintenance_schedules').update({
-    last_service_date: today.toISOString().slice(0, 10),
-    next_due_date: nextDate.toISOString().slice(0, 10),
-    last_brake_pad_date: today.toISOString().slice(0, 10),
-  }).eq('id', id);
+  const oilCost = parseFloat(String(body['oil_cost'] || '0.0')) || 0.0;
+  const brakePadCost = parseFloat(String(body['brake_pad_cost'] || '0.0')) || 0.0;
+  const sparkPlugCost = parseFloat(String(body['spark_plug_cost'] || '0.0')) || 0.0;
+  const laborCost = parseFloat(String(body['labor_cost'] || '0.0')) || 0.0;
+  const otherCost = parseFloat(String(body['other_cost'] || '0.0')) || 0.0;
+  const rawTotal = parseFloat(String(body['total_cost'] || '0.0')) || 0.0;
+
+  const computedTotal = oilCost + brakePadCost + sparkPlugCost + laborCost + otherCost;
+  const finalTotalCost = rawTotal > 0 ? rawTotal : computedTotal;
+
+  const notes = body['notes'] ? String(body['notes']).trim() : '';
+  const accountId = body['account_id'] ? String(body['account_id']).trim() : '';
+
+  const parsedDate = new Date(serviceDate);
+  const nextDueDate = new Date(parsedDate.getTime() + intervalWeeks * 7 * 86400000).toISOString().slice(0, 10);
+
+  // Insert or record in maintenance_schedules
+  const insertPayload: any = {
+    bike_id: bikeId || null,
+    service_type: serviceType,
+    interval_weeks: intervalWeeks,
+    last_service_date: serviceDate,
+    next_due_date: nextDueDate,
+    last_brake_pad_date: brakePadCost > 0 ? serviceDate : null,
+    brake_pad_cost_last: brakePadCost,
+    notes: notes || `Service on ${serviceDate}: Oil (Ksh ${oilCost}), Pads (Ksh ${brakePadCost}), Labor (Ksh ${laborCost})`,
+  };
+  if (userId) {
+    insertPayload.user_id = userId;
+  }
+
+  const { error } = await supabase.from('maintenance_schedules').insert(insertPayload);
+  if (error) {
+    console.error('Failed to log maintenance schedule:', error);
+  }
+
+  // Deduct from account & sync to finance ledger if account specified and cost > 0
+  if (accountId && finalTotalCost > 0) {
+    const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+    if (acc) {
+      const newBal = toDecimal(acc.balance).minus(finalTotalCost).toNumber();
+      await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: accountId,
+        transaction_type: 'EXPENSE',
+        category: 'Living Expenses',
+        amount: finalTotalCost,
+        date: serviceDate,
+        description: `Bike Service: ${serviceType} (${notes || 'Oil, Brake Pads & Labor'})`,
+      });
+    }
+  }
+
+  return c.redirect('/rider?toast=Maintenance+service+recorded+and+ledger+updated', 303);
+});
+
+riderRoutes.post('/rider/maintenance/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const serviceType = String(body['service_type'] || 'Oil Change & Inspection').trim();
+  const intervalWeeks = parseInt(String(body['interval_weeks'] || '3'), 10) || 3;
+  const lastDate = body['last_service_date'] ? String(body['last_service_date']) : new Date().toISOString().slice(0, 10);
+  const nextDate = new Date(new Date(lastDate).getTime() + intervalWeeks * 7 * 86400000).toISOString().slice(0, 10);
+
+  const { error } = await supabase.from('maintenance_schedules').insert({
+    ...(userId ? { user_id: userId } : {}),
+    service_type: serviceType,
+    interval_weeks: intervalWeeks,
+    last_service_date: lastDate,
+    next_due_date: nextDate,
+    notes: body['notes'] ? String(body['notes']).trim() : null,
+  });
 
   if (error) {
-    return c.redirect(`/rider?toast=${encodeURIComponent('Error updating service: ' + error.message)}`, 303);
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to create schedule: ' + error.message)}`, 303);
   }
-  return c.redirect('/rider?toast=Service+logged+and+interval+reset', 303);
+  return c.redirect('/rider?toast=Maintenance+schedule+added', 303);
+});
+
+riderRoutes.post('/rider/maintenance/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const { error } = await supabase.from('maintenance_schedules').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to delete schedule: ' + error.message)}`, 303);
+  }
+  return c.redirect('/rider?toast=Maintenance+schedule+removed', 303);
+});
+
+riderRoutes.post('/rider/compliance/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const title = String(body['title'] || 'Motorbike Insurance').trim();
+  const expiryDate = body['expiry_date'] ? String(body['expiry_date']) : null;
+  const intervalMonths = parseInt(String(body['interval_months'] || '12'), 10) || 12;
+  const lastRenewed = body['last_renewed_date'] ? String(body['last_renewed_date']) : new Date().toISOString().slice(0, 10);
+  const notes = body['notes'] ? String(body['notes']).trim() : null;
+
+  const { error } = await supabase.from('compliance_deadlines').insert({
+    ...(userId ? { user_id: userId } : {}),
+    title,
+    expiry_date: expiryDate,
+    interval_months: intervalMonths,
+    last_renewed_date: lastRenewed,
+    notes,
+  });
+
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to create compliance item: ' + error.message)}`, 303);
+  }
+  return c.redirect('/rider?toast=Compliance+record+created', 303);
+});
+
+riderRoutes.post('/rider/compliance/update/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const body = await c.req.parseBody();
+  const expiryDate = body['expiry_date'] ? String(body['expiry_date']) : null;
+  const lastRenewed = body['last_renewed_date'] ? String(body['last_renewed_date']) : new Date().toISOString().slice(0, 10);
+  const notes = body['notes'] ? String(body['notes']).trim() : null;
+  const renewalCost = parseFloat(String(body['renewal_cost'] || '0.0')) || 0.0;
+  const accountId = body['account_id'] ? String(body['account_id']).trim() : '';
+
+  const { data: comp, error } = await supabase.from('compliance_deadlines').update({
+    expiry_date: expiryDate,
+    last_renewed_date: lastRenewed,
+    notes,
+  }).eq('id', id).select().single();
+
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to update compliance: ' + error.message)}`, 303);
+  }
+
+  if (accountId && renewalCost > 0 && comp) {
+    const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+    if (acc) {
+      const newBal = toDecimal(acc.balance).minus(renewalCost).toNumber();
+      await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: accountId,
+        transaction_type: 'EXPENSE',
+        category: 'Utilities & Bills',
+        amount: renewalCost,
+        date: lastRenewed,
+        description: `Compliance Renewal: ${comp.title}`,
+      });
+    }
+  }
+
+  return c.redirect('/rider?toast=Compliance+deadline+updated', 303);
 });
 
 riderRoutes.post('/rider/compliance/renew/:id', async (c) => {
@@ -347,5 +493,15 @@ riderRoutes.post('/rider/compliance/renew/:id', async (c) => {
     return c.redirect(`/rider?toast=${encodeURIComponent('Error updating compliance: ' + error.message)}`, 303);
   }
   return c.redirect('/rider?toast=Compliance+deadline+renewed', 303);
+});
+
+riderRoutes.post('/rider/compliance/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const { error } = await supabase.from('compliance_deadlines').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to delete: ' + error.message)}`, 303);
+  }
+  return c.redirect('/rider?toast=Compliance+record+deleted', 303);
 });
 
