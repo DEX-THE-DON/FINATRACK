@@ -403,6 +403,26 @@ financeRoutes.post('/goals/delete/:id', async (c) => {
   return c.redirect('/?toast=Goal+deleted', 303);
 });
 
+financeRoutes.post('/goals/reset/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  await supabase.from('goals').update({ current_amount: 0.00 }).eq('id', id);
+  return c.redirect('/?toast=Goal+saved+amount+reset+to+Ksh+0.00', 303);
+});
+
+financeRoutes.post('/goals/reset-all', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  let query = supabase.from('goals').update({ current_amount: 0.00 });
+  if (userId) {
+    query = query.eq('user_id', userId);
+  } else {
+    query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+  }
+  await query;
+  return c.redirect('/?toast=All+goal+balances+reset+to+Ksh+0.00', 303);
+});
+
+
 // ------------------------------------------------------------------------------
 // DEBTS & LOANS
 // ------------------------------------------------------------------------------

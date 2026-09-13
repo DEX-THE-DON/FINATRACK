@@ -1033,11 +1033,16 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                 </div>
 
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2">
                     <div class="text-right hidden sm:block">
                         <p class="text-[10px] font-bold text-gray-400 uppercase">Total Saved</p>
                         <p class="text-sm font-black text-indigo-600 dark:text-indigo-400 convertible-amount" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)} <span class="text-xs font-semibold text-gray-400">/ <span class="convertible-amount" data-kes="${totalGoalsTarget}">${formatKes(totalGoalsTarget)}</span></span></p>
                     </div>
+                    <form action="/goals/reset-all" method="POST" onsubmit="return confirm('Reset all goal balances to Ksh 0.00?');" class="inline">
+                        <button type="submit" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-gray-700 dark:text-gray-300 hover:text-amber-700 dark:hover:text-amber-300 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95 border border-gray-200 dark:border-gray-700">
+                            <span>🔄 Reset to 0</span>
+                        </button>
+                    </form>
                     <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
                         <span>➕ New Goal</span>
                     </button>
@@ -1114,11 +1119,15 @@ export function renderFinanceDashboard(data: any): string {
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-1">
+                                    <form action="/goals/reset/${g.id}" method="POST" onsubmit="return confirm('Reset saved balance for ${g.title} to Ksh 0.00?');">
+                                        <button type="submit" title="Reset Saved to 0" class="text-gray-400 hover:text-amber-500 p-1 text-xs transition">🔄</button>
+                                    </form>
                                     <form action="/goals/delete/${g.id}" method="POST" onsubmit="return confirm('Delete this savings goal?');">
                                         <button type="submit" title="Delete Goal" class="text-gray-400 hover:text-rose-500 p-1 text-xs transition">✕</button>
                                     </form>
                                 </div>
                             </div>
+
 
                             <!-- Progress Bar -->
                             <div class="space-y-1">
