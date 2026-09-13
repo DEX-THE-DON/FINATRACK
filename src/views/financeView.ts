@@ -181,11 +181,15 @@ export function renderFinanceDashboard(data: any): string {
         function toggleEdit(id) {
             const displayDiv = document.getElementById('acc-display-' + id);
             const editDiv = document.getElementById('acc-edit-' + id);
+            if (!displayDiv || !editDiv) {
+                console.warn('Account elements not found:', id);
+                return;
+            }
             if (editDiv.classList.contains('hidden')) {
                 const curr = getCurrency();
                 const balInput = editDiv.querySelector('input[name="balance"]');
-                if (balInput && balInput.hasAttribute('data-kes')) {
-                    const kes = parseFloat(balInput.getAttribute('data-kes')) || 0;
+                if (balInput) {
+                    const kes = parseFloat(balInput.getAttribute('data-kes')) || parseFloat(balInput.value) || 0;
                     balInput.value = curr === 'Ksh' ? kes.toFixed(2) : (kes / USD_TO_KES).toFixed(2);
                 }
                 editDiv.classList.remove('hidden');
@@ -194,6 +198,16 @@ export function renderFinanceDashboard(data: any): string {
                 editDiv.classList.add('hidden');
                 displayDiv.classList.remove('hidden');
             }
+        }
+
+        function onAccountEditSubmit(form) {
+            const curr = getCurrency();
+            const balInput = form.querySelector('input[name="balance"]');
+            if (balInput && curr === 'USD') {
+                const usdVal = parseFloat(balInput.value) || 0;
+                balInput.value = (usdVal * USD_TO_KES).toFixed(2);
+            }
+            return true;
         }
 
         function toggleDarkMode() {
@@ -689,11 +703,11 @@ export function renderFinanceDashboard(data: any): string {
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Balance</p>
                                 <p class="font-bold text-xl text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${acc.balance}">${formatKes(acc.balance)}</p>
                             </div>
-                            <button onclick="toggleEdit('${acc.id}')" class="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-semibold py-1.5 rounded-lg transition mt-2">Edit Account</button>
+                            <button type="button" onclick="toggleEdit('${acc.id}')" class="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-semibold py-1.5 rounded-lg transition mt-2 active:scale-95">Edit Account</button>
                         </div>
 
                         <div id="acc-edit-${acc.id}" class="hidden space-y-2">
-                            <form action="/accounts/update/${acc.id}" method="POST" class="space-y-2">
+                            <form action="/accounts/update/${acc.id}" method="POST" onsubmit="return onAccountEditSubmit(this)" class="space-y-2">
                                 <div>
                                     <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account Name</label>
                                     <input type="text" name="name" value="${acc.name}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs" required>
@@ -718,12 +732,12 @@ export function renderFinanceDashboard(data: any): string {
                                     <input type="number" step="any" name="interest_rate_p_a" value="${acc.interest_rate_p_a || 0.0}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance (Ksh)</label>
-                                    <input type="number" step="any" name="balance" value="${acc.balance}" data-kes="${acc.balance}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-input" required>
+                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance (<span class="curr-symbol-label">Ksh</span>)</label>
+                                    <input type="number" step="any" inputmode="decimal" name="balance" value="${acc.balance}" data-kes="${acc.balance}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-input" required>
                                 </div>
                                 <div class="flex space-x-2 pt-1">
-                                    <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1 rounded text-xs font-semibold">Save</button>
-                                    <button type="button" onclick="toggleEdit('${acc.id}')" class="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 text-gray-700 dark:text-gray-200 py-1 rounded text-xs">Cancel</button>
+                                    <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1 rounded text-xs font-semibold active:scale-95">Save</button>
+                                    <button type="button" onclick="toggleEdit('${acc.id}')" class="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 text-gray-700 dark:text-gray-200 py-1 rounded text-xs active:scale-95">Cancel</button>
                                 </div>
                             </form>
                         </div>
