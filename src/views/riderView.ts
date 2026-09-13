@@ -283,6 +283,14 @@ export function renderRiderDashboard(data: any): string {
             const maintPetrol = document.getElementById('maint-checklist-petrol');
             const maintElectric = document.getElementById('maint-checklist-electric');
 
+            const lbl1 = document.getElementById('label_item_1');
+            const lbl2 = document.getElementById('label_item_2');
+            const lbl3 = document.getElementById('label_item_3');
+            const lbl4 = document.getElementById('label_item_4');
+            const lbl5 = document.getElementById('label_item_5');
+            const svcTitle = document.getElementById('service_type_input');
+            const notesInput = document.getElementById('service_notes_input');
+
             if (type === 'ELECTRIC') {
                 if (btnElectric) {
                     btnElectric.className = 'px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs transition active:scale-95';
@@ -306,6 +314,18 @@ export function renderRiderDashboard(data: any): string {
                 if (metricContainer) {
                     metricContainer.innerHTML = '<label class="block text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">🔋 Swaps Count</label>' +
                                                 '<input type="number" step="1" min="0" inputmode="numeric" name="swaps_count" value="1" placeholder="e.g. 2 swaps" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">';
+                }
+
+                if (lbl1) lbl1.innerHTML = '🔋 Battery Terminals & Latch';
+                if (lbl2) lbl2.innerHTML = '🛑 Regenerative Braking & Pads';
+                if (lbl3) lbl3.innerHTML = '⚡ Motor Controller & BMS (0 if OK)';
+                if (lbl4) lbl4.innerHTML = '👨‍🔧 EV Technician Labor Fee';
+                if (lbl5) lbl5.innerHTML = '🛵 Drive Belt / Tire / Wiring';
+                if (svcTitle && svcTitle.value === 'Oil Change, Brake Pads & Labor Service') {
+                    svcTitle.value = 'EV Battery Latch, Regen Braking & Tech Inspection';
+                }
+                if (notesInput) {
+                    notesInput.placeholder = 'e.g. Cleaned battery latch terminals, checked motor controller harness, tuned regen braking.';
                 }
 
                 if (maintElectric) maintElectric.classList.remove('hidden');
@@ -332,6 +352,18 @@ export function renderRiderDashboard(data: any): string {
                 if (metricContainer) {
                     metricContainer.innerHTML = '<label class="block text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⛽ Fuel Litres (Optional)</label>' +
                                                 '<input type="number" step="any" inputmode="decimal" name="fuel_litres" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">';
+                }
+
+                if (lbl1) lbl1.innerHTML = '🛢️ Engine Oil & Filter';
+                if (lbl2) lbl2.innerHTML = '🛑 Brake Pads / Shoes';
+                if (lbl3) lbl3.innerHTML = '⚡ Spark Plug (0 if OK)';
+                if (lbl4) lbl4.innerHTML = '👨‍🔧 Mechanic Labor Fee';
+                if (lbl5) lbl5.innerHTML = '🔩 Other Spares / Chain';
+                if (svcTitle && svcTitle.value === 'EV Battery Latch, Regen Braking & Tech Inspection') {
+                    svcTitle.value = 'Oil Change, Brake Pads & Labor Service';
+                }
+                if (notesInput) {
+                    notesInput.placeholder = 'e.g. Changed oil (20W-50) & brake pads. Spark plug was good so did not buy new one. Paid mechanic labor.';
                 }
 
                 if (maintPetrol) maintPetrol.classList.remove('hidden');
@@ -854,7 +886,7 @@ export function renderRiderDashboard(data: any): string {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Summary Title</label>
-                            <input type="text" name="service_type" value="Oil Change, Brake Pads & Labor Service" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold" required>
+                            <input type="text" id="service_type_input" name="service_type" value="Oil Change, Brake Pads & Labor Service" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold" required>
                         </div>
                     </div>
 
@@ -866,23 +898,23 @@ export function renderRiderDashboard(data: any): string {
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
                             <div>
-                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🛢️ Engine Oil & Filter</label>
+                                <label id="label_item_1" class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🛢️ Engine Oil & Filter</label>
                                 <input type="number" step="any" inputmode="decimal" id="service_oil_cost" name="oil_cost" placeholder="e.g. 500" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
                             </div>
                             <div>
-                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🛑 Brake Pads / Shoes</label>
+                                <label id="label_item_2" class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🛑 Brake Pads / Shoes</label>
                                 <input type="number" step="any" inputmode="decimal" id="service_brake_pad_cost" name="brake_pad_cost" placeholder="e.g. 350" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
                             </div>
                             <div>
-                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">⚡ Spark Plug (0 if OK)</label>
+                                <label id="label_item_3" class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">⚡ Spark Plug (0 if OK)</label>
                                 <input type="number" step="any" inputmode="decimal" id="service_spark_plug_cost" name="spark_plug_cost" placeholder="0" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
                             </div>
                             <div>
-                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">👨‍🔧 Mechanic Labor Fee</label>
+                                <label id="label_item_4" class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">👨‍🔧 Mechanic Labor Fee</label>
                                 <input type="number" step="any" inputmode="decimal" id="service_labor_cost" name="labor_cost" placeholder="e.g. 200" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
                             </div>
                             <div>
-                                <label class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🔩 Other Spares / Chain</label>
+                                <label id="label_item_5" class="block font-semibold text-gray-600 dark:text-gray-400 mb-1">🔩 Other Spares / Chain</label>
                                 <input type="number" step="any" inputmode="decimal" id="service_other_cost" name="other_cost" placeholder="0" oninput="calcServiceTotal()" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg font-bold">
                             </div>
                         </div>
@@ -916,7 +948,7 @@ export function renderRiderDashboard(data: any): string {
 
                     <div>
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Notes & Part Details</label>
-                        <input type="text" name="notes" placeholder="e.g. Changed oil (20W-50) & brake pads. Spark plug was good so did not buy new one. Paid mechanic labor." value="Oil plus brakepads changed, spark plug inspected (in good condition), labor paid." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-medium">
+                        <input type="text" id="service_notes_input" name="notes" placeholder="e.g. Changed oil (20W-50) & brake pads. Spark plug was good so did not buy new one. Paid mechanic labor." value="Oil plus brakepads changed, spark plug inspected (in good condition), labor paid." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-medium">
                     </div>
 
                     <div class="flex justify-end gap-2 pt-1">
