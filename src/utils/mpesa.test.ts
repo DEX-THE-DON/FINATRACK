@@ -73,5 +73,14 @@ if (!parsedAbbr || parsedAbbr.party !== 'K.P.L.C. PREPAID') {
 }
 console.log('✅ 7. Abbreviation Party:', parsedAbbr.party);
 
+// Test 8: User Real-world Rubis Lavington 2 Fuel SMS with saf.cx URL
+const userLiveSms = 'UID8Z6A6N6 Confirmed. Ksh500.00 paid to RUBIS LAVINGTON 2. on 13/9/26 at 5:17 PM.New M-PESA balance is Ksh4,340.70. Transaction cost, Ksh0.00. Amount you can transact within the day is 483,933.30. See all your balances now https://saf.cx/kWQpy';
+const parsedLive = parseSingleMpesaMessage(userLiveSms);
+if (!parsedLive || parsedLive.code !== 'UID8Z6A6N6' || parsedLive.amount_kes !== 500 || parsedLive.party !== 'RUBIS LAVINGTON 2' || parsedLive.suggested_category !== 'Fuel & Petrol' || parsedLive.time !== '5:17 PM' || parsedLive.date !== '2026-09-13') {
+  console.error('❌ Failed Test 8: User Live Rubis SMS', parsedLive);
+  process.exit(1);
+}
+console.log('✅ 8. User Live Rubis SMS:', parsedLive.code, parsedLive.amount_kes, 'KES -> Party:', parsedLive.party, 'Time:', parsedLive.time, 'Date:', parsedLive.date);
+
 console.log('🎉 ALL M-PESA REGEX & BATCH SMS TESTS PASSED 100%!');
 

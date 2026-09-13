@@ -399,26 +399,32 @@ export function renderFinanceDashboard(data: any): string {
             }
 
             let text = raw
-                .replace(new RegExp('[\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]', 'g'), ' ')
+                .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, ' ')
                 .trim();
-            // Normalize common Safaricom punctuation quirks
-            text = text.replace(new RegExp('([0-9]|AM|PM|am|pm)\\.New\\s+M-PESA', 'gi'), '$1. New M-PESA');
+            // Normalize common Safaricom punctuation quirks (e.g. "PM.New M-PESA" -> "PM. New M-PESA")
+            text = text.replace(/([0-9]|AM|PM|am|pm)\.New\s+M-PESA/gi, '$1. New M-PESA');
 
             const results = [];
-            const receivedRegex = new RegExp('([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:You have received\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+received from\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))', 'i');
-            const sentRegex = new RegExp('([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+sent to\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))', 'i');
-            const paidRegex = new RegExp('([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+paid to\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))', 'i');
-            const withdrawRegex = new RegExp('([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+withdrawn from\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))', 'i');
-            const dtRegex = new RegExp('on\\s+(\\d{1,2}[\\/\\-]\\d{1,2}[\\/\\-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})(?:\\s+at\\s+(\\d{1,2}:\\d{2}(?:\\s*(?:AM|PM|am|pm))?))?', 'i');
-            const regex = new RegExp('(?:^|\\b)([A-Z0-9]{8,12})\\s+(?:Confirmed|You have received)[\\s\\S]*?(?=(?:\\b[A-Z0-9]{8,12}\\s+(?:Confirmed|You have received))|$)', 'gi');
+            const receivedRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:You have received\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+received from\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
+            const sentRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+sent to\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
+            const paidRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+paid to\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
+            const withdrawRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+withdrawn from\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
+            const dtRegex = /on\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?))?/i;
+            const splitRegex = /(?:^|\b)([A-Z0-9]{8,12})\s+(?:Confirmed|You have received)[\s\S]*?(?=(?:\b[A-Z0-9]{8,12}\s+(?:Confirmed|You have received))|$)/gi;
+
             const chunks = [];
             let rMatch;
-            while ((rMatch = regex.exec(text)) !== null) {
+            while ((rMatch = splitRegex.exec(text)) !== null) {
                 chunks.push(rMatch[0].trim());
             }
 
             if (chunks.length === 0) {
-                chunks.push(text);
+                const lines = text.split(/\n+/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length >= 15; });
+                if (lines.length > 0) {
+                    lines.forEach(function(l) { chunks.push(l); });
+                } else {
+                    chunks.push(text);
+                }
             }
 
             chunks.forEach(function(c) {
