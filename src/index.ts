@@ -57,6 +57,31 @@ app.get('/manifest.json', (c) => {
   });
 });
 
+const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#1e3a8a"/>
+  <circle cx="256" cy="256" r="200" fill="#2563eb" stroke="#60a5fa" stroke-width="12"/>
+  <g fill="#ffffff">
+    <circle cx="170" cy="310" r="50" fill="none" stroke="#ffffff" stroke-width="20"/>
+    <circle cx="342" cy="310" r="50" fill="none" stroke="#ffffff" stroke-width="20"/>
+    <path d="M170 310 L220 230 L280 230 L342 310" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M220 230 L250 310" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round"/>
+    <path d="M280 230 L320 180 L350 180" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="270" cy="150" r="22" fill="#ffffff"/>
+    <path d="M250 180 L290 190 L260 230" fill="#ffffff"/>
+  </g>
+  <text x="256" y="420" font-family="sans-serif" font-size="36" font-weight="bold" fill="#93c5fd" text-anchor="middle" letter-spacing="2">FINATRACK</text>
+</svg>`;
+
+app.get('/icons/icon.svg', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/static/icons/icon.svg', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/favicon.ico', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/icons/icon-192.png', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/icons/icon-512.png', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/static/icons/icon-192.png', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/static/icons/icon-512.png', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/apple-touch-icon.png', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+app.get('/apple-touch-icon-precomposed.png', (c) => c.body(ICON_SVG, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+
 app.get('/manifest.webmanifest', (c) => c.redirect('/manifest.json', 301));
 
 app.get('/sw.js', (c) => {
