@@ -64,5 +64,26 @@ const monthExpenseTarget = calculateTargetPace(12000, 25000, 'MONTHLY', false, 1
 console.assert(monthExpenseTarget.percentage === 48, `Monthly expense target pct should be 48%, got ${monthExpenseTarget.percentage}%`);
 console.log(`✅ Monthly Expense Target (12k/25k on day 15/30): ${monthExpenseTarget.statusLabel}, Safe Daily=${monthExpenseTarget.dailyRate.toFixed(2)}/day`);
 
+// Test 6: Debt & Loan Danger Zone Countdown
+import { calculateDebtDeadline } from './math';
+const now = new Date();
+const overdueDate = new Date(now.getTime() - 2 * 86400000).toISOString();
+const dueTodayDate = now.toISOString();
+const dangerDate = new Date(now.getTime() + 2 * 86400000).toISOString();
+const safeDate = new Date(now.getTime() + 15 * 86400000).toISOString();
+
+const overdueStatus = calculateDebtDeadline(overdueDate);
+console.assert(overdueStatus.isOverdue === true, 'Should be marked overdue');
+console.assert(overdueStatus.isDangerZone === true, 'Overdue should be in danger zone');
+
+const dangerStatus = calculateDebtDeadline(dangerDate);
+console.assert(dangerStatus.isDangerZone === true, '2 days should be in danger zone');
+
+const safeStatus = calculateDebtDeadline(safeDate);
+console.assert(safeStatus.isDangerZone === false, '15 days should not be danger zone');
+
+console.log(`✅ Debt Danger Zones: Overdue='${overdueStatus.badgeLabel}', Danger='${dangerStatus.badgeLabel}', Safe='${safeStatus.badgeLabel}'`);
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
+
 

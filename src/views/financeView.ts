@@ -74,6 +74,13 @@ export function renderFinanceDashboard(data: any): string {
   const totalGoalsSaved = (goals || []).reduce((sum: number, g: any) => sum + Number(g.current_amount || 0), 0);
   const overallGoalsPercent = totalGoalsTarget > 0 ? Math.min(100, Math.round((totalGoalsSaved / totalGoalsTarget) * 100)) : 0;
 
+  const borrowedDebts = (debts || []).filter((d: any) => d.debt_type === 'I_OWE');
+  const lentDebts = (debts || []).filter((d: any) => d.debt_type !== 'I_OWE');
+  const totalBorrowedBalance = borrowedDebts.reduce((sum: number, d: any) => sum + (Number(d.remaining) || (Number(d.total_amount || 0) - Number(d.paid_amount || 0))), 0);
+  const totalLentBalance = lentDebts.reduce((sum: number, d: any) => sum + (Number(d.remaining) || (Number(d.total_amount || 0) - Number(d.paid_amount || 0))), 0);
+  const dangerDebts = (debts || []).filter((d: any) => d.danger_status?.isDangerZone && !d.is_settled);
+  const dangerCount = dangerDebts.length;
+
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -308,6 +315,40 @@ export function renderFinanceDashboard(data: any): string {
                 }
             });
         }
+
+        function toggleDebtForm(id) {
+            const el = document.getElementById('debt-repay-' + id);
+            if (el) el.classList.toggle('hidden');
+        }
+
+        function switchDebtTab(filter) {
+            ['all', 'borrowed', 'lent', 'danger'].forEach(tab => {
+                const btn = document.getElementById('debt-tab-btn-' + tab);
+                if (btn) {
+                    if (tab === filter) {
+                        btn.className = 'debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs bg-indigo-600 text-white';
+                    } else {
+                        btn.className = 'debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700';
+                    }
+                }
+            });
+
+            document.querySelectorAll('.debt-card-item').forEach(card => {
+                const isBorrowed = card.getAttribute('data-debt-type') === 'I_OWE';
+                const isDanger = card.getAttribute('data-is-danger') === 'true';
+
+                if (filter === 'all') {
+                    card.classList.remove('hidden');
+                } else if (filter === 'borrowed') {
+                    if (isBorrowed) card.classList.remove('hidden'); else card.classList.add('hidden');
+                } else if (filter === 'lent') {
+                    if (!isBorrowed) card.classList.remove('hidden'); else card.classList.add('hidden');
+                } else if (filter === 'danger') {
+                    if (isDanger) card.classList.remove('hidden'); else card.classList.add('hidden');
+                }
+            });
+        }
+
 
 
         function toggleDarkMode() {
@@ -580,6 +621,9 @@ export function renderFinanceDashboard(data: any): string {
             </button>
             <button onclick="document.getElementById('waterfall-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🌊 Auto-Split</span>
+            </button>
+            <button onclick="document.getElementById('debts-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-rose-600 to-amber-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>💳 Loans & Debts ${dangerCount > 0 ? `<span class="px-1.5 py-0.2 bg-white text-rose-700 rounded-full font-black text-[10px] animate-pulse">🚨 ${dangerCount}</span>` : ''}</span>
             </button>
             <a href="/rider" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🛵 Log Shift</span>
@@ -1204,6 +1248,252 @@ export function renderFinanceDashboard(data: any): string {
                     <p class="text-3xl">🎯</p>
                     <h4 class="font-bold text-gray-700 dark:text-gray-200">No Savings Goals Active</h4>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Click "➕ New Goal" above to create savings goals for your TV, Gas Cooker, Living Room Seats, etc.!</p>
+                </div>`}
+            </div>
+        </div>
+
+        <!-- 💳 Loans & Debts Tracker (Borrowed vs Lent + Danger Zone Deadlines) -->
+        <div id="debts-card" class="bg-gradient-to-br from-slate-900 via-gray-900 to-slate-950 p-6 rounded-2xl border border-rose-900/40 text-white shadow-xl space-y-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-800 pb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-600 text-white flex items-center justify-center text-xl shadow-md shrink-0">
+                        💳
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <span>Loans & Debts Tracker</span>
+                            <span class="text-[10px] bg-rose-500/20 text-rose-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-rose-500/30">Danger Zone & Due Dates</span>
+                        </h2>
+                        <p class="text-xs text-gray-400">Segregated tracking for Borrowed Loans (Fuliza, Hustler Fund, Tala) vs Money Lent with deadline alerts.</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <button type="button" onclick="document.getElementById('new-debt-form-container')?.classList.toggle('hidden')" class="px-3.5 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                        <span>➕ New Loan / Debt</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Summary KPI Badges (Borrowed vs Lent vs Danger Zone) -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="p-3.5 bg-rose-950/40 border border-rose-800/60 rounded-xl space-y-1">
+                    <div class="flex justify-between items-center text-xs text-rose-300 font-bold">
+                        <span>🔴 Money Borrowed (I Owe)</span>
+                        <span class="text-[10px] bg-rose-900/80 px-2 py-0.5 rounded-full">${borrowedDebts.length} active</span>
+                    </div>
+                    <p class="text-xl font-black text-rose-400 convertible-amount" data-kes="${totalBorrowedBalance}">${formatKes(totalBorrowedBalance)}</p>
+                    <p class="text-[10px] text-gray-400">Total liabilities to settle</p>
+                </div>
+
+                <div class="p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-xl space-y-1">
+                    <div class="flex justify-between items-center text-xs text-emerald-300 font-bold">
+                        <span>🟢 Money Lent Out (Owed to Me)</span>
+                        <span class="text-[10px] bg-emerald-900/80 px-2 py-0.5 rounded-full">${lentDebts.length} active</span>
+                    </div>
+                    <p class="text-xl font-black text-emerald-400 convertible-amount" data-kes="${totalLentBalance}">${formatKes(totalLentBalance)}</p>
+                    <p class="text-[10px] text-gray-400">Receivables owed to you</p>
+                </div>
+
+                <div class="p-3.5 ${dangerCount > 0 ? 'bg-amber-950/60 border border-amber-500/80 ring-1 ring-amber-500/50' : 'bg-slate-800/50 border border-slate-700/60'} rounded-xl space-y-1">
+                    <div class="flex justify-between items-center text-xs ${dangerCount > 0 ? 'text-amber-300' : 'text-gray-300'} font-bold">
+                        <span>🚨 Danger Zone Deadlines</span>
+                        <span class="text-[10px] ${dangerCount > 0 ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-700 text-gray-300'} px-2 py-0.5 rounded-full">${dangerCount} Urgent</span>
+                    </div>
+                    <p class="text-xl font-black ${dangerCount > 0 ? 'text-amber-400' : 'text-gray-300'}">${dangerCount > 0 ? `${dangerCount} Need Action` : 'All Clear 👍'}</p>
+                    <p class="text-[10px] text-gray-400">Due in ≤ 3 days or overdue</p>
+                </div>
+            </div>
+
+            <!-- Filter Switcher Tabs -->
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+                <button type="button" id="debt-tab-btn-all" onclick="switchDebtTab('all')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs bg-indigo-600 text-white">
+                    All (${debts.length})
+                </button>
+                <button type="button" id="debt-tab-btn-borrowed" onclick="switchDebtTab('borrowed')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700">
+                    🔴 Borrowed Loans (${borrowedDebts.length})
+                </button>
+                <button type="button" id="debt-tab-btn-lent" onclick="switchDebtTab('lent')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700">
+                    🟢 Money Lent (${lentDebts.length})
+                </button>
+                <button type="button" id="debt-tab-btn-danger" onclick="switchDebtTab('danger')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700">
+                    🚨 Danger Zone (${dangerCount})
+                </button>
+            </div>
+
+            <!-- Collapsible Create Loan / Debt Form -->
+            <div id="new-debt-form-container" class="hidden bg-slate-950 p-5 rounded-2xl border border-rose-900/60 shadow-lg space-y-3">
+                <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <span>➕ Record New Loan or Debt</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('new-debt-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-200 text-sm">✕</button>
+                </div>
+                <form action="/debts/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                    <div>
+                        <label class="block text-gray-400 font-bold mb-1">Debt Direction / Type</label>
+                        <select name="debt_type" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-bold" required>
+                            <option value="I_OWE">🔴 I Borrowed (Loan I Owe - e.g. Hustler, Fuliza, Tala)</option>
+                            <option value="OWED_TO_ME">🟢 I Lent Out (Money Owed to Me - Friend/Advance)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-bold mb-1">Lender / Borrower / Platform Name</label>
+                        <input type="text" name="person_name" placeholder="e.g. Hustler Fund, Fuliza, Tala, Brian Boda" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-bold mb-1">Total Principal (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="total_amount" placeholder="5000" data-placeholder-base="5000" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-bold convertible-placeholder" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-bold mb-1">Already Repaid Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="paid_amount" placeholder="0" data-placeholder-base="0" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold convertible-placeholder">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-bold mb-1">Due Date / Danger Zone Deadline</label>
+                        <input type="date" name="due_at" value="${today}" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-bold mb-1">Disbursement / Source Account (Optional)</label>
+                        <select name="account_id" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold">
+                            <option value="">-- No Account Link --</option>
+                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2 lg:col-span-2 flex items-center gap-3">
+                        <label class="flex items-center space-x-2 text-gray-300 font-medium cursor-pointer">
+                            <input type="checkbox" name="link_account" value="1" class="rounded border-gray-700 text-rose-600 focus:ring-rose-500">
+                            <span>Sync initial loan disbursement to account balance & financial ledger</span>
+                        </label>
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold py-2.5 rounded-xl transition shadow-xs active:scale-95">
+                            Save Loan / Debt
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Debts Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${debts.length > 0 ? debts.map((d: any) => {
+                    const isBorrowed = d.debt_type === 'I_OWE';
+                    const danger = d.danger_status;
+                    const isDanger = danger?.isDangerZone && !d.is_settled;
+                    const totalAmt = Number(d.total ?? d.total_amount ?? 0);
+                    const paidAmt = Number(d.paid ?? d.paid_amount ?? 0);
+                    const remainingAmt = Number(d.remaining ?? Math.max(0, totalAmt - paidAmt));
+                    const percent = d.percent ?? (totalAmt > 0 ? Math.min(100, Math.round((paidAmt / totalAmt) * 100)) : 0);
+
+                    return `
+                    <div class="debt-card-item ${isDanger ? 'border-2 border-rose-500 ring-2 ring-rose-500/30 shadow-lg shadow-rose-950/50' : 'border border-gray-800'} bg-slate-950 p-4 rounded-xl space-y-3 flex flex-col justify-between transition-all" data-debt-type="${d.debt_type}" data-is-danger="${isDanger ? 'true' : 'false'}">
+                        <div class="space-y-2.5">
+                            <div class="flex justify-between items-start gap-2">
+                                <div>
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-xs font-black ${isBorrowed ? 'text-rose-400' : 'text-emerald-400'}">
+                                            ${isBorrowed ? '🔴 Borrowed' : '🟢 Lent Out'}
+                                        </span>
+                                        ${d.is_settled ? `
+                                            <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 font-extrabold px-2 py-0.2 rounded-full">✓ Settled</span>
+                                        ` : `
+                                            <span class="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 font-extrabold px-2 py-0.2 rounded-full">Active</span>
+                                        `}
+                                    </div>
+                                    <h3 class="font-bold text-white text-base mt-0.5">${d.person_name || d.name || 'Unnamed Debt'}</h3>
+                                </div>
+                                <div class="flex items-center space-x-1 shrink-0">
+                                    <form action="/debts/toggle-status/${d.id}" method="POST" class="inline">
+                                        <button type="submit" title="Toggle Paid/Active" class="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white text-xs transition">
+                                            ${d.is_settled ? '🔄 Reopen' : '✓ Mark Paid'}
+                                        </button>
+                                    </form>
+                                    <form action="/debts/delete/${d.id}" method="POST" onsubmit="return confirm('Delete this debt record?');" class="inline">
+                                        <button type="submit" class="p-1 hover:bg-rose-950 rounded-lg text-rose-400 hover:text-rose-300 text-xs transition">🗑️</button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Danger Zone Alert / Due Date Badge -->
+                            ${danger ? `
+                            <div class="flex items-center justify-between p-2 rounded-lg ${isDanger ? 'bg-rose-950/80 border border-rose-800/80' : 'bg-gray-900/90 border border-gray-800'}">
+                                <span class="text-[11px] font-bold ${danger.badgeClass}">
+                                    ${danger.label}
+                                </span>
+                                <span class="text-[10px] text-gray-400 font-mono">
+                                    ${danger.formattedDue ? `Due: ${danger.formattedDue}` : ''}
+                                </span>
+                            </div>
+                            ` : ''}
+
+                            <!-- Financial Numbers -->
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div class="p-2 bg-gray-900 rounded-lg">
+                                    <p class="text-[10px] text-gray-400">Total Principal</p>
+                                    <p class="font-bold text-white convertible-amount" data-kes="${totalAmt}">${formatKes(totalAmt)}</p>
+                                </div>
+                                <div class="p-2 ${isBorrowed ? 'bg-rose-950/40' : 'bg-emerald-950/40'} rounded-lg">
+                                    <p class="text-[10px] ${isBorrowed ? 'text-rose-300' : 'text-emerald-300'} font-medium">Remaining Balance</p>
+                                    <p class="font-bold ${isBorrowed ? 'text-rose-400' : 'text-emerald-400'} convertible-amount" data-kes="${remainingAmt}">${formatKes(remainingAmt)}</p>
+                                </div>
+                            </div>
+
+                            <!-- Repayment Progress Bar -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-[11px] text-gray-400">
+                                    <span>Repaid: <strong class="text-white convertible-amount" data-kes="${paidAmt}">${formatKes(paidAmt)}</strong></span>
+                                    <span>${percent}%</span>
+                                </div>
+                                <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                    <div class="h-full rounded-full transition-all duration-300 ${isBorrowed ? 'bg-rose-500' : 'bg-emerald-500'}" style="width: ${percent}%;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Repay / Settle Action Drawer -->
+                        <div class="space-y-2 pt-2 border-t border-gray-800/80">
+                            ${!d.is_settled ? `
+                            <button type="button" onclick="toggleDebtForm('${d.id}')" class="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center space-x-1 active:scale-95">
+                                <span>${isBorrowed ? '💳 Record Repayment' : '📥 Record Collection'}</span>
+                            </button>
+                            ` : `
+                            <p class="text-center text-xs text-emerald-400 font-bold py-1">🎉 Fully Settled & Closed</p>
+                            `}
+
+                            <div id="debt-repay-${d.id}" class="hidden p-3 bg-gray-900 border border-gray-700 rounded-xl space-y-2.5">
+                                <form action="/debts/repay/${d.id}" method="POST" class="space-y-2">
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-gray-300 mb-0.5">Amount to ${isBorrowed ? 'Repay' : 'Collect'} (<span class="curr-symbol-label">Ksh</span>)</label>
+                                        <input type="number" step="any" inputmode="decimal" name="amount" value="${remainingAmt}" max="${remainingAmt}" placeholder="${remainingAmt}" data-placeholder-base="${remainingAmt}" class="w-full p-2 bg-slate-950 border border-gray-600 text-white rounded-lg text-xs font-bold convertible-placeholder" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-gray-300 mb-0.5">${isBorrowed ? 'Payment Source Account' : 'Deposit Destination Account'}</label>
+                                        <select name="account_id" class="w-full p-2 bg-slate-950 border border-gray-600 text-white rounded-lg text-xs font-medium">
+                                            <option value="">-- No Account Ledger Sync --</option>
+                                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-gray-300 mb-0.5">Date</label>
+                                        <input type="date" name="payment_date" value="${today}" class="w-full p-2 bg-slate-950 border border-gray-600 text-white rounded-lg text-xs font-medium" required>
+                                    </div>
+                                    <div class="flex gap-2 pt-1">
+                                        <button type="submit" class="flex-1 ${isBorrowed ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-bold py-1.5 rounded-lg text-xs transition active:scale-95">
+                                            Confirm ${isBorrowed ? 'Repayment' : 'Collection'}
+                                        </button>
+                                        <button type="button" onclick="toggleDebtForm('${d.id}')" class="px-2.5 py-1.5 bg-gray-800 text-gray-300 font-semibold rounded-lg text-xs">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('') : `
+                <div class="md:col-span-3 p-8 text-center bg-slate-950 rounded-xl border border-dashed border-gray-800 space-y-2">
+                    <p class="text-3xl">💳</p>
+                    <h4 class="font-bold text-gray-200">No Loans or Debts Recorded</h4>
+                    <p class="text-xs text-gray-400">Track money you borrowed (Hustler Fund, Fuliza, Tala) or money you lent out with automatic danger zone countdowns!</p>
                 </div>`}
             </div>
         </div>

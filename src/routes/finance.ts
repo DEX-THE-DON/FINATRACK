@@ -424,56 +424,149 @@ financeRoutes.post('/goals/reset-all', async (c) => {
 
 
 // ------------------------------------------------------------------------------
-// DEBTS & LOANS
+// DEBTS & LOANS (BORROWED LOANS & LENT MONEY WITH DANGER ZONES)
 // ------------------------------------------------------------------------------
 financeRoutes.post('/debts/create', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const personName = String(body['person_name'] || '').trim();
-  const debtType = String(body['debt_type'] || 'I_OWE');
+  const debtType = String(body['debt_type'] || 'I_OWE'); // 'I_OWE' (Borrowed) or 'OWED_TO_ME' (Lent)
   const rawTotal = parseFloat(String(body['total_amount'] || '0.0')) || 0.0;
-  const issuedAt = String(body['issued_at'] || new Date().toISOString());
-  const dueAt = String(body['due_at'] || new Date(Date.now() + 30 * 86400000).toISOString());
+  const rawPaid = parseFloat(String(body['paid_amount'] || '0.0')) || 0.0;
+  const issuedAt = String(body['issued_at'] || new Date().toISOString().slice(0, 10));
+  const dueAt = String(body['due_at'] || new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10));
   const description = body['description'] ? String(body['description']).trim() : null;
+  const accountId = body['account_id'] ? String(body['account_id']).trim() : null;
+  const linkAccount = body['link_account'] === '1' || body['link_account'] === 'on';
 
-  const { error } = await supabase.from('debts').insert({
+  const isPaid = rawPaid >= rawTotal && rawTotal > 0;
+
+  const { data: newDebt, error } = await supabase.from('debts').insert({
     ...(userId ? { user_id: userId } : {}),
     person_name: personName,
     debt_type: debtType,
     total_amount: rawTotal,
-    paid_amount: 0.00,
+    paid_amount: rawPaid,
     issued_at: issuedAt,
     due_at: dueAt,
-    status: 'ACTIVE',
+    status: isPaid ? 'PAID' : 'ACTIVE',
     description,
-  });
+  }).select().single();
 
   if (error) {
     console.error('Failed to create debt:', error);
     return c.redirect(`/?toast=${encodeURIComponent('Failed to save debt: ' + error.message)}`, 303);
   }
 
-  return c.redirect('/?toast=Debt+record+saved', 303);
+  // If linking account for initial loan disbursement
+  if (linkAccount && accountId && rawTotal > 0) {
+    const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+    if (acc) {
+      if (debtType === 'I_OWE') {
+        // I borrowed -> funds received in account
+        const newBal = toDecimal(acc.balance).plus(rawTotal).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: accountId,
+          transaction_type: 'INCOME',
+          category: 'Loans & Borrowing',
+          amount: rawTotal,
+          date: issuedAt.slice(0, 10),
+          description: `Loan Disbursed: ${personName} (Principal)`,
+        });
+      } else {
+        // I lent out -> funds paid out from account
+        const newBal = toDecimal(acc.balance).minus(rawTotal).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: accountId,
+          transaction_type: 'EXPENSE',
+          category: 'Money Lent Out',
+          amount: rawTotal,
+          date: issuedAt.slice(0, 10),
+          description: `Loan Issued to: ${personName}`,
+        });
+      }
+    }
+  }
+
+  const label = debtType === 'I_OWE' ? 'Borrowed loan' : 'Lending record';
+  return c.redirect(`/?toast=${encodeURIComponent(`${label} saved successfully!`)}`, 303);
 });
 
 financeRoutes.post('/debts/repay/:id', async (c) => {
-  const { supabase } = await getRequestContext(c);
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const accountId = body['account_id'] ? String(body['account_id']).trim() : null;
+  const paymentDate = String(body['payment_date'] || new Date().toISOString().slice(0, 10));
 
   const { data: debt } = await supabase.from('debts').select('*').eq('id', id).single();
-  if (debt) {
+  if (debt && rawAmt > 0) {
     const newPaid = toDecimal(debt.paid_amount).plus(rawAmt).toNumber();
     const isPaid = newPaid >= Number(debt.total_amount);
+    
     await supabase.from('debts').update({
       paid_amount: newPaid,
-      status: isPaid ? 'PAID' : debt.status,
+      status: isPaid ? 'PAID' : 'ACTIVE',
+      updated_at: new Date().toISOString(),
+    }).eq('id', id);
+
+    // Account ledger sync
+    if (accountId) {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        if (debt.debt_type === 'I_OWE') {
+          // Repaying a loan I borrowed -> expense from account
+          const newBal = toDecimal(acc.balance).minus(rawAmt).toNumber();
+          await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+          await supabase.from('transactions').insert({
+            ...(userId ? { user_id: userId } : {}),
+            account_id: accountId,
+            transaction_type: 'EXPENSE',
+            category: 'Debt & Loan Repayments',
+            amount: rawAmt,
+            date: paymentDate,
+            description: `Loan Repayment: ${debt.person_name}`,
+          });
+        } else {
+          // Receiving repayment for money I lent -> income to account
+          const newBal = toDecimal(acc.balance).plus(rawAmt).toNumber();
+          await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+          await supabase.from('transactions').insert({
+            ...(userId ? { user_id: userId } : {}),
+            account_id: accountId,
+            transaction_type: 'INCOME',
+            category: 'Debt Collections',
+            amount: rawAmt,
+            date: paymentDate,
+            description: `Debt Recovery from: ${debt.person_name}`,
+          });
+        }
+      }
+    }
+  }
+
+  return c.redirect('/?toast=Payment+recorded+and+ledger+updated', 303);
+});
+
+financeRoutes.post('/debts/toggle-status/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const { data: debt } = await supabase.from('debts').select('*').eq('id', id).single();
+  if (debt) {
+    const newStatus = debt.status === 'PAID' ? 'ACTIVE' : 'PAID';
+    const newPaid = newStatus === 'PAID' ? Number(debt.total_amount) : 0.00;
+    await supabase.from('debts').update({
+      status: newStatus,
+      paid_amount: newPaid,
       updated_at: new Date().toISOString(),
     }).eq('id', id);
   }
-
-  return c.redirect('/?toast=Debt+payment+recorded', 303);
+  return c.redirect('/?toast=Debt+status+updated', 303);
 });
 
 financeRoutes.post('/debts/delete/:id', async (c) => {
@@ -485,6 +578,7 @@ financeRoutes.post('/debts/delete/:id', async (c) => {
   }
   return c.redirect('/?toast=Debt+record+deleted', 303);
 });
+
 
 // ------------------------------------------------------------------------------
 // RECURRING BILLS

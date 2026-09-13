@@ -15,6 +15,7 @@ import {
   calculateAnnualYield,
   calculateBudgetPace,
   calculateTargetPace,
+  calculateDebtDeadline,
   calculateShiftHours,
   formatTimeDisplay
 } from './utils/math';
@@ -167,11 +168,34 @@ app.get('/', async (c) => {
         goals = defaultToInsert.map((g, idx) => ({ id: `default-goal-${idx + 1}`, ...g }));
       }
     }
+
+    if (debts.length === 0) {
+      const now = new Date();
+      const threeDaysLater = new Date(now.getTime() + 3 * 86400000).toISOString().slice(0, 10);
+      const twelveDaysLater = new Date(now.getTime() + 12 * 86400000).toISOString().slice(0, 10);
+      const defaultDebtsToInsert = [
+        { user_id: userId, person_name: 'Hustler Fund / Fuliza Loan', debt_type: 'I_OWE', total_amount: 3500, paid_amount: 1000, due_at: threeDaysLater, status: 'ACTIVE', description: 'Emergency float loan - Impending Penalty Zone' },
+        { user_id: userId, person_name: 'Brian (Boda Mechanic Spare Advance)', debt_type: 'OWED_TO_ME', total_amount: 2500, paid_amount: 500, due_at: twelveDaysLater, status: 'ACTIVE', description: 'Front brake caliper & chain spare advance' },
+      ];
+      try {
+        const { data: insertedDebts } = await supabase.from('debts').insert(defaultDebtsToInsert).select();
+        debts = (insertedDebts && insertedDebts.length > 0) ? insertedDebts : defaultDebtsToInsert.map((d, idx) => ({ id: `default-debt-${idx + 1}`, ...d }));
+      } catch (e) {
+        debts = defaultDebtsToInsert.map((d, idx) => ({ id: `default-debt-${idx + 1}`, ...d }));
+      }
+    }
   } else {
+    const now = new Date();
+    const threeDaysLater = new Date(now.getTime() + 3 * 86400000).toISOString().slice(0, 10);
+    const twelveDaysLater = new Date(now.getTime() + 12 * 86400000).toISOString().slice(0, 10);
     goals = [
       { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
       { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
       { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
+    ];
+    debts = [
+      { id: 'debt-1', person_name: 'Hustler Fund / Fuliza Loan', debt_type: 'I_OWE', total_amount: 3500, paid_amount: 1000, due_at: threeDaysLater, status: 'ACTIVE', description: 'Emergency float loan - Impending Penalty Zone' },
+      { id: 'debt-2', person_name: 'Brian (Boda Mechanic Spare Advance)', debt_type: 'OWED_TO_ME', total_amount: 2500, paid_amount: 500, due_at: twelveDaysLater, status: 'ACTIVE', description: 'Front brake caliper & chain spare advance' },
     ];
   }
 
@@ -310,6 +334,26 @@ app.get('/', async (c) => {
     }
   }
 
+  // Enriched Debts & Loans with Danger Zone Intelligence
+  const enrichedDebts = (debts || []).map((d: any) => {
+    const total = Number(d.total_amount || 0);
+    const paid = Number(d.paid_amount || 0);
+    const remaining = Math.max(0, total - paid);
+    const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+    const danger = calculateDebtDeadline(d.due_at);
+    const isSettled = d.status === 'PAID' || remaining === 0;
+
+    return {
+      ...d,
+      total,
+      paid,
+      remaining,
+      percent,
+      is_settled: isSettled,
+      danger_status: danger,
+    };
+  });
+
   const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
 
   const html = renderFinanceDashboard({
@@ -320,7 +364,7 @@ app.get('/', async (c) => {
     income_targets: incomeTargets,
     expense_targets: expenseTargets,
     category_budgets: categoryBudgets,
-    debts: debts || [],
+    debts: enrichedDebts,
     bills: bills || [],
     mmf_accounts: mmfAccounts,
     allocation_rules: rules,

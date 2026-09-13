@@ -309,3 +309,111 @@ export function calculateTargetPace(
   };
 }
 
+// ------------------------------------------------------------------------------
+// DEBTS & LOANS DANGER ZONE COUNTDOWN INTELLIGENCE
+// ------------------------------------------------------------------------------
+export interface DebtDangerStatus {
+  daysRemaining: number;
+  isOverdue: boolean;
+  isDueToday: boolean;
+  isDangerZone: boolean; // <= 3 days or Overdue
+  isCautionZone: boolean; // <= 7 days
+  badgeLabel: string;
+  badgeClass: string;
+  cardBorderClass: string;
+  progressColor: string;
+}
+
+export function calculateDebtDeadline(dueAt?: string | null): DebtDangerStatus {
+  if (!dueAt) {
+    return {
+      daysRemaining: 999,
+      isOverdue: false,
+      isDueToday: false,
+      isDangerZone: false,
+      isCautionZone: false,
+      badgeLabel: '🗓️ No Fixed Deadline',
+      badgeClass: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300',
+      cardBorderClass: 'border-gray-200 dark:border-gray-800',
+      progressColor: 'bg-indigo-500'
+    };
+  }
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dueDate = new Date(dueAt);
+  const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime();
+
+  const diffDays = Math.round((dueStart - todayStart) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    const overdueDays = Math.abs(diffDays);
+    return {
+      daysRemaining: diffDays,
+      isOverdue: true,
+      isDueToday: false,
+      isDangerZone: true,
+      isCautionZone: true,
+      badgeLabel: `🚨 OVERDUE by ${overdueDays} day${overdueDays === 1 ? '' : 's'} (Danger Zone)`,
+      badgeClass: 'bg-rose-600 text-white font-black animate-pulse shadow-xs border border-rose-700',
+      cardBorderClass: 'border-rose-500 ring-2 ring-rose-500/40 dark:border-rose-500',
+      progressColor: 'bg-gradient-to-r from-rose-600 to-red-600'
+    };
+  }
+
+  if (diffDays === 0) {
+    return {
+      daysRemaining: 0,
+      isOverdue: false,
+      isDueToday: true,
+      isDangerZone: true,
+      isCautionZone: true,
+      badgeLabel: '⚠️ DUE TODAY (Danger Zone)',
+      badgeClass: 'bg-amber-500 text-slate-950 font-black animate-pulse shadow-xs border border-amber-600',
+      cardBorderClass: 'border-amber-500 ring-2 ring-amber-500/40 dark:border-amber-500',
+      progressColor: 'bg-gradient-to-r from-amber-500 to-rose-500'
+    };
+  }
+
+  if (diffDays <= 3) {
+    return {
+      daysRemaining: diffDays,
+      isOverdue: false,
+      isDueToday: false,
+      isDangerZone: true,
+      isCautionZone: true,
+      badgeLabel: `⚡ Due in ${diffDays} day${diffDays === 1 ? '' : 's'} (Danger Zone)`,
+      badgeClass: 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 font-extrabold border border-rose-300 dark:border-rose-800',
+      cardBorderClass: 'border-rose-400 dark:border-rose-800/80',
+      progressColor: 'bg-gradient-to-r from-amber-500 to-rose-500'
+    };
+  }
+
+  if (diffDays <= 7) {
+    return {
+      daysRemaining: diffDays,
+      isOverdue: false,
+      isDueToday: false,
+      isDangerZone: false,
+      isCautionZone: true,
+      badgeLabel: `⏳ Due in ${diffDays} days (Caution)`,
+      badgeClass: 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800',
+      cardBorderClass: 'border-amber-300 dark:border-amber-900/60',
+      progressColor: 'bg-gradient-to-r from-yellow-500 to-amber-500'
+    };
+  }
+
+  return {
+    daysRemaining: diffDays,
+    isOverdue: false,
+    isDueToday: false,
+    isDangerZone: false,
+    isCautionZone: false,
+    badgeLabel: `🗓️ Due in ${diffDays} days (${dueAt.slice(0, 10)})`,
+    badgeClass: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-200 dark:border-indigo-800',
+    cardBorderClass: 'border-indigo-100 dark:border-indigo-900/40',
+    progressColor: 'bg-gradient-to-r from-indigo-500 to-teal-500'
+  };
+}
+
+
