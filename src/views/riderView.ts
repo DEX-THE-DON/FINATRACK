@@ -11,6 +11,7 @@ export function renderRiderDashboard(data: any): string {
     accounts = [],
     toast = '',
     usd_to_kes = 129.0,
+    current_currency = 'Ksh',
     today = new Date().toISOString().slice(0, 10),
     username = 'Dennis',
     is_logged_in = false,
@@ -137,15 +138,31 @@ export function renderRiderDashboard(data: any): string {
             }
         }
 
+        let activeCurrency = '${current_currency}';
+        try {
+            const ls = localStorage.getItem('finatrack_currency');
+            if (ls === 'USD' || ls === 'Ksh') activeCurrency = ls;
+        } catch (e) {}
+
         function getCurrency() {
-            const val = localStorage.getItem('finatrack_currency');
-            return val === 'USD' ? 'USD' : 'Ksh';
+            try {
+                const ls = localStorage.getItem('finatrack_currency');
+                if (ls === 'USD' || ls === 'Ksh') return ls;
+                const match = document.cookie.match(/finatrack_currency=(Ksh|USD)/);
+                if (match) return match[1];
+            } catch (e) {}
+            return activeCurrency || 'Ksh';
         }
 
         function setCurrency(curr) {
-            const validCurr = curr === 'USD' ? 'USD' : 'Ksh';
-            localStorage.setItem('finatrack_currency', validCurr);
-            document.cookie = "finatrack_currency=" + validCurr + ";path=/;max-age=31536000";
+            const validCurr = (curr === 'USD') ? 'USD' : 'Ksh';
+            activeCurrency = validCurr;
+            try {
+                localStorage.setItem('finatrack_currency', validCurr);
+            } catch (e) {}
+            try {
+                document.cookie = "finatrack_currency=" + validCurr + ";path=/;max-age=31536000;SameSite=Lax";
+            } catch (e) {}
             applyConversion();
         }
 
@@ -341,8 +358,8 @@ export function renderRiderDashboard(data: any): string {
                 </a>
 
                 <select id="currency-selector" onchange="setCurrency(this.value)" class="text-xs bg-gray-100 dark:bg-gray-800 border-0 rounded-lg px-2.5 py-1.5 font-bold text-gray-700 dark:text-gray-200 cursor-pointer">
-                    <option value="Ksh">KSH</option>
-                    <option value="USD">USD</option>
+                    <option value="Ksh" ${current_currency === 'Ksh' ? 'selected' : ''}>KSH</option>
+                    <option value="USD" ${current_currency === 'USD' ? 'selected' : ''}>USD</option>
                 </select>
 
                 ${is_logged_in ? `

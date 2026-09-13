@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from './db/supabase';
 import { financeRoutes } from './routes/finance';
 import { riderRoutes, classifyShiftWindow } from './routes/rider';
@@ -214,6 +215,8 @@ app.get('/', async (c) => {
     };
   });
 
+  const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
+
   const html = renderFinanceDashboard({
     accounts: accs,
     transactions: txs,
@@ -229,6 +232,7 @@ app.get('/', async (c) => {
     net_savings: monthlyIncome - monthlyExpenses,
     total_monthly_passive_income: totalMonthlyPassive.toFixed(2),
     usd_to_kes: USD_TO_KES,
+    current_currency: userCurrency,
     toast,
     username,
     is_logged_in: isLoggedIn,
@@ -368,6 +372,8 @@ app.get('/rider', async (c) => {
     monthly_breakdown: [],
   };
 
+  const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
+
   const html = renderRiderDashboard({
     active_bike: (activeBikes || []).find((b: any) => b.is_active === 1) || activeBikes[0] || null,
     bikes: activeBikes,
@@ -386,6 +392,7 @@ app.get('/rider', async (c) => {
     accounts: accounts || [],
     toast,
     usd_to_kes: USD_TO_KES,
+    current_currency: userCurrency,
     username,
     is_logged_in: isLoggedIn,
   });
