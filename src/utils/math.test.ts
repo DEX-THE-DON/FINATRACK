@@ -53,4 +53,16 @@ const pace = calculateBudgetPace(2500, 5000, 15, 30);
 console.assert(pace.percentage === 50, `Budget pace percentage should be 50%, got ${pace.percentage}%`);
 console.log(`✅ Budget Pace (2,500/5,000 on day 15/30): ${pace.burnLabel}, Safe Daily=${pace.safeDailySpend}`);
 
+// Test 5: Target Income & Expense Multi-Timeframe Checkers
+import { calculateTargetPace } from './math';
+const weekIncomeTarget = calculateTargetPace(10000, 15000, 'WEEKLY', true, 4, 7);
+console.assert(weekIncomeTarget.percentage === 67, `Weekly income target pct should be 67%, got ${weekIncomeTarget.percentage}%`);
+console.assert(Math.round(weekIncomeTarget.dailyRate) === 1250, `Daily run-rate needed should be 1250, got ${weekIncomeTarget.dailyRate}`);
+console.log(`✅ Weekly Income Target (10k/15k on day 4/7): ${weekIncomeTarget.statusLabel}, Needed=${Math.round(weekIncomeTarget.dailyRate)}/day`);
+
+const monthExpenseTarget = calculateTargetPace(12000, 25000, 'MONTHLY', false, 15, 30);
+console.assert(monthExpenseTarget.percentage === 48, `Monthly expense target pct should be 48%, got ${monthExpenseTarget.percentage}%`);
+console.log(`✅ Monthly Expense Target (12k/25k on day 15/30): ${monthExpenseTarget.statusLabel}, Safe Daily=${monthExpenseTarget.dailyRate.toFixed(2)}/day`);
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
+

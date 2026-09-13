@@ -14,6 +14,7 @@ import {
   calculateDailyYield,
   calculateAnnualYield,
   calculateBudgetPace,
+  calculateTargetPace,
   calculateShiftHours,
   formatTimeDisplay
 } from './utils/math';
@@ -191,17 +192,103 @@ app.get('/', async (c) => {
 
   const today = new Date();
   const currentMonth = today.toISOString().slice(0, 7);
+  const currentYear = String(today.getFullYear());
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const currentDay = today.getDate();
 
+  // Weekly calculation (Mon - Sun)
+  const dayOfWeek = (today.getDay() + 6) % 7; // 0 for Monday, 6 for Sunday
+  const daysElapsedWeek = dayOfWeek + 1;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - dayOfWeek);
+  const mondayStr = monday.toISOString().slice(0, 10);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const sundayStr = sunday.toISOString().slice(0, 10);
+
+  // Yearly calculation
+  const startOfYear = new Date(today.getFullYear(), 0, 1);
+  const isLeap = (today.getFullYear() % 4 === 0 && today.getFullYear() % 100 !== 0) || (today.getFullYear() % 400 === 0);
+  const totalDaysInYear = isLeap ? 366 : 365;
+  const dayOfYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  // Retrieve user target preferences or defaults
+  const bgtMap = new Map((budgets || []).map((b: any) => [b.category, Number(b.limit_amount || 0)]));
+
+  const targetIncWeekly = bgtMap.get('TARGET_INCOME_WEEKLY') || 15000;
+  const targetIncMonthly = bgtMap.get('TARGET_INCOME_MONTHLY') || 65000;
+  const targetIncYearly = bgtMap.get('TARGET_INCOME_YEARLY') || 780000;
+
+  const targetExpWeekly = bgtMap.get('TARGET_EXPENSE_WEEKLY') || 6000;
+  const targetExpMonthly = bgtMap.get('TARGET_EXPENSE_MONTHLY') || 25000;
+  const targetExpYearly = bgtMap.get('TARGET_EXPENSE_YEARLY') || 300000;
+
+  const catLimitLiving = bgtMap.get('Living Expenses') || 8000;
+  const catLimitFood = bgtMap.get('Food & Groceries') || 6000;
+  const catLimitFuel = bgtMap.get('Fuel & Petrol') || bgtMap.get('Fuel & Petrol / EV Swaps') || 7000;
+  const catLimitBills = bgtMap.get('Utilities & Bills') || 4000;
+
+  let weeklyIncome = 0;
+  let weeklyExpenses = 0;
   let monthlyIncome = 0;
   let monthlyExpenses = 0;
+  let yearlyIncome = 0;
+  let yearlyExpenses = 0;
+
   for (const t of txs) {
-    if ((t.date || '').startsWith(currentMonth)) {
-      if (t.transaction_type === 'INCOME') monthlyIncome += Number(t.amount || 0);
-      if (t.transaction_type === 'EXPENSE') monthlyExpenses += Number(t.amount || 0);
+    const tDate = t.date || '';
+    const amt = Number(t.amount || 0);
+    const isInc = t.transaction_type === 'INCOME';
+    const isExp = t.transaction_type === 'EXPENSE';
+
+    if (tDate >= mondayStr && tDate <= sundayStr) {
+      if (isInc) weeklyIncome += amt;
+      if (isExp) weeklyExpenses += amt;
+    }
+    if (tDate.startsWith(currentMonth)) {
+      if (isInc) monthlyIncome += amt;
+      if (isExp) monthlyExpenses += amt;
+    }
+    if (tDate.startsWith(currentYear)) {
+      if (isInc) yearlyIncome += amt;
+      if (isExp) yearlyExpenses += amt;
     }
   }
+
+  // Multi-timeframe Income and Expense Target Objects
+  const incomeTargets = {
+    weekly: calculateTargetPace(weeklyIncome, targetIncWeekly, 'WEEKLY', true, daysElapsedWeek, 7),
+    monthly: calculateTargetPace(monthlyIncome, targetIncMonthly, 'MONTHLY', true, currentDay, daysInMonth),
+    yearly: calculateTargetPace(yearlyIncome, targetIncYearly, 'YEARLY', true, dayOfYear, totalDaysInYear),
+  };
+
+  const expenseTargets = {
+    weekly: calculateTargetPace(weeklyExpenses, targetExpWeekly, 'WEEKLY', false, daysElapsedWeek, 7),
+    monthly: calculateTargetPace(monthlyExpenses, targetExpMonthly, 'MONTHLY', false, currentDay, daysInMonth),
+    yearly: calculateTargetPace(yearlyExpenses, targetExpYearly, 'YEARLY', false, dayOfYear, totalDaysInYear),
+  };
+
+  const defaultCategories = [
+    { name: 'Living Expenses', icon: '🏠', limit: catLimitLiving },
+    { name: 'Food & Groceries', icon: '🛒', limit: catLimitFood },
+    { name: 'Fuel & Petrol / EV Swaps', icon: '⛽', limit: catLimitFuel },
+    { name: 'Utilities & Bills', icon: '⚡', limit: catLimitBills },
+  ];
+
+  const categoryBudgets = defaultCategories.map(cat => {
+    const spent = txs
+      .filter((t) => t.transaction_type === 'EXPENSE' && (
+        (t.category || '').toLowerCase() === cat.name.toLowerCase() ||
+        (cat.name.includes('Fuel') && ((t.category || '').toLowerCase().includes('fuel') || (t.category || '').toLowerCase().includes('petrol') || (t.category || '').toLowerCase().includes('battery') || (t.category || '').toLowerCase().includes('ev swap')))
+      ) && (t.date || '').startsWith(currentMonth))
+      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+    return {
+      category: cat.name,
+      icon: cat.icon,
+      ...calculateBudgetPace(spent, cat.limit, currentDay, daysInMonth),
+    };
+  });
 
   // MMF passive yield calculations
   const mmfAccounts = [];
@@ -223,32 +310,27 @@ app.get('/', async (c) => {
     }
   }
 
-  // Budget burn rate calculations
-  const budgetData = (budgets || []).map((b) => {
-    const spent = txs
-      .filter((t) => t.transaction_type === 'EXPENSE' && (t.category || '').toLowerCase() === b.category.toLowerCase() && (t.date || '').startsWith(currentMonth))
-      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-    return {
-      id: b.id,
-      category: b.category,
-      ...calculateBudgetPace(spent, b.limit_amount, currentDay, daysInMonth),
-    };
-  });
-
   const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
 
   const html = renderFinanceDashboard({
     accounts: accs,
     transactions: txs,
     goals: goals || [],
-    budgets: budgetData,
+    budgets: categoryBudgets,
+    income_targets: incomeTargets,
+    expense_targets: expenseTargets,
+    category_budgets: categoryBudgets,
     debts: debts || [],
     bills: bills || [],
     mmf_accounts: mmfAccounts,
     allocation_rules: rules,
     total_balance: totalBalance,
+    weekly_income: weeklyIncome,
+    weekly_expenses: weeklyExpenses,
     monthly_income: monthlyIncome,
     monthly_expenses: monthlyExpenses,
+    yearly_income: yearlyIncome,
+    yearly_expenses: yearlyExpenses,
     net_savings: monthlyIncome - monthlyExpenses,
     total_monthly_passive_income: totalMonthlyPassive.toFixed(2),
     usd_to_kes: USD_TO_KES,

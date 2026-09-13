@@ -242,6 +242,49 @@ financeRoutes.post('/budgets/delete/:id', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
+// TARGETS UPDATE (WEEKLY / MONTHLY / YEARLY INCOME & EXPENSE CHECKERS)
+// ------------------------------------------------------------------------------
+financeRoutes.post('/targets/update', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+
+  const entriesToUpsert = [
+    { category: 'TARGET_INCOME_WEEKLY', limit_amount: parseFloat(String(body['target_income_weekly'] || '15000')) || 15000 },
+    { category: 'TARGET_INCOME_MONTHLY', limit_amount: parseFloat(String(body['target_income_monthly'] || '65000')) || 65000 },
+    { category: 'TARGET_INCOME_YEARLY', limit_amount: parseFloat(String(body['target_income_yearly'] || '780000')) || 780000 },
+    { category: 'TARGET_EXPENSE_WEEKLY', limit_amount: parseFloat(String(body['target_expense_weekly'] || '6000')) || 6000 },
+    { category: 'TARGET_EXPENSE_MONTHLY', limit_amount: parseFloat(String(body['target_expense_monthly'] || '25000')) || 25000 },
+    { category: 'TARGET_EXPENSE_YEARLY', limit_amount: parseFloat(String(body['target_expense_yearly'] || '300000')) || 300000 },
+  ];
+
+  if (body['cat_limit_living'] !== undefined && body['cat_limit_living'] !== '') {
+    entriesToUpsert.push({ category: 'Living Expenses', limit_amount: parseFloat(String(body['cat_limit_living'])) || 8000 });
+  }
+  if (body['cat_limit_food'] !== undefined && body['cat_limit_food'] !== '') {
+    entriesToUpsert.push({ category: 'Food & Groceries', limit_amount: parseFloat(String(body['cat_limit_food'])) || 6000 });
+  }
+  if (body['cat_limit_fuel'] !== undefined && body['cat_limit_fuel'] !== '') {
+    entriesToUpsert.push({ category: 'Fuel & Petrol', limit_amount: parseFloat(String(body['cat_limit_fuel'])) || 7000 });
+  }
+  if (body['cat_limit_bills'] !== undefined && body['cat_limit_bills'] !== '') {
+    entriesToUpsert.push({ category: 'Utilities & Bills', limit_amount: parseFloat(String(body['cat_limit_bills'])) || 4000 });
+  }
+
+  if (userId) {
+    for (const item of entriesToUpsert) {
+      await supabase.from('budgets').upsert({
+        user_id: userId,
+        category: item.category,
+        limit_amount: item.limit_amount,
+      }, { onConflict: 'user_id, category' });
+    }
+  }
+
+  return c.redirect('/?toast=Targets+and+budget+limits+updated+successfully', 303);
+});
+
+
+// ------------------------------------------------------------------------------
 // SAVINGS GOALS
 // ------------------------------------------------------------------------------
 financeRoutes.post('/goals/create', async (c) => {

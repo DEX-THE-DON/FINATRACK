@@ -4,13 +4,28 @@ export function renderFinanceDashboard(data: any): string {
     transactions = [],
     goals = [],
     budgets = [],
+    income_targets = {
+      weekly: { actual: 0, target: 15000, percentage: 0, displayPercentage: 0, remaining: 15000, dailyRate: 2142.86, statusLabel: '🎯 On Track', statusBadge: 'emerald', daysRemaining: 7 },
+      monthly: { actual: 0, target: 65000, percentage: 0, displayPercentage: 0, remaining: 65000, dailyRate: 2166.67, statusLabel: '🎯 On Track', statusBadge: 'emerald', daysRemaining: 30 },
+      yearly: { actual: 0, target: 780000, percentage: 0, displayPercentage: 0, remaining: 780000, dailyRate: 2136.99, statusLabel: '🎯 On Track', statusBadge: 'emerald', daysRemaining: 365 }
+    },
+    expense_targets = {
+      weekly: { actual: 0, target: 6000, percentage: 0, displayPercentage: 0, remaining: 6000, dailyRate: 857.14, statusLabel: '🟢 Safe Spend Pace', statusBadge: 'emerald', daysRemaining: 7 },
+      monthly: { actual: 0, target: 25000, percentage: 0, displayPercentage: 0, remaining: 25000, dailyRate: 833.33, statusLabel: '🟢 Safe Spend Pace', statusBadge: 'emerald', daysRemaining: 30 },
+      yearly: { actual: 0, target: 300000, percentage: 0, displayPercentage: 0, remaining: 300000, dailyRate: 821.92, statusLabel: '🟢 Safe Spend Pace', statusBadge: 'emerald', daysRemaining: 365 }
+    },
+    category_budgets = [],
     debts = [],
     bills = [],
     mmf_accounts = [],
     allocation_rules = [],
     total_balance = 0.0,
+    weekly_income = 0.0,
+    weekly_expenses = 0.0,
     monthly_income = 0.0,
     monthly_expenses = 0.0,
+    yearly_income = 0.0,
+    yearly_expenses = 0.0,
     net_savings = 0.0,
     total_monthly_passive_income = 0.0,
     usd_to_kes = 129.0,
@@ -25,6 +40,21 @@ export function renderFinanceDashboard(data: any): string {
 
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const getBadgeStyles = (badge: string) => {
+    switch (badge) {
+      case 'emerald':
+        return 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800';
+      case 'cyan':
+        return 'bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800';
+      case 'amber':
+        return 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800';
+      case 'rose':
+        return 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800';
+      default:
+        return 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800';
+    }
+  };
 
   const getGoalIcon = (title: string): string => {
     const t = (title || '').toLowerCase();
@@ -257,6 +287,28 @@ export function renderFinanceDashboard(data: any): string {
                 if (withdrawDiv) withdrawDiv.classList.toggle('hidden');
             }
         }
+
+        function switchTargetTab(timeframe) {
+            ['weekly', 'monthly', 'yearly'].forEach(tf => {
+                const pane = document.getElementById('target-pane-' + tf);
+                const btn = document.getElementById('target-btn-' + tf);
+                if (pane) {
+                    if (tf === timeframe) {
+                        pane.classList.remove('hidden');
+                    } else {
+                        pane.classList.add('hidden');
+                    }
+                }
+                if (btn) {
+                    if (tf === timeframe) {
+                        btn.className = 'target-tab-btn px-4 py-1.5 rounded-xl text-xs font-bold transition shadow-xs bg-emerald-600 text-white';
+                    } else {
+                        btn.className = 'target-tab-btn px-4 py-1.5 rounded-xl text-xs font-bold transition bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700';
+                    }
+                }
+            });
+        }
+
 
         function toggleDarkMode() {
             const isDark = document.documentElement.classList.toggle('dark');
@@ -514,6 +566,9 @@ export function renderFinanceDashboard(data: any): string {
 
         <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
         <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <button onclick="document.getElementById('targets-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🎯 Targets</span>
+            </button>
             <button onclick="document.getElementById('tx-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>➕ Add Tx</span>
             </button>
@@ -560,6 +615,282 @@ export function renderFinanceDashboard(data: any): string {
                 <p class="text-[11px] text-amber-700 dark:text-amber-300">From MMF & Sacco high yields</p>
             </div>
         </div>
+
+        <!-- 🎯 Targets & Budget Pace Checker Card -->
+        <div id="targets-card" class="bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 p-5 sm:p-6 rounded-2xl text-white shadow-lg border border-indigo-900/60 space-y-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-800/60 pb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                        🎯
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <span>Income & Expense Target Checkers</span>
+                            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/30">Weekly • Monthly • Yearly</span>
+                        </h2>
+                        <p class="text-xs text-indigo-200">Track target income milestones vs expense budget burn rates with safe daily run-rate pacing.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <!-- Timeframe Tab Switcher -->
+                    <div class="flex p-1 bg-slate-950/80 border border-indigo-800/80 rounded-xl">
+                        <button type="button" id="target-btn-weekly" onclick="switchTargetTab('weekly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">
+                            Weekly
+                        </button>
+                        <button type="button" id="target-btn-monthly" onclick="switchTargetTab('monthly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow-xs">
+                            Monthly
+                        </button>
+                        <button type="button" id="target-btn-yearly" onclick="switchTargetTab('yearly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">
+                            Yearly
+                        </button>
+                    </div>
+
+                    <button type="button" onclick="document.getElementById('targets-edit-form-container')?.classList.toggle('hidden')" class="px-3 py-2 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white text-xs font-bold rounded-xl border border-indigo-700/60 transition active:scale-95 flex items-center gap-1.5">
+                        <span>⚙️ Set Targets</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Collapsible Edit Targets Form -->
+            <div id="targets-edit-form-container" class="hidden bg-slate-950/90 p-5 rounded-2xl border border-indigo-700/60 shadow-inner space-y-4">
+                <div class="flex justify-between items-center border-b border-indigo-800/60 pb-2">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <span>⚙️ Customize Income Targets & Expense Ceilings</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('targets-edit-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-white text-sm">✕</button>
+                </div>
+
+                <form action="/targets/update" method="POST" class="space-y-4">
+                    <div>
+                        <p class="text-xs font-extrabold text-emerald-400 uppercase tracking-wider mb-2">💵 Target Income Milestones (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">Weekly Target Income</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_weekly" value="${income_targets.weekly.target}" placeholder="15000" data-placeholder-base="15000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">Monthly Target Income</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_monthly" value="${income_targets.monthly.target}" placeholder="65000" data-placeholder-base="65000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">Yearly Target Income</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_yearly" value="${income_targets.yearly.target}" placeholder="780000" data-placeholder-base="780000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-extrabold text-rose-400 uppercase tracking-wider mb-2">🛑 Expense Target & Budget Ceilings (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">Weekly Expense Budget</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_weekly" value="${expense_targets.weekly.target}" placeholder="6000" data-placeholder-base="6000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">Monthly Expense Budget</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_monthly" value="${expense_targets.monthly.target}" placeholder="25000" data-placeholder-base="25000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">Yearly Expense Budget</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_yearly" value="${expense_targets.yearly.target}" placeholder="300000" data-placeholder-base="300000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-extrabold text-amber-400 uppercase tracking-wider mb-2">🏷️ Monthly Category Spending Limits (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">🏠 Living Expenses</label>
+                                <input type="number" step="any" name="cat_limit_living" value="${(budgets.find((b: any) => b.category === 'Living Expenses') || {}).limit || 8000}" placeholder="8000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">🛒 Food & Groceries</label>
+                                <input type="number" step="any" name="cat_limit_food" value="${(budgets.find((b: any) => b.category === 'Food & Groceries') || {}).limit || 6000}" placeholder="6000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">⛽ Fuel / EV Swaps</label>
+                                <input type="number" step="any" name="cat_limit_fuel" value="${(budgets.find((b: any) => b.category.includes('Fuel')) || {}).limit || 7000}" placeholder="7000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">⚡ Utilities & Bills</label>
+                                <input type="number" step="any" name="cat_limit_bills" value="${(budgets.find((b: any) => b.category.includes('Utilities')) || {}).limit || 4000}" placeholder="4000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end pt-2">
+                        <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition shadow-md active:scale-95">
+                            💾 Save Target Preferences
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- TIME PANES: Weekly, Monthly, Yearly -->
+            ${(['weekly', 'monthly', 'yearly'] as const).map(tf => {
+                const inc = income_targets[tf];
+                const exp = expense_targets[tf];
+                const isHidden = tf !== 'monthly';
+                const tfTitle = tf === 'weekly' ? 'This Week (Mon - Sun)' : tf === 'monthly' ? "This Month's Pace" : 'Yearly Goal Pace';
+
+                return `
+                <div id="target-pane-${tf}" class="${isHidden ? 'hidden' : ''} space-y-5">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- 💵 Target Income Checker Card -->
+                        <div class="bg-slate-950/80 border border-emerald-500/40 p-5 rounded-2xl shadow-inner space-y-4 flex flex-col justify-between">
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-start gap-2">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-xl">💵</span>
+                                        <div>
+                                            <h3 class="text-sm font-bold text-white">Target Income Checker</h3>
+                                            <p class="text-[10px] text-emerald-300 font-semibold">${tfTitle}</p>
+                                        </div>
+                                    </div>
+                                    <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full ${getBadgeStyles(inc.statusBadge)}">
+                                        ${inc.statusLabel}
+                                    </span>
+                                </div>
+
+                                <div class="flex justify-between items-baseline pt-1">
+                                    <div>
+                                        <p class="text-[10px] uppercase font-bold text-gray-400">Earned So Far</p>
+                                        <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${inc.actual}">${formatKes(inc.actual)}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-[10px] uppercase font-bold text-gray-400">Target Goal</p>
+                                        <p class="text-sm font-black text-gray-200 convertible-amount" data-kes="${inc.target}">${formatKes(inc.target)}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div class="space-y-1">
+                                    <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-emerald-950">
+                                        <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-teal-500 to-emerald-400 shadow-sm" style="width: ${inc.displayPercentage}%;"></div>
+                                    </div>
+                                    <div class="flex justify-between text-[11px] text-gray-400 font-semibold">
+                                        <span class="text-emerald-300 font-black">${inc.percentage}% Achieved</span>
+                                        <span>Remaining: <strong class="convertible-amount text-white" data-kes="${inc.remaining}">${formatKes(inc.remaining)}</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="p-3 bg-emerald-950/40 rounded-xl border border-emerald-900/60 text-xs">
+                                ${inc.actual >= inc.target ? `
+                                <div class="flex items-center space-x-2 text-emerald-300 font-bold">
+                                    <span>🎉</span>
+                                    <span>Goal exceeded by <span class="convertible-amount font-black text-emerald-200" data-kes="${inc.actual - inc.target}">${formatKes(inc.actual - inc.target)}</span>! Fantastic momentum!</span>
+                                </div>
+                                ` : `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-emerald-200 font-semibold">⚡ Required Run-Rate:</span>
+                                    <span class="font-extrabold text-white"><span class="convertible-amount text-emerald-300" data-kes="${inc.dailyRate}">${formatKes(inc.dailyRate)}</span> <span class="text-[10px] text-gray-400">/ day (${inc.daysRemaining} days left)</span></span>
+                                </div>
+                                `}
+                            </div>
+                        </div>
+
+                        <!-- 🛑 Expense Target & Budget Checker Card -->
+                        <div class="bg-slate-950/80 border border-rose-500/30 p-5 rounded-2xl shadow-inner space-y-4 flex flex-col justify-between">
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-start gap-2">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-xl">🛑</span>
+                                        <div>
+                                            <h3 class="text-sm font-bold text-white">Expense Target / Budget Checker</h3>
+                                            <p class="text-[10px] text-rose-300 font-semibold">${tfTitle}</p>
+                                        </div>
+                                    </div>
+                                    <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full ${getBadgeStyles(exp.statusBadge)}">
+                                        ${exp.statusLabel}
+                                    </span>
+                                </div>
+
+                                <div class="flex justify-between items-baseline pt-1">
+                                    <div>
+                                        <p class="text-[10px] uppercase font-bold text-gray-400">Spent So Far</p>
+                                        <p class="text-2xl font-black text-rose-400 convertible-amount" data-kes="${exp.actual}">${formatKes(exp.actual)}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-[10px] uppercase font-bold text-gray-400">Budget Limit</p>
+                                        <p class="text-sm font-black text-gray-200 convertible-amount" data-kes="${exp.target}">${formatKes(exp.target)}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div class="space-y-1">
+                                    <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-rose-950">
+                                        <div class="h-full rounded-full transition-all duration-500 ${exp.percentage >= 100 ? 'bg-gradient-to-r from-rose-600 to-red-500' : exp.percentage > exp.expectedPacePct + 15 ? 'bg-gradient-to-r from-amber-500 to-rose-500' : 'bg-gradient-to-r from-emerald-500 to-teal-400'}" style="width: ${exp.displayPercentage}%;"></div>
+                                    </div>
+                                    <div class="flex justify-between text-[11px] text-gray-400 font-semibold">
+                                        <span class="${exp.percentage >= 100 ? 'text-rose-400 font-black' : 'text-gray-300'}">${exp.percentage}% Spent</span>
+                                        <span>Remaining: <strong class="convertible-amount text-white" data-kes="${exp.remaining}">${formatKes(exp.remaining)}</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="p-3 bg-slate-900/90 rounded-xl border border-indigo-900/60 text-xs">
+                                ${exp.actual > exp.target ? `
+                                <div class="flex items-center space-x-2 text-rose-400 font-bold">
+                                    <span>🚨</span>
+                                    <span>Over budget limit by <span class="convertible-amount font-black" data-kes="${exp.actual - exp.target}">${formatKes(exp.actual - exp.target)}</span>!</span>
+                                </div>
+                                ` : `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-indigo-200 font-semibold">🛡️ Safe Daily Spend Limit:</span>
+                                    <span class="font-extrabold text-white"><span class="convertible-amount text-emerald-400" data-kes="${exp.dailyRate}">${formatKes(exp.dailyRate)}</span> <span class="text-[10px] text-gray-400">/ day max (${exp.daysRemaining} days left)</span></span>
+                                </div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('')}
+
+            <!-- 🏷️ Monthly Category Budgets & Burn Rates Breakdown -->
+            <div class="pt-2 border-t border-indigo-800/60 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xs font-extrabold uppercase text-indigo-200 tracking-wider flex items-center gap-1.5">
+                        <span>🏷️ Monthly Category Budget Burn Rates</span>
+                    </h3>
+                    <span class="text-[10px] text-gray-400 font-semibold">Live auto-calculated from transactions</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    ${category_budgets.map((b: any) => `
+                    <div class="p-3.5 bg-slate-950/70 border border-indigo-900/60 rounded-xl space-y-2.5 flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-lg">${b.icon || '🏷️'}</span>
+                                    <span class="text-xs font-bold text-gray-200 truncate max-w-[120px]">${b.category}</span>
+                                </div>
+                                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full ${getBadgeStyles(b.burnBadge)}">
+                                    ${b.burnLabel}
+                                </span>
+                            </div>
+
+                            <div class="flex justify-between text-xs mt-2">
+                                <span class="font-black text-white convertible-amount" data-kes="${b.spent}">${formatKes(b.spent)}</span>
+                                <span class="text-gray-400 text-[11px]">/ <span class="convertible-amount font-semibold" data-kes="${b.limit}">${formatKes(b.limit)}</span></span>
+                            </div>
+
+                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden mt-1.5 border border-indigo-950">
+                                <div class="h-full rounded-full transition-all duration-500 ${b.burnBadge === 'rose' ? 'bg-rose-500' : b.burnBadge === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'}" style="width: ${b.displayPercentage}%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="pt-2 border-t border-indigo-950/80 flex justify-between items-center text-[10px] text-gray-400">
+                            <span>Safe daily:</span>
+                            <strong class="text-emerald-400 font-bold convertible-amount" data-kes="${b.safeDailySpend}">${formatKes(b.safeDailySpend)}/d</strong>
+                        </div>
+                    </div>`).join('')}
+                </div>
+            </div>
+        </div>
+
 
         <!-- 🌊 Dynamic Waterfall Auto-Split Card -->
         <div id="waterfall-card" class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-md border border-indigo-800/40 space-y-4">

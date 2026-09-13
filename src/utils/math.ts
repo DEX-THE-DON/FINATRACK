@@ -213,3 +213,99 @@ export function calculateBudgetPace(
     burnBadge
   };
 }
+
+// ------------------------------------------------------------------------------
+// WEEKLY / MONTHLY / YEARLY TARGET INCOME & EXPENSE PACING
+// ------------------------------------------------------------------------------
+export interface TargetPace {
+  period: 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  periodLabel: string;
+  isIncome: boolean;
+  actual: number;
+  target: number;
+  percentage: number;
+  displayPercentage: number;
+  remaining: number;
+  dailyRate: number; // For income: daily run-rate needed. For expense: safe daily spend limit.
+  expectedPacePct: number;
+  daysRemaining: number;
+  statusLabel: string;
+  statusBadge: 'rose' | 'amber' | 'emerald' | 'cyan' | 'indigo';
+}
+
+export function calculateTargetPace(
+  actualAmount: number | string | Decimal,
+  targetAmount: number | string | Decimal,
+  period: 'WEEKLY' | 'MONTHLY' | 'YEARLY',
+  isIncome: boolean,
+  daysElapsed: number,
+  totalDaysInPeriod: number
+): TargetPace {
+  const actual = toDecimal(actualAmount).toNumber();
+  const target = toDecimal(targetAmount).toNumber();
+  const daysRemaining = Math.max(1, totalDaysInPeriod - daysElapsed + 1);
+  const expectedPacePct = totalDaysInPeriod > 0
+    ? Math.min(100, Math.round((daysElapsed / totalDaysInPeriod) * 100))
+    : 100;
+
+  const percentage = target > 0
+    ? Math.round((actual / target) * 100)
+    : 0;
+
+  const displayPercentage = Math.min(100, Math.max(0, percentage));
+  const remaining = Math.max(0, target - actual);
+  const dailyRate = daysRemaining > 0 ? remaining / daysRemaining : 0;
+
+  const periodLabel = period === 'WEEKLY' ? 'This Week' : period === 'MONTHLY' ? 'This Month' : 'This Year';
+
+  let statusLabel = '';
+  let statusBadge: 'rose' | 'amber' | 'emerald' | 'cyan' | 'indigo' = 'emerald';
+
+  if (isIncome) {
+    if (actual >= target && target > 0) {
+      statusLabel = '🎉 Target Achieved!';
+      statusBadge = 'emerald';
+    } else if (percentage >= expectedPacePct + 10) {
+      statusLabel = '🚀 Ahead of Target';
+      statusBadge = 'cyan';
+    } else if (percentage >= Math.max(0, expectedPacePct - 15)) {
+      statusLabel = '🎯 On Track';
+      statusBadge = 'emerald';
+    } else {
+      statusLabel = '⚡ Catch Up Needed';
+      statusBadge = 'amber';
+    }
+  } else {
+    // Expense Budget
+    if (actual > target && target > 0) {
+      statusLabel = '🚨 Over Budget';
+      statusBadge = 'rose';
+    } else if (percentage > expectedPacePct + 15) {
+      statusLabel = '⚡ Burning Fast';
+      statusBadge = 'amber';
+    } else if (actual === 0) {
+      statusLabel = '✨ 0 Spend Yet';
+      statusBadge = 'indigo';
+    } else {
+      statusLabel = '🟢 Safe Spend Pace';
+      statusBadge = 'emerald';
+    }
+  }
+
+  return {
+    period,
+    periodLabel,
+    isIncome,
+    actual,
+    target,
+    percentage,
+    displayPercentage,
+    remaining,
+    dailyRate,
+    expectedPacePct,
+    daysRemaining,
+    statusLabel,
+    statusBadge
+  };
+}
+
