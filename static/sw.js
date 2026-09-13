@@ -1,4 +1,4 @@
-const CACHE_NAME = 'finatrack-v1';
+const CACHE_NAME = 'finatrack-v10';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/static/icons/icon-192.png',
@@ -7,11 +7,6 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
   self.skipWaiting();
 });
 
@@ -20,9 +15,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
+          return caches.delete(key);
         })
       );
     })
@@ -37,9 +30,7 @@ self.addEventListener('fetch', (event) => {
 
   // For navigation requests (pages)
   if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req).catch(() => caches.match(req).then((res) => res || caches.match('/rider')))
-    );
+    event.respondWith(fetch(req));
     return;
   }
 
