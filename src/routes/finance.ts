@@ -281,30 +281,69 @@ financeRoutes.post('/goals/create', async (c) => {
 });
 
 financeRoutes.post('/goals/fund/:id', async (c) => {
-  const { supabase } = await getRequestContext(c);
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const accountId = String(body['account_id'] || '').trim();
 
   const { data: goal } = await supabase.from('goals').select('*').eq('id', id).single();
-  if (goal) {
+  if (goal && rawAmt > 0) {
     const newAmt = toDecimal(goal.current_amount).plus(rawAmt).toNumber();
     await supabase.from('goals').update({ current_amount: newAmt }).eq('id', id);
+
+    if (accountId) {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const newBal = toDecimal(acc.balance).minus(rawAmt).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: accountId,
+          transaction_type: 'EXPENSE',
+          category: 'Savings & Goals',
+          amount: rawAmt,
+          date: new Date().toISOString().slice(0, 10),
+          description: `Funded Goal: ${goal.title}`,
+        });
+      }
+    }
   }
 
   return c.redirect('/?toast=Funds+deposited+to+goal', 303);
 });
 
 financeRoutes.post('/goals/withdraw/:id', async (c) => {
-  const { supabase } = await getRequestContext(c);
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const accountId = String(body['account_id'] || '').trim();
 
   const { data: goal } = await supabase.from('goals').select('*').eq('id', id).single();
-  if (goal) {
+  if (goal && rawAmt > 0) {
+    const actualWithdraw = Math.min(Number(goal.current_amount || 0), rawAmt);
     const newAmt = Decimal.max(0, toDecimal(goal.current_amount).minus(rawAmt)).toNumber();
     await supabase.from('goals').update({ current_amount: newAmt }).eq('id', id);
+
+    if (accountId && actualWithdraw > 0) {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const newBal = toDecimal(acc.balance).plus(actualWithdraw).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: accountId,
+          transaction_type: 'INCOME',
+          category: 'Savings & Goals',
+          amount: actualWithdraw,
+          date: new Date().toISOString().slice(0, 10),
+          description: `Withdrawal from Goal: ${goal.title}`,
+        });
+      }
+    }
   }
 
   return c.redirect('/?toast=Funds+withdrawn+from+goal', 303);

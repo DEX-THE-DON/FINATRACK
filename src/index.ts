@@ -152,6 +152,26 @@ app.get('/', async (c) => {
     debts = debtRes.data || [];
     bills = billRes.data || [];
     allocationRules = ruleRes.data || [];
+
+    if (goals.length === 0) {
+      const defaultToInsert = [
+        { user_id: userId, title: '55" 4K Smart TV', target_amount: 45000, current_amount: 12500, target_date: '2026-12-31' },
+        { user_id: userId, title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 8000, target_date: '2026-11-30' },
+        { user_id: userId, title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 15000, target_date: '2027-01-31' }
+      ];
+      try {
+        const { data: insertedGoals } = await supabase.from('goals').insert(defaultToInsert).select();
+        goals = (insertedGoals && insertedGoals.length > 0) ? insertedGoals : defaultToInsert.map((g, idx) => ({ id: `default-goal-${idx + 1}`, ...g }));
+      } catch (e) {
+        goals = defaultToInsert.map((g, idx) => ({ id: `default-goal-${idx + 1}`, ...g }));
+      }
+    }
+  } else {
+    goals = [
+      { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 12500, target_date: '2026-12-31' },
+      { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 8000, target_date: '2026-11-30' },
+      { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 15000, target_date: '2027-01-31' }
+    ];
   }
 
   const DEFAULT_RULES = [

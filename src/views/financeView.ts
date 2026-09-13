@@ -26,6 +26,24 @@ export function renderFinanceDashboard(data: any): string {
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  const getGoalIcon = (title: string): string => {
+    const t = (title || '').toLowerCase();
+    if (t.includes('tv') || t.includes('television') || t.includes('screen')) return '📺';
+    if (t.includes('cooker') || t.includes('gas') || t.includes('oven') || t.includes('kitchen') || t.includes('stove')) return '🍳';
+    if (t.includes('seat') || t.includes('sofa') || t.includes('couch') || t.includes('furniture') || t.includes('chair') || t.includes('table')) return '🛋️';
+    if (t.includes('fridge') || t.includes('refrigerator')) return '🧊';
+    if (t.includes('bike') || t.includes('boda') || t.includes('motorcycle') || t.includes('car')) return '🛵';
+    if (t.includes('laptop') || t.includes('macbook') || t.includes('computer') || t.includes('phone') || t.includes('iphone')) return '💻';
+    if (t.includes('house') || t.includes('rent') || t.includes('plot') || t.includes('land')) return '🏠';
+    if (t.includes('emergency') || t.includes('fund')) return '🛡️';
+    if (t.includes('vacation') || t.includes('trip') || t.includes('holiday')) return '✈️';
+    return '🎯';
+  };
+
+  const totalGoalsTarget = (goals || []).reduce((sum: number, g: any) => sum + Number(g.target_amount || 0), 0);
+  const totalGoalsSaved = (goals || []).reduce((sum: number, g: any) => sum + Number(g.current_amount || 0), 0);
+  const overallGoalsPercent = totalGoalsTarget > 0 ? Math.min(100, Math.round((totalGoalsSaved / totalGoalsTarget) * 100)) : 0;
+
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -226,6 +244,18 @@ export function renderFinanceDashboard(data: any): string {
                 balInput.value = (usdVal * USD_TO_KES).toFixed(2);
             }
             return true;
+        }
+
+        function toggleGoalForm(id, type) {
+            const fundDiv = document.getElementById('goal-fund-' + id);
+            const withdrawDiv = document.getElementById('goal-withdraw-' + id);
+            if (type === 'fund') {
+                if (withdrawDiv) withdrawDiv.classList.add('hidden');
+                if (fundDiv) fundDiv.classList.toggle('hidden');
+            } else if (type === 'withdraw') {
+                if (fundDiv) fundDiv.classList.add('hidden');
+                if (withdrawDiv) withdrawDiv.classList.toggle('hidden');
+            }
         }
 
         function toggleDarkMode() {
@@ -490,6 +520,9 @@ export function renderFinanceDashboard(data: any): string {
             <button onclick="pasteSampleMpesa('batch'); document.getElementById('mpesa-card')?.scrollIntoView({behavior: 'smooth'});" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gray-900 dark:bg-gray-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
                 <span>📲 Parse M-Pesa</span>
             </button>
+            <button onclick="document.getElementById('goals-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-purple-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🎯 Goals</span>
+            </button>
             <button onclick="document.getElementById('waterfall-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🌊 Auto-Split</span>
             </button>
@@ -651,6 +684,188 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                 </div>
             </form>
+        </div>
+
+        <!-- 🎯 Savings Goals & Asset Targets Card -->
+        <div id="goals-card" class="bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 space-y-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl shadow-xs">
+                        🎯
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>Savings Goals & Purchase Targets</span>
+                            <span class="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">${goals.length} Goals Active</span>
+                        </h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Track your progress towards planned assets (Smart TV, Gas Cooker, Living Room Seats) and milestone purchases.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <div class="text-right hidden sm:block">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase">Total Saved</p>
+                        <p class="text-sm font-black text-indigo-600 dark:text-indigo-400 convertible-amount" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)} <span class="text-xs font-semibold text-gray-400">/ <span class="convertible-amount" data-kes="${totalGoalsTarget}">${formatKes(totalGoalsTarget)}</span></span></p>
+                    </div>
+                    <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                        <span>➕ New Goal</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Total Goals Progress Bar -->
+            <div class="bg-white dark:bg-gray-900 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5 w-full sm:w-auto">
+                    <span class="text-xs font-black text-indigo-700 dark:text-indigo-300">Overall Milestone:</span>
+                    <span class="text-xs font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">${overallGoalsPercent}% Complete</span>
+                </div>
+                <div class="w-full sm:flex-1 bg-gray-100 dark:bg-gray-800 h-2.5 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" style="width: ${overallGoalsPercent}%;"></div>
+                </div>
+                <div class="text-xs text-gray-500 font-semibold text-right w-full sm:w-auto">
+                    <span class="convertible-amount font-bold text-indigo-600 dark:text-indigo-400" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)}</span> of <span class="convertible-amount" data-kes="${totalGoalsTarget}">${formatKes(totalGoalsTarget)}</span>
+                </div>
+            </div>
+
+            <!-- Create New Goal Collapsible Form -->
+            <div id="new-goal-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-md space-y-3">
+                <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>➕ Set a New Savings Target</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
+                </div>
+                <form action="/goals/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="sm:col-span-2 lg:col-span-1">
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Goal Title</label>
+                        <input type="text" name="title" placeholder="e.g. 55&quot; 4K Smart TV, Sofa Seat, Gas Cooker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="target_amount" placeholder="45000" data-placeholder-base="45000" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Deadline (Optional)</label>
+                        <input type="date" name="target_date" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold">
+                    </div>
+                    <div class="flex flex-col justify-end space-y-2">
+                        <label class="flex items-center space-x-2 text-xs text-gray-600 dark:text-gray-300">
+                            <input type="checkbox" name="add_to_split" value="1" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <span>Add 10% Auto-Split Rule</span>
+                        </label>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl text-xs transition shadow-xs active:scale-95">
+                            Create Goal Target
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Goals Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${goals.length > 0 ? goals.map((g: any) => {
+                    const target = Number(g.target_amount) || 0;
+                    const current = Number(g.current_amount) || 0;
+                    const percent = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+                    const remaining = Math.max(0, target - current);
+                    const icon = getGoalIcon(g.title);
+
+                    return `
+                    <div class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-xs space-y-3 flex flex-col justify-between">
+                        <div class="space-y-2.5">
+                            <div class="flex justify-between items-start">
+                                <div class="flex items-center space-x-2.5">
+                                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl shadow-xs shrink-0">
+                                        ${icon}
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug">${g.title}</h3>
+                                        ${g.target_date ? `<span class="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">📅 ${g.target_date}</span>` : '<span class="text-[10px] text-gray-400">Open Goal</span>'}
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <form action="/goals/delete/${g.id}" method="POST" onsubmit="return confirm('Delete this savings goal?');">
+                                        <button type="submit" title="Delete Goal" class="text-gray-400 hover:text-rose-500 p-1 text-xs transition">✕</button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-xs items-baseline">
+                                    <span class="text-xs font-black text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${current}">${formatKes(current)}</span>
+                                    <span class="text-[11px] font-bold text-gray-400 convertible-amount" data-kes="${target}">Target: ${formatKes(target)}</span>
+                                </div>
+                                <div class="w-full bg-gray-100 dark:bg-gray-800 h-2.5 rounded-full overflow-hidden">
+                                    <div class="h-full rounded-full transition-all duration-500 ${percent >= 100 ? 'bg-gradient-to-r from-emerald-500 to-green-400' : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500'}" style="width: ${percent}%;"></div>
+                                </div>
+                                <div class="flex justify-between text-[11px] text-gray-400 font-medium">
+                                    <span class="font-bold ${percent >= 100 ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-indigo-600 dark:text-indigo-400'}">${percent}% Completed</span>
+                                    <span>Remaining: <strong class="convertible-amount font-bold text-gray-700 dark:text-gray-300" data-kes="${remaining}">${formatKes(remaining)}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons & Drawers -->
+                        <div class="space-y-2 pt-1 border-t dark:border-gray-800">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" onclick="toggleGoalForm('${g.id}', 'fund')" class="w-full py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-lg border border-emerald-200 dark:border-emerald-800/60 transition active:scale-95 flex items-center justify-center gap-1">
+                                    <span>➕ Add Funds</span>
+                                </button>
+                                <button type="button" onclick="toggleGoalForm('${g.id}', 'withdraw')" class="w-full py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-lg border border-gray-200 dark:border-gray-700 transition active:scale-95 flex items-center justify-center gap-1">
+                                    <span>➖ Withdraw</span>
+                                </button>
+                            </div>
+
+                            <!-- Inline Deposit Drawer -->
+                            <div id="goal-fund-${g.id}" class="hidden p-3 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl space-y-2">
+                                <form action="/goals/fund/${g.id}" method="POST" class="space-y-2">
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-emerald-900 dark:text-emerald-200 mb-0.5">Deposit Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                                        <input type="number" step="any" inputmode="decimal" name="amount" placeholder="500" data-placeholder-base="500" class="w-full p-1.5 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-900 dark:text-white rounded-lg text-xs font-bold convertible-placeholder" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-emerald-900 dark:text-emerald-200 mb-0.5">Deduct from Account (Optional)</label>
+                                        <select name="account_id" class="w-full p-1.5 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-900 dark:text-white rounded-lg text-xs font-medium">
+                                            <option value="">-- No Account Deduction (Direct) --</option>
+                                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="flex gap-2 pt-1">
+                                        <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95">Confirm Deposit</button>
+                                        <button type="button" onclick="toggleGoalForm('${g.id}', 'fund')" class="px-2.5 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-lg text-xs">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <!-- Inline Withdraw Drawer -->
+                            <div id="goal-withdraw-${g.id}" class="hidden p-3 bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl space-y-2">
+                                <form action="/goals/withdraw/${g.id}" method="POST" class="space-y-2">
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-rose-900 dark:text-rose-200 mb-0.5">Withdraw Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                                        <input type="number" step="any" inputmode="decimal" name="amount" max="${current}" placeholder="500" data-placeholder-base="500" class="w-full p-1.5 border border-rose-300 dark:border-rose-700 dark:bg-gray-900 dark:text-white rounded-lg text-xs font-bold convertible-placeholder" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-rose-900 dark:text-rose-200 mb-0.5">Deposit to Account (Optional)</label>
+                                        <select name="account_id" class="w-full p-1.5 border border-rose-300 dark:border-rose-700 dark:bg-gray-900 dark:text-white rounded-lg text-xs font-medium">
+                                            <option value="">-- Direct Cash Withdrawal --</option>
+                                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="flex gap-2 pt-1">
+                                        <button type="submit" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95">Confirm Withdrawal</button>
+                                        <button type="button" onclick="toggleGoalForm('${g.id}', 'withdraw')" class="px-2.5 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-lg text-xs">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('') : `
+                <div class="md:col-span-3 p-6 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 space-y-2">
+                    <p class="text-3xl">🎯</p>
+                    <h4 class="font-bold text-gray-700 dark:text-gray-200">No Savings Goals Active</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Click "➕ New Goal" above to create savings goals for your TV, Gas Cooker, Living Room Seats, etc.!</p>
+                </div>`}
+            </div>
         </div>
 
         <!-- 📈 MMF & Passive Yields Section -->
