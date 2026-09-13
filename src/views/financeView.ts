@@ -28,6 +28,46 @@ export function renderFinanceDashboard(data: any): string {
     yearly_expenses = 0.0,
     net_savings = 0.0,
     total_monthly_passive_income = 0.0,
+    runway_status = {
+      liquidBalance: 0,
+      monthlyBurn: 25000,
+      months: 0.0,
+      displayMonths: '0.0 mo',
+      goalMonths: 6.0,
+      percentageOfGoal: 0,
+      statusLabel: '🛡️ Building Runway',
+      statusBadge: 'amber',
+      statusColor: 'text-amber-600 dark:text-amber-400',
+      advice: 'Allocate daily waterfall savings into high-yield MMFs to build a 3-6 month safety cushion.',
+    },
+    health_score = {
+      totalScore: 85,
+      grade: 'A',
+      tierLabel: '🛡️ Robust Financial Shield',
+      badgeClass: 'bg-emerald-600 text-white font-black shadow-sm',
+      pillarScores: {
+        runway: { score: 20, max: 25, label: 'Emergency Runway', detail: '3.0 Months' },
+        debt: { score: 25, max: 25, label: 'Debt Health', detail: '0 Debt' },
+        incomeTarget: { score: 20, max: 25, label: 'Income Target Pace', detail: '80% Met' },
+        budgetDiscipline: { score: 20, max: 25, label: 'Budget Discipline', detail: '75% Burn' },
+      },
+      recommendations: ['Keep compounding passive yields and stay within monthly expense limits.'],
+    },
+    ev_roi_stats = {
+      totalKm: 0,
+      evKm: 0,
+      petrolKm: 0,
+      actualSpent: 0,
+      petrolEquivalentCost: 0,
+      netSavingsKes: 0,
+      costPerKmActual: 0,
+      costPerKmPetrol: 4.50,
+      costPerKmEv: 1.80,
+      co2SavedKg: 0,
+      savingsPercentage: 0,
+    },
+    unified_timeline = [],
+    category_breakdown = [],
     usd_to_kes = 129.0,
     current_currency = 'Ksh',
     toast = '',
@@ -54,6 +94,18 @@ export function renderFinanceDashboard(data: any): string {
       default:
         return 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800';
     }
+  };
+
+  const getCategoryTheme = (cat: string) => {
+    const c = (cat || '').toLowerCase();
+    if (c.includes('fuel') || c.includes('petrol')) return { bg: 'bg-amber-500', text: 'text-amber-500', hex: '#f59e0b', icon: '⛽' };
+    if (c.includes('ev') || c.includes('battery') || c.includes('swap')) return { bg: 'bg-cyan-500', text: 'text-cyan-500', hex: '#06b6d4', icon: '⚡' };
+    if (c.includes('food') || c.includes('grocer')) return { bg: 'bg-emerald-500', text: 'text-emerald-500', hex: '#10b981', icon: '🛒' };
+    if (c.includes('utilit') || c.includes('bill') || c.includes('kplc')) return { bg: 'bg-blue-500', text: 'text-blue-500', hex: '#3b82f6', icon: '💡' };
+    if (c.includes('maint') || c.includes('bike') || c.includes('repair')) return { bg: 'bg-purple-500', text: 'text-purple-500', hex: '#a855f7', icon: '🔧' };
+    if (c.includes('debt') || c.includes('loan')) return { bg: 'bg-rose-500', text: 'text-rose-500', hex: '#f43f5e', icon: '💳' };
+    if (c.includes('rider') || c.includes('boda') || c.includes('deliver')) return { bg: 'bg-teal-500', text: 'text-teal-500', hex: '#14b8a6', icon: '🛵' };
+    return { bg: 'bg-indigo-500', text: 'text-indigo-500', hex: '#6366f1', icon: '🏠' };
   };
 
   const getGoalIcon = (title: string): string => {
@@ -598,6 +650,9 @@ export function renderFinanceDashboard(data: any): string {
                 </div>
             </div>
             <div class="flex items-center space-x-2 text-xs">
+                <a href="/finance/statement" target="_blank" class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition active:scale-95 border border-slate-200 dark:border-gray-700">
+                    <span>📄 SACCO / PDF Statement</span>
+                </a>
                 ${is_logged_in ? `
                 <span class="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 font-bold rounded-xl flex items-center gap-1.5 shadow-2xs">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -613,8 +668,17 @@ export function renderFinanceDashboard(data: any): string {
 
         <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
         <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <button onclick="document.getElementById('runway-score-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🛡️ Runway (${runway_status.displayMonths})</span>
+            </button>
             <button onclick="document.getElementById('targets-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🎯 Targets</span>
+            </button>
+            <button onclick="document.getElementById('timeline-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🗓️ Timeline (${unified_timeline.length})</span>
+            </button>
+            <button onclick="document.getElementById('expense-breakdown-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
+                <span>📊 Chart</span>
             </button>
             <button onclick="document.getElementById('tx-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>➕ Add Tx</span>
@@ -666,7 +730,307 @@ export function renderFinanceDashboard(data: any): string {
             </div>
         </div>
 
-        <!-- 🎯 Targets & Budget Pace Checker Card -->
+        <!-- 🛡️ & 🏆 Emergency Runway & Financial Health Score Twin Cards -->
+        <div id="runway-score-card" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <!-- 🛡️ Emergency Fund Runway Meter ("Months of Freedom") -->
+            <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-indigo-800/50 space-y-4">
+                <div class="flex items-center justify-between border-b border-indigo-800/60 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center text-xl shadow-md shrink-0">
+                            🛡️
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span>Emergency Fund Runway</span>
+                                <span class="text-[10px] ${getBadgeStyles(runway_status.statusBadge)} font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${runway_status.statusLabel}</span>
+                            </h2>
+                            <p class="text-xs text-indigo-200">Months of Freedom you can survive without new income</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-2xl font-black text-amber-400">${runway_status.displayMonths}</span>
+                        <p class="text-[10px] text-gray-400">Target: 6.0 mo</p>
+                    </div>
+                </div>
+
+                <!-- Progress Meter -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-300 font-semibold">Freedom Cushion Progress</span>
+                        <span class="font-extrabold text-amber-300">${runway_status.percentageOfGoal}% of 6-mo goal</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-indigo-900/80 p-0.5">
+                        <div class="h-full rounded-full transition-all duration-500 ${runway_status.months >= 3 ? 'bg-gradient-to-r from-amber-500 to-emerald-500' : 'bg-gradient-to-r from-rose-500 to-amber-500'}" style="width: ${Math.min(100, Math.max(2, runway_status.percentageOfGoal))}%"></div>
+                    </div>
+                </div>
+
+                <!-- Stats Breakdown Row -->
+                <div class="grid grid-cols-2 gap-3 pt-1">
+                    <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
+                        <p class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Liquid Reserves</p>
+                        <p class="text-base font-bold text-emerald-400 convertible-amount" data-kes="${runway_status.liquidBalance}">${formatKes(runway_status.liquidBalance)}</p>
+                        <p class="text-[10px] text-gray-500">M-Pesa, Cash & MMF</p>
+                    </div>
+                    <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
+                        <p class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Monthly Burn Rate</p>
+                        <p class="text-base font-bold text-rose-400 convertible-amount" data-kes="${runway_status.monthlyBurn}">${formatKes(runway_status.monthlyBurn)}</p>
+                        <p class="text-[10px] text-gray-500">Essential living expenses</p>
+                    </div>
+                </div>
+
+                <!-- Actionable Advice -->
+                <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5">
+                    <span class="text-base shrink-0">💡</span>
+                    <p class="text-xs text-amber-200 leading-relaxed">${runway_status.advice}</p>
+                </div>
+            </div>
+
+            <!-- 🏆 Financial Freedom & Health Score (0-100) -->
+            <div class="bg-gradient-to-br from-slate-900 via-gray-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-gray-800 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                            🏆
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span>Financial Health Score</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full ${health_score.badgeClass}">${health_score.grade} Grade</span>
+                            </h2>
+                            <p class="text-xs text-gray-400">${health_score.tierLabel}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-3xl font-black ${health_score.totalScore >= 75 ? 'text-emerald-400' : health_score.totalScore >= 50 ? 'text-amber-400' : 'text-rose-400'}">${health_score.totalScore}</span>
+                        <span class="text-xs text-gray-400">/ 100</span>
+                    </div>
+                </div>
+
+                <!-- 4 Pillars Breakdown -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-gray-300 font-semibold">🛡️ Runway</span>
+                            <span class="font-bold text-emerald-400">${health_score.pillarScores.runway.score}/25</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-emerald-500 rounded-full" style="width: ${(health_score.pillarScores.runway.score / 25) * 100}%"></div>
+                        </div>
+                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.runway.detail}</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-gray-300 font-semibold">💳 Debt Health</span>
+                            <span class="font-bold text-emerald-400">${health_score.pillarScores.debt.score}/25</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-cyan-500 rounded-full" style="width: ${(health_score.pillarScores.debt.score / 25) * 100}%"></div>
+                        </div>
+                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.debt.detail}</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-gray-300 font-semibold">🎯 Target Pace</span>
+                            <span class="font-bold text-emerald-400">${health_score.pillarScores.incomeTarget.score}/25</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-500 rounded-full" style="width: ${(health_score.pillarScores.incomeTarget.score / 25) * 100}%"></div>
+                        </div>
+                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.incomeTarget.detail}</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-gray-300 font-semibold">⚖️ Discipline</span>
+                            <span class="font-bold text-emerald-400">${health_score.pillarScores.budgetDiscipline.score}/25</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-purple-500 rounded-full" style="width: ${(health_score.pillarScores.budgetDiscipline.score / 25) * 100}%"></div>
+                        </div>
+                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.budgetDiscipline.detail}</p>
+                    </div>
+                </div>
+
+                <!-- Strategic Recommendations -->
+                <div class="pt-1">
+                    ${(health_score.recommendations || []).map((rec: string) => `
+                    <p class="text-xs text-gray-300 flex items-center gap-1.5"><span class="text-emerald-400 font-bold">✓</span> ${rec}</p>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+
+        <!-- ⚡ EV vs. Petrol Cost-Savings & ROI Comparator Banner -->
+        <div id="ev-savings-card" class="bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-teal-800/50 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-teal-800/60 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                        ⚡
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <span>EV vs. Petrol Cost-Savings & ROI Comparator</span>
+                            <span class="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${ev_roi_stats.savingsPercentage}% Cheaper</span>
+                        </h2>
+                        <p class="text-xs text-teal-200">Real-time savings analytics based on your logged rider shifts and battery swaps</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="/rider" class="px-3 py-1.5 bg-teal-800/60 hover:bg-teal-700 text-teal-200 hover:text-white rounded-xl text-xs font-bold border border-teal-700/60 transition active:scale-95">
+                        🛵 View Rider Shifts
+                    </a>
+                </div>
+            </div>
+
+            <!-- Savings Metrics Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Total Distance</p>
+                    <p class="text-xl font-black text-white mt-0.5">${formatNum(ev_roi_stats.totalKm)} <span class="text-xs font-normal text-gray-400">km</span></p>
+                    <p class="text-[10px] text-gray-400">EV: ${formatNum(ev_roi_stats.evKm)} km • Petrol: ${formatNum(ev_roi_stats.petrolKm)} km</p>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Net Shillings Saved</p>
+                    <p class="text-xl font-black text-emerald-400 mt-0.5 convertible-amount" data-kes="${ev_roi_stats.netSavingsKes}">${formatKes(ev_roi_stats.netSavingsKes)}</p>
+                    <p class="text-[10px] text-emerald-300">vs. pure petrol baseline</p>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Unit Running Cost</p>
+                    <p class="text-xl font-black text-cyan-300 mt-0.5">Ksh ${ev_roi_stats.costPerKmEv.toFixed(2)} <span class="text-xs font-normal text-gray-400">/ km</span></p>
+                    <p class="text-[10px] text-gray-400">Petrol avg: Ksh ${ev_roi_stats.costPerKmPetrol.toFixed(2)}/km</p>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">🍃 CO2 Offset</p>
+                    <p class="text-xl font-black text-emerald-300 mt-0.5">${formatNum(ev_roi_stats.co2SavedKg)} <span class="text-xs font-normal text-gray-400">kg</span></p>
+                    <p class="text-[10px] text-gray-400">Clean energy reduction</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📊 & 🗓️ Expense Breakdown & Unified Deadlines Agenda Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <!-- 📊 Expense Category Breakdown & Distribution Card -->
+            <div id="expense-breakdown-card" class="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b dark:border-gray-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
+                            📊
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <span>Monthly Expense Distribution</span>
+                            </h2>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Category spending breakdown & proportions</p>
+                        </div>
+                    </div>
+                    <span class="text-sm font-black text-rose-600 dark:text-rose-400 convertible-amount" data-kes="${monthly_expenses}">${formatKes(monthly_expenses)}</span>
+                </div>
+
+                ${category_breakdown.length === 0 ? `
+                <div class="text-center py-8 text-gray-400 text-xs">
+                    <p class="text-2xl mb-2">🛍️</p>
+                    <p class="font-bold">No expenses logged yet this month.</p>
+                    <p class="mt-1">Add transactions or import M-Pesa statements to see your spending distribution.</p>
+                </div>
+                ` : `
+                <!-- Stacked Distribution Bar -->
+                <div class="w-full h-3.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden flex gap-0.5 p-0.5">
+                    ${category_breakdown.map((item: any) => {
+                        const theme = getCategoryTheme(item.category);
+                        return `<div class="h-full rounded-xs transition-all duration-300 ${theme.bg}" style="width: ${Math.max(3, item.percentage)}%" title="${item.category}: ${item.percentage}% (${formatKes(item.amount)})"></div>`;
+                    }).join('')}
+                </div>
+
+                <!-- Breakdown List -->
+                <div class="space-y-2 max-h-72 overflow-y-auto no-scrollbar pt-1">
+                    ${category_breakdown.map((item: any) => {
+                        const theme = getCategoryTheme(item.category);
+                        return `
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-xs">
+                            <div class="flex items-center space-x-2.5">
+                                <span class="w-7 h-7 rounded-lg ${theme.bg} text-white flex items-center justify-center text-sm shrink-0 shadow-xs">${theme.icon}</span>
+                                <div>
+                                    <p class="font-bold text-gray-900 dark:text-gray-100">${item.category}</p>
+                                    <p class="text-[10px] text-gray-400">${item.percentage}% of monthly spend</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-black text-gray-900 dark:text-white convertible-amount" data-kes="${item.amount}">${formatKes(item.amount)}</p>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+                `}
+            </div>
+
+            <!-- 🗓️ Unified Upcoming Deadlines & Renewals Timeline -->
+            <div id="timeline-card" class="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b dark:border-gray-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
+                            🗓️
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <span>Upcoming Deadlines & Renewals</span>
+                                ${dangerCount > 0 ? `<span class="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] rounded-full animate-pulse border border-rose-300 dark:border-rose-800">🚨 ${dangerCount} Urgent</span>` : ''}
+                            </h2>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Unified agenda: loans, bills & vehicle compliance</p>
+                        </div>
+                    </div>
+                </div>
+
+                ${unified_timeline.length === 0 ? `
+                <div class="text-center py-8 text-gray-400 text-xs">
+                    <p class="text-2xl mb-2">✨</p>
+                    <p class="font-bold">No active deadlines pending.</p>
+                    <p class="mt-1">Add loan deadlines, recurring bills, or vehicle compliance to track them here.</p>
+                </div>
+                ` : `
+                <div class="space-y-2.5 max-h-72 overflow-y-auto no-scrollbar">
+                    ${unified_timeline.map((item: any) => {
+                        const isOverdue = item.urgencyStatus === 'OVERDUE';
+                        const isDanger = item.urgencyStatus === 'DANGER';
+                        const badgeStyle = isOverdue 
+                            ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                            : isDanger 
+                                ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                                : 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800';
+
+                        return `
+                        <div class="p-3 rounded-xl border ${isDanger || isOverdue ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20' : 'border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40'} flex items-center justify-between gap-3 text-xs">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 rounded-lg ${isOverdue ? 'bg-rose-600' : isDanger ? 'bg-amber-600' : 'bg-indigo-600'} text-white flex items-center justify-center text-sm shrink-0">
+                                    ${item.type === 'DEBT_PAYMENT' ? '💳' : item.type === 'BILL' ? '⚡' : '🛵'}
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <p class="font-bold text-gray-900 dark:text-gray-100">${item.title}</p>
+                                        <span class="text-[9px] px-1.5 py-0.2 rounded-md font-bold ${badgeStyle}">${item.typeLabel}</span>
+                                    </div>
+                                    <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                        📅 Due: <strong>${item.dueDate}</strong> • 
+                                        <span class="${isOverdue ? 'text-rose-600 dark:text-rose-400 font-extrabold' : isDanger ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-gray-500'}">
+                                            ${item.daysRemaining < 0 ? `🚨 ${Math.abs(item.daysRemaining)} days overdue!` : item.daysRemaining === 0 ? '🚨 Due TODAY!' : `⏳ in ${item.daysRemaining} days`}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="text-right shrink-0">
+                                ${item.amount !== undefined ? `<p class="font-black text-gray-900 dark:text-white convertible-amount" data-kes="${item.amount}">${formatKes(item.amount)}</p>` : ''}
+                                <a href="${item.actionLink}" class="inline-block mt-1 text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold">View →</a>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+                `}
+            </div>
+        </div>
         <div id="targets-card" class="bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 p-5 sm:p-6 rounded-2xl text-white shadow-lg border border-indigo-900/60 space-y-6">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-800/60 pb-4">
                 <div class="flex items-center space-x-3">

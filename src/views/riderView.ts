@@ -7,6 +7,19 @@ export function renderRiderDashboard(data: any): string {
     maintenance_schedules = [],
     compliance_deadlines = [],
     bike_financings = [],
+    ev_roi_stats = {
+      totalKm: 0,
+      evKm: 0,
+      petrolKm: 0,
+      actualSpent: 0,
+      petrolEquivalentCost: 0,
+      netSavingsKes: 0,
+      costPerKmActual: 0,
+      costPerKmPetrol: 4.50,
+      costPerKmEv: 1.80,
+      co2SavedKg: 0,
+      savingsPercentage: 0,
+    },
     allocation_rules = [],
     accounts = [],
     toast = '',
@@ -426,6 +439,10 @@ export function renderRiderDashboard(data: any): string {
                     <span class="sm:hidden">Install</span>
                 </button>
 
+                <a href="/finance/statement" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
+                    <span>📄 <span class="hidden md:inline">SACCO Statement</span></span>
+                </a>
+
                 <a href="/" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
                     <span>⚡ <span class="hidden md:inline">Finance Freedom Hub</span></span>
                 </a>
@@ -602,6 +619,51 @@ export function renderRiderDashboard(data: any): string {
                     <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">🛵 No vehicles in your fleet yet. Fill the registration form above to add your first motorbike or electric EV.</p>
                 </div>
                 `}
+            </div>
+        </div>
+
+        <!-- ⚡ EV vs. Petrol Cost-Savings & ROI Comparator Banner -->
+        <div id="ev-savings-card" class="bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-6 rounded-3xl text-white shadow-lg border border-teal-800/50 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-teal-800/60 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                        ⚡
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <span>EV vs. Petrol Cost-Savings & ROI Comparator</span>
+                            <span class="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${ev_roi_stats.savingsPercentage}% Cheaper</span>
+                        </h2>
+                        <p class="text-xs text-teal-200">Real-time savings comparing actual battery swap / fuel spend against petrol baseline</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Savings Metrics Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Total Distance</p>
+                    <p class="text-xl font-black text-white mt-0.5">${formatNum(ev_roi_stats.totalKm)} <span class="text-xs font-normal text-gray-400">km</span></p>
+                    <p class="text-[10px] text-gray-400">EV: ${formatNum(ev_roi_stats.evKm)} km • Petrol: ${formatNum(ev_roi_stats.petrolKm)} km</p>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Net Shillings Saved</p>
+                    <p class="text-xl font-black text-emerald-400 mt-0.5 convertible-amount" data-kes="${ev_roi_stats.netSavingsKes}">${formatKes(ev_roi_stats.netSavingsKes)}</p>
+                    <p class="text-[10px] text-emerald-300">vs. pure petrol baseline</p>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Unit Running Cost</p>
+                    <p class="text-xl font-black text-cyan-300 mt-0.5">Ksh ${ev_roi_stats.costPerKmEv.toFixed(2)} <span class="text-xs font-normal text-gray-400">/ km</span></p>
+                    <p class="text-[10px] text-gray-400">Petrol avg: Ksh ${ev_roi_stats.costPerKmPetrol.toFixed(2)}/km</p>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">🍃 CO2 Offset</p>
+                    <p class="text-xl font-black text-emerald-300 mt-0.5">${formatNum(ev_roi_stats.co2SavedKg)} <span class="text-xs font-normal text-gray-400">kg</span></p>
+                    <p class="text-[10px] text-gray-400">Clean energy reduction</p>
+                </div>
             </div>
         </div>
 

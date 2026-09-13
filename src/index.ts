@@ -17,7 +17,11 @@ import {
   calculateTargetPace,
   calculateDebtDeadline,
   calculateShiftHours,
-  formatTimeDisplay
+  formatTimeDisplay,
+  calculateEmergencyRunway,
+  calculateEvRoiSavings,
+  calculateFinancialHealthScore,
+  buildUnifiedTimeline
 } from './utils/math';
 import { Decimal } from 'decimal.js';
 
@@ -135,9 +139,11 @@ app.get('/', async (c) => {
   let debts: any[] = [];
   let bills: any[] = [];
   let allocationRules: any[] = [];
+  let riderLogs: any[] = [];
+  let complianceDeadlines: any[] = [];
 
   if (userId) {
-    const [accRes, txRes, goalRes, bgtRes, debtRes, billRes, ruleRes] = await Promise.all([
+    const [accRes, txRes, goalRes, bgtRes, debtRes, billRes, ruleRes, logRes, compRes] = await Promise.all([
       supabase.from('accounts').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
       supabase.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(50),
       supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
@@ -145,6 +151,8 @@ app.get('/', async (c) => {
       supabase.from('debts').select('*').eq('user_id', userId).order('due_at', { ascending: true }),
       supabase.from('bills').select('*').eq('user_id', userId).order('due_day', { ascending: true }),
       supabase.from('allocation_rules').select('*').eq('user_id', userId).order('percentage', { ascending: false }),
+      supabase.from('rider_logs').select('*').eq('user_id', userId),
+      supabase.from('compliance_deadlines').select('*').eq('user_id', userId),
     ]);
 
     accounts = accRes.data || [];
@@ -154,6 +162,8 @@ app.get('/', async (c) => {
     debts = debtRes.data || [];
     bills = billRes.data || [];
     allocationRules = ruleRes.data || [];
+    riderLogs = logRes?.data || [];
+    complianceDeadlines = compRes?.data || [];
 
     if (goals.length === 0) {
       const defaultToInsert = [
@@ -332,6 +342,55 @@ app.get('/', async (c) => {
     };
   });
 
+  // Emergency Runway Meter
+  const runwayStatus = calculateEmergencyRunway(totalBalance, monthlyExpenses, 25000);
+
+  // Total Debt Liabilities
+  const totalDebt = enrichedDebts.filter((d: any) => !d.is_settled).reduce((s: number, d: any) => s + Number(d.remaining || 0), 0);
+
+  // Financial Freedom & Health Score (0 - 100)
+  const healthScore = calculateFinancialHealthScore({
+    liquidBalance: totalBalance,
+    totalDebt,
+    monthlyIncome,
+    monthlyExpenses,
+    monthlyIncomeTarget: incomeTargets.monthly.target,
+    monthlyExpenseTarget: expenseTargets.monthly.target,
+    runwayMonths: runwayStatus.months,
+  });
+
+  // EV vs Petrol ROI Intelligence
+  const evRoiStats = calculateEvRoiSavings(riderLogs || []);
+
+  // Unified Deadlines & Renewals Timeline
+  const complianceItems = (complianceDeadlines || []).map((c: any) => ({
+    id: c.id,
+    name: c.item_type || c.name,
+    expiryDate: c.expiry_date,
+    costKes: Number(c.cost || 0),
+    notes: c.notes,
+  }));
+  const unifiedTimeline = buildUnifiedTimeline({
+    debts: enrichedDebts,
+    bills: bills || [],
+    complianceItems,
+  });
+
+  // Monthly Expense Category Breakdown for Chart
+  const categoryTotals: Record<string, number> = {};
+  for (const t of txs) {
+    if (t.transaction_type === 'EXPENSE' && t.date && t.date.startsWith(currentMonth)) {
+      const cat = t.category || 'Living Expenses';
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(t.amount || 0);
+    }
+  }
+  const categoryBreakdown = Object.entries(categoryTotals).map(([category, amount]) => ({
+    category,
+    name: category,
+    amount,
+    percentage: monthlyExpenses > 0 ? Math.round((amount / monthlyExpenses) * 100) : 0,
+  })).sort((a, b) => b.amount - a.amount);
+
   const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
 
   const html = renderFinanceDashboard({
@@ -342,6 +401,7 @@ app.get('/', async (c) => {
     income_targets: incomeTargets,
     expense_targets: expenseTargets,
     category_budgets: categoryBudgets,
+    category_breakdown: categoryBreakdown,
     debts: enrichedDebts,
     bills: bills || [],
     mmf_accounts: mmfAccounts,
@@ -355,6 +415,10 @@ app.get('/', async (c) => {
     yearly_expenses: yearlyExpenses,
     net_savings: monthlyIncome - monthlyExpenses,
     total_monthly_passive_income: totalMonthlyPassive.toFixed(2),
+    runway_status: runwayStatus,
+    health_score: healthScore,
+    ev_roi_stats: evRoiStats,
+    unified_timeline: unifiedTimeline,
     usd_to_kes: USD_TO_KES,
     current_currency: userCurrency,
     toast,
@@ -607,6 +671,7 @@ app.get('/rider', async (c) => {
     maintenance_schedules: maintenance || [],
     compliance_deadlines: compliance || [],
     bike_financings: financing || [],
+    ev_roi_stats: calculateEvRoiSavings(shiftLogs || []),
     allocation_rules: (allocationRules && allocationRules.length > 0) ? allocationRules : [
       { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
       { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },

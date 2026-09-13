@@ -84,6 +84,47 @@ console.assert(safeStatus.isDangerZone === false, '15 days should not be danger 
 
 console.log(`✅ Debt Danger Zones: Overdue='${overdueStatus.badgeLabel}', Danger='${dangerStatus.badgeLabel}', Safe='${safeStatus.badgeLabel}'`);
 
+// Test 7: Emergency Fund Runway Meter
+import { calculateEmergencyRunway } from './math';
+const runway1 = calculateEmergencyRunway(75000, 25000);
+console.assert(runway1.months === 3.0, `Runway months should be 3.0, got ${runway1.months}`);
+console.assert(runway1.percentageOfGoal === 50, `Runway % of goal should be 50%, got ${runway1.percentageOfGoal}%`);
+console.log(`✅ Emergency Fund Runway (75k liquid / 25k burn): ${runway1.months} months (${runway1.statusLabel})`);
+
+// Test 8: EV vs Petrol ROI Savings
+import { calculateEvRoiSavings } from './math';
+const sampleShifts = [
+  { distance_km: 120, bike_type: 'EV', battery_swap_cost: 250 },
+  { distance_km: 80, bike_type: 'PETROL', fuel_cost: 400 },
+];
+const evStats = calculateEvRoiSavings(sampleShifts, 4.5, 1.8);
+console.assert(evStats.totalKm === 200, `Total km should be 200, got ${evStats.totalKm}`);
+console.assert(evStats.actualSpent === 650, `Actual spend should be 650, got ${evStats.actualSpent}`);
+console.assert(evStats.netSavingsKes === 250, `Net savings should be 250 (900 petrol equiv - 650 actual), got ${evStats.netSavingsKes}`);
+console.log(`✅ EV vs Petrol Savings (200 km): Spent=${evStats.actualSpent} KES vs Petrol=${evStats.petrolEquivalentCost} KES (Saved ${evStats.netSavingsKes} KES)`);
+
+// Test 9: Financial Freedom & Health Score (0 - 100)
+import { calculateFinancialHealthScore } from './math';
+const health = calculateFinancialHealthScore({
+  liquidBalance: 60000,
+  totalDebt: 5000,
+  monthlyIncome: 65000,
+  monthlyExpenses: 20000,
+  runwayMonths: 3.0,
+});
+console.assert(health.totalScore >= 75, `Healthy score should be >= 75, got ${health.totalScore}`);
+console.log(`✅ Financial Health Score: ${health.totalScore}/100 (Grade ${health.grade} - ${health.tierLabel})`);
+
+// Test 10: Unified Upcoming Deadlines Timeline
+import { buildUnifiedTimeline } from './math';
+const timeline = buildUnifiedTimeline({
+  debts: [{ id: '1', person_name: 'Hustler Loan', debt_type: 'I_OWE', remaining: 2000, due_at: dangerDate }],
+  bills: [{ id: 'b1', title: 'KPLC Electricity', amount: 800, due_day: 20 }],
+  complianceItems: [{ id: 'c1', name: 'Comprehensive Bike Insurance', expiryDate: safeDate, costKes: 3500 }],
+});
+console.assert(timeline.length === 3, `Timeline should aggregate 3 items, got ${timeline.length}`);
+console.log(`✅ Unified Timeline: Aggregated ${timeline.length} items (First due: ${timeline[0].title} in ${timeline[0].daysRemaining}d)`);
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
 
 

@@ -5,9 +5,12 @@ import {
   calculateMonthlyYield,
   allocateWaterfallSplit,
   calculateBudgetPace,
-  formatMoney
+  formatMoney,
+  calculateEmergencyRunway,
+  calculateFinancialHealthScore
 } from '../utils/math';
 import { parseMultipleMpesaMessages } from '../utils/mpesa';
+import { renderFinancialStatement } from '../views/statementView';
 import { Decimal } from 'decimal.js';
 
 export const financeRoutes = new Hono<{ Bindings: AppEnv }>();
@@ -830,4 +833,63 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
 
   return c.redirect(`/?toast=Successfully+imported+${importedCount}+M-Pesa+transactions!`, 303);
 });
+
+// ------------------------------------------------------------------------------
+// 📄 1-CLICK PRINTABLE / PDF FINANCIAL STATEMENT
+// ------------------------------------------------------------------------------
+financeRoutes.get('/finance/statement', async (c) => {
+  const { supabase, userId, username } = await getRequestContext(c);
+
+  let accQuery = supabase.from('accounts').select('*').order('created_at', { ascending: true });
+  let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false });
+  let debtQuery = supabase.from('debts').select('*').order('due_at', { ascending: true });
+
+  if (userId) {
+    accQuery = accQuery.eq('user_id', userId);
+    txQuery = txQuery.eq('user_id', userId);
+    debtQuery = debtQuery.eq('user_id', userId);
+  }
+
+  const [accRes, txRes, debtRes] = await Promise.all([accQuery, txQuery, debtQuery]);
+  const accounts = accRes.data || [];
+  const transactions = txRes.data || [];
+  const debts = debtRes.data || [];
+
+  const totalBalance = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+  
+  const now = new Date();
+  const currentMonthStr = now.toISOString().slice(0, 7);
+  const monthlyTxs = transactions.filter((t: any) => t.date && t.date.startsWith(currentMonthStr));
+  const monthlyIncome = monthlyTxs.filter((t: any) => t.transaction_type === 'INCOME').reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
+  const monthlyExpenses = monthlyTxs.filter((t: any) => t.transaction_type === 'EXPENSE').reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
+  const netSavings = monthlyIncome - monthlyExpenses;
+
+  const totalDebt = debts.filter((d: any) => d.status !== 'PAID').reduce((sum: number, d: any) => sum + (Number(d.total_amount || 0) - Number(d.paid_amount || 0)), 0);
+
+  const runwayStatus = calculateEmergencyRunway(totalBalance, monthlyExpenses, 25000);
+  const healthScore = calculateFinancialHealthScore({
+    liquidBalance: totalBalance,
+    totalDebt,
+    monthlyIncome,
+    monthlyExpenses,
+    runwayMonths: runwayStatus.months,
+  });
+
+  const html = renderFinancialStatement({
+    username: username || 'Dennis',
+    accounts,
+    transactions,
+    total_balance: totalBalance,
+    monthly_income: monthlyIncome,
+    monthly_expenses: monthlyExpenses,
+    net_savings: netSavings,
+    total_debt: totalDebt,
+    runway_status: runwayStatus,
+    health_score: healthScore,
+    currency: 'Ksh',
+  });
+
+  return c.html(html);
+});
+
 
