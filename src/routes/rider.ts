@@ -358,23 +358,25 @@ riderRoutes.post('/rider/maintenance/log', async (c) => {
     console.error('Failed to log maintenance schedule:', error);
   }
 
-  // Deduct from account & sync to finance ledger if account specified and cost > 0
-  if (accountId && finalTotalCost > 0) {
-    const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
-    if (acc) {
-      const newBal = toDecimal(acc.balance).minus(finalTotalCost).toNumber();
-      await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
-
-      await supabase.from('transactions').insert({
-        ...(userId ? { user_id: userId } : {}),
-        account_id: accountId,
-        transaction_type: 'EXPENSE',
-        category: 'Living Expenses',
-        amount: finalTotalCost,
-        date: serviceDate,
-        description: `Bike Service: ${serviceType} (${notes || 'Oil, Brake Pads & Labor'})`,
-      });
+  // Deduct from account & sync to finance ledger automatically
+  if (finalTotalCost > 0) {
+    if (accountId) {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const newBal = toDecimal(acc.balance).minus(finalTotalCost).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+      }
     }
+
+    await supabase.from('transactions').insert({
+      ...(userId ? { user_id: userId } : {}),
+      account_id: accountId || null,
+      transaction_type: 'EXPENSE',
+      category: 'Vehicle Maintenance & Repairs',
+      amount: finalTotalCost,
+      date: serviceDate,
+      description: `Motorbike Service: ${serviceType} (${notes || 'Oil, Brake Pads & Labor'})`,
+    });
   }
 
   return c.redirect('/rider?toast=Maintenance+service+recorded+and+ledger+updated', 303);
@@ -457,22 +459,24 @@ riderRoutes.post('/rider/compliance/update/:id', async (c) => {
     return c.redirect(`/rider?toast=${encodeURIComponent('Failed to update compliance: ' + error.message)}`, 303);
   }
 
-  if (accountId && renewalCost > 0 && comp) {
-    const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
-    if (acc) {
-      const newBal = toDecimal(acc.balance).minus(renewalCost).toNumber();
-      await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
-
-      await supabase.from('transactions').insert({
-        ...(userId ? { user_id: userId } : {}),
-        account_id: accountId,
-        transaction_type: 'EXPENSE',
-        category: 'Utilities & Bills',
-        amount: renewalCost,
-        date: lastRenewed,
-        description: `Compliance Renewal: ${comp.title}`,
-      });
+  if (renewalCost > 0) {
+    if (accountId) {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const newBal = toDecimal(acc.balance).minus(renewalCost).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+      }
     }
+
+    await supabase.from('transactions').insert({
+      ...(userId ? { user_id: userId } : {}),
+      account_id: accountId || null,
+      transaction_type: 'EXPENSE',
+      category: 'Utilities & Bills',
+      amount: renewalCost,
+      date: lastRenewed,
+      description: `Compliance Renewal: ${comp?.title || 'Motorbike Insurance / Permit'}`,
+    });
   }
 
   return c.redirect('/rider?toast=Compliance+deadline+updated', 303);
