@@ -123,40 +123,81 @@ riderRoutes.post('/rider/logs', async (c) => {
     return c.redirect(`/rider?toast=${encodeURIComponent('Failed to save shift: ' + error.message)}`, 303);
   }
 
-  // Automatic Finance Ledger Integration
+  // Automatic Finance Ledger Integration (Sync Income AND Expenses)
   if (newLog) {
-    if (earningsAccId && totalEarnedKes > 0) {
-      const { data: acc } = await supabase.from('accounts').select('*').eq('id', earningsAccId).single();
-      if (acc) {
-        await supabase.from('accounts').update({ balance: toDecimal(acc.balance).plus(totalEarnedKes).toNumber() }).eq('id', earningsAccId);
-        await supabase.from('transactions').insert({
-          ...(userId ? { user_id: userId } : {}),
-          account_id: earningsAccId,
-          transaction_type: 'INCOME',
-          category: 'Rider Revenue',
-          amount: totalEarnedKes,
-          description: `Rider Shift Income (${logDate} • ${shiftHours}h shift)`,
-          rider_log_id: newLog.id,
-          date: logDate,
-        });
-      }
+    const targetAccId = earningsAccId || expenseAccId || null;
+    const txInserts: any[] = [];
+
+    // 1. Gross Earnings Income Transaction
+    if (totalEarnedKes > 0) {
+      txInserts.push({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetAccId,
+        transaction_type: 'INCOME',
+        category: 'Rider & Boda Deliveries',
+        amount: totalEarnedKes,
+        description: `Rider Shift Gross Revenue (${logDate} • ${shiftHours}h shift)`,
+        rider_log_id: newLog.id,
+        date: logDate,
+      });
     }
 
-    if (expenseAccId && totalExpensesKes > 0) {
-      const { data: acc } = await supabase.from('accounts').select('*').eq('id', expenseAccId).single();
+    // 2. Fuel / Battery Swap Expense Transaction
+    if (fuelCostKes > 0) {
+      const energyCategory = powerType === 'ELECTRIC' ? 'EV Battery Swap & Charging' : 'Fuel & Petrol';
+      const energyLabel = powerType === 'ELECTRIC' ? `EV Battery Swap (${fuelStation || 'Station'})` : `Fuel & Petrol (${fuelStation || 'Station'})`;
+      txInserts.push({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetAccId,
+        transaction_type: 'EXPENSE',
+        category: energyCategory,
+        amount: fuelCostKes,
+        description: `Rider Shift: ${energyLabel}`,
+        rider_log_id: newLog.id,
+        date: logDate,
+      });
+    }
+
+    // 3. Food / Lunch Expense Transaction
+    if (foodSpentKes > 0) {
+      txInserts.push({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetAccId,
+        transaction_type: 'EXPENSE',
+        category: 'Food & Groceries',
+        amount: foodSpentKes,
+        description: `Rider Shift: Food & Lunch (${logDate})`,
+        rider_log_id: newLog.id,
+        date: logDate,
+      });
+    }
+
+    // 4. Maintenance / Upkeep Expense Transaction
+    const otherUpkeep = toDecimal(maintCostKes).plus(airtimeSpentKes).plus(miscExpensesKes).toNumber();
+    if (otherUpkeep > 0) {
+      txInserts.push({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetAccId,
+        transaction_type: 'EXPENSE',
+        category: 'Living Expenses',
+        amount: otherUpkeep,
+        description: `Rider Shift: Bike Maintenance & Airtime (${logDate})`,
+        rider_log_id: newLog.id,
+        date: logDate,
+      });
+    }
+
+    if (txInserts.length > 0) {
+      await supabase.from('transactions').insert(txInserts);
+    }
+
+    // Update target account balance with net take-home
+    if (targetAccId) {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', targetAccId).single();
       if (acc) {
-        await supabase.from('accounts').update({ balance: toDecimal(acc.balance).minus(totalExpensesKes).toNumber() }).eq('id', expenseAccId);
-        const energyLabel = powerType === 'ELECTRIC' ? `${fuelStation} Battery Swap` : `${fuelStation} Fuel`;
-        await supabase.from('transactions').insert({
-          ...(userId ? { user_id: userId } : {}),
-          account_id: expenseAccId,
-          transaction_type: 'EXPENSE',
-          category: powerType === 'ELECTRIC' ? 'EV Battery Swap & Upkeep' : 'Rider Shift Upkeep',
-          amount: totalExpensesKes,
-          description: `Rider Shift Expenses (${energyLabel}, Lunch & Upkeep)`,
-          rider_log_id: newLog.id,
-          date: logDate,
-        });
+        const netTakeHome = toDecimal(totalEarnedKes).minus(totalExpensesKes);
+        const newBalance = toDecimal(acc.balance).plus(netTakeHome).toNumber();
+        await supabase.from('accounts').update({ balance: newBalance }).eq('id', targetAccId);
       }
     }
   }

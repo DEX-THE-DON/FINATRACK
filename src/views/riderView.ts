@@ -752,9 +752,9 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Deposit Net Into Account</label>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Target Account (Sync Income & Expenses)</label>
                     <select name="earnings_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium text-emerald-600">
-                        <option value="">-- Don't Deposit --</option>
+                        <option value="">-- Don't Sync to Account --</option>
                         ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                     </select>
                 </div>
