@@ -794,5 +794,97 @@ export function buildUnifiedTimeline(params: {
   return items;
 }
 
+// ------------------------------------------------------------------------------
+// 🎯 SINKING FUNDS & GOAL PACE CALCULATOR
+// ------------------------------------------------------------------------------
+export interface GoalPaceResult {
+  remainingAmount: number;
+  daysLeft: number;
+  dailyNeeded: number;
+  weeklyNeeded: number;
+  monthlyNeeded: number;
+  progressPct: number;
+  isCompleted: boolean;
+  statusBadge: string;
+}
 
+export function calculateGoalPace(
+  targetAmount: number | string | Decimal,
+  currentAmount: number | string | Decimal,
+  targetDateStr?: string | null
+): GoalPaceResult {
+  const target = toDecimal(targetAmount);
+  const current = toDecimal(currentAmount);
+  const remaining = Decimal.max(0, target.minus(current));
+  const isCompleted = target.greaterThan(0) && current.greaterThanOrEqualTo(target);
+  const progressPct = target.isZero()
+    ? 0
+    : Math.min(100, Math.round(current.dividedBy(target).times(100).toNumber()));
 
+  let daysLeft = 30;
+  if (targetDateStr) {
+    const tTime = Date.parse(targetDateStr.slice(0, 10));
+    const nTime = Date.parse(new Date().toISOString().slice(0, 10));
+    const diffMs = tTime - nTime;
+    daysLeft = Math.max(1, Math.round(diffMs / 86400000));
+  }
+
+  const dailyNeeded = daysLeft > 0 ? remaining.dividedBy(daysLeft).toDecimalPlaces(2).toNumber() : 0;
+  const weeklyNeeded = toDecimal(dailyNeeded).times(7).toDecimalPlaces(2).toNumber();
+  const monthlyNeeded = toDecimal(dailyNeeded).times(30).toDecimalPlaces(2).toNumber();
+
+  let statusBadge = '🎯 On Track';
+  if (isCompleted) {
+    statusBadge = '🎉 Target Reached!';
+  } else if (daysLeft <= 7) {
+    statusBadge = `⚡ Target in ${daysLeft} days`;
+  } else {
+    statusBadge = `⏳ ${daysLeft} days left`;
+  }
+
+  return {
+    remainingAmount: remaining.toNumber(),
+    daysLeft,
+    dailyNeeded,
+    weeklyNeeded,
+    monthlyNeeded,
+    progressPct,
+    isCompleted,
+    statusBadge,
+  };
+}
+
+// ------------------------------------------------------------------------------
+// 👥 SACCO & CHAMA DIVIDEND FORECASTER
+// ------------------------------------------------------------------------------
+export interface SaccoProjectionResult {
+  currentCapital: number;
+  projectedYearEndCapital: number;
+  annualDividend: number;
+  monthlyEffectiveDividend: number;
+  totalAnnualYieldPct: number;
+}
+
+export function calculateSaccoDividendProjection(
+  currentShareCapital: number | string | Decimal,
+  monthlyContribution: number | string | Decimal,
+  dividendRatePct: number | string | Decimal = 12.0
+): SaccoProjectionResult {
+  const capital = toDecimal(currentShareCapital);
+  const monthly = toDecimal(monthlyContribution);
+  const rate = toDecimal(dividendRatePct).dividedBy(100);
+
+  // Approximate weighted average balance over 12 months with linear contributions
+  const yearEndCapital = capital.plus(monthly.times(12));
+  const avgCapital = capital.plus(monthly.times(6)); // Mid-year weighted average
+  const annualDividend = avgCapital.times(rate).toDecimalPlaces(2);
+  const monthlyEffectiveDividend = annualDividend.dividedBy(12).toDecimalPlaces(2);
+
+  return {
+    currentCapital: capital.toNumber(),
+    projectedYearEndCapital: yearEndCapital.toNumber(),
+    annualDividend: annualDividend.toNumber(),
+    monthlyEffectiveDividend: monthlyEffectiveDividend.toNumber(),
+    totalAnnualYieldPct: rate.times(100).toNumber(),
+  };
+}

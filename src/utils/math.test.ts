@@ -125,6 +125,21 @@ const timeline = buildUnifiedTimeline({
 console.assert(timeline.length === 3, `Timeline should aggregate 3 items, got ${timeline.length}`);
 console.log(`✅ Unified Timeline: Aggregated ${timeline.length} items (First due: ${timeline[0].title} in ${timeline[0].daysRemaining}d)`);
 
+// Test 11: Sinking Funds & Goal Pace Calculator
+import { calculateGoalPace } from './math';
+const todayUtc = new Date(new Date().toISOString().slice(0, 10));
+const futureDate = new Date(todayUtc.getTime() + 10 * 86400000).toISOString().slice(0, 10);
+const goalPace = calculateGoalPace(10000, 3000, futureDate);
+console.assert(goalPace.remainingAmount === 7000, `Remaining amount should be 7000, got ${goalPace.remainingAmount}`);
+console.assert(goalPace.dailyNeeded === 700, `Daily needed should be 700, got ${goalPace.dailyNeeded}`);
+console.assert(goalPace.progressPct === 30, `Progress pct should be 30%, got ${goalPace.progressPct}%`);
+console.log(`✅ Goal Pace (3k/10k in 10d): Needed=${goalPace.dailyNeeded}/day, Weekly=${goalPace.weeklyNeeded}/wk (${goalPace.statusBadge})`);
+
+// Test 12: SACCO & Chama Dividend Forecaster
+import { calculateSaccoDividendProjection } from './math';
+const saccoProj = calculateSaccoDividendProjection(50000, 5000, 12);
+console.assert(saccoProj.projectedYearEndCapital === 110000, `Year end capital should be 110,000, got ${saccoProj.projectedYearEndCapital}`);
+console.assert(saccoProj.annualDividend === 9600, `Annual dividend should be 9,600, got ${saccoProj.annualDividend}`);
+console.log(`✅ SACCO Forecaster (50k initial + 5k/mo @ 12%): Year-end=${saccoProj.projectedYearEndCapital} KES, Div=${saccoProj.annualDividend} KES`);
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
-
-

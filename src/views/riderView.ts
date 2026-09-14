@@ -33,6 +33,10 @@ export function renderRiderDashboard(data: any): string {
   const ti = time_intelligence;
   const activePowerType = (active_bike && active_bike.power_type) || 'PETROL';
 
+  const lastShift = rider_logs && rider_logs.length > 0 ? rider_logs[0] : null;
+  const lastShiftTotalExp = lastShift ? (Number(lastShift.fuel_cost || 0) + Number(lastShift.food_spent || 0) + Number(lastShift.airtime_spent || 0) + Number(lastShift.misc_expenses || 0) + Number(lastShift.maintenance_cost || 0)) : 0;
+  const lastShiftNet = lastShift ? (Number(lastShift.total_earned || 0) - lastShiftTotalExp) : 0;
+
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -523,6 +527,70 @@ export function renderRiderDashboard(data: any): string {
             <button onclick="triggerAppInstall()" class="pwa-install-trigger flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-pink-600 to-rose-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>📲 Install</span>
             </button>
+        </div>
+
+        <!-- ☀️ Daily Rider Shift Briefing & Night Wrap-up Snapshot Card -->
+        <div id="shift-briefing-card" class="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-blue-800/40 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-blue-800/60 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-xl shadow-xs">
+                        ☀️
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-black text-white flex items-center gap-2">
+                            <span>Daily Shift Briefing & Take-Home Wrap-up</span>
+                            <span class="text-[10px] bg-blue-500/20 text-blue-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-blue-400/30">Live Briefing</span>
+                        </h2>
+                        <p class="text-xs text-blue-200">Daily earnings target, safe fuel/swap allowance, and your latest shift take-home debrief.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                        <span>⚡ Log Today's Shift</span>
+                    </button>
+                    <a href="/rider/export/csv" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                        <span>📥 CSV</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <!-- Morning Targets Card -->
+                <div class="p-4 bg-slate-950/80 border border-blue-900/60 rounded-2xl space-y-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">🎯 Today's Target</span>
+                        <span class="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full font-bold">Goal</span>
+                    </div>
+                    <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${active_bike?.daily_target || 2500}">Ksh ${(Number(active_bike?.daily_target) || 2500).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                    <p class="text-[11px] text-gray-300">Peak Window: <strong class="text-indigo-300">${ti.best_time_window || '11am – 10pm'}</strong></p>
+                </div>
+
+                <!-- Safe Operating Allowance -->
+                <div class="p-4 bg-slate-950/80 border border-blue-900/60 rounded-2xl space-y-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">⛽ Shift Budget Allowance</span>
+                        <span class="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full font-bold">${activePowerType === 'ELECTRIC' ? 'EV Swap' : 'Petrol'}</span>
+                    </div>
+                    <p class="text-2xl font-black text-cyan-300 convertible-amount" data-kes="${activePowerType === 'ELECTRIC' ? 300 : 600}">Ksh ${(activePowerType === 'ELECTRIC' ? 300 : 600).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                    <p class="text-[11px] text-gray-300">Target net yield: <strong class="text-cyan-300 convertible-amount" data-kes="${ti.overall_avg_net_hourly || 280}">Ksh ${(Number(ti.overall_avg_net_hourly) || 280).toFixed(0)}/hr</strong></p>
+                </div>
+
+                <!-- Last Shift Debrief -->
+                <div class="p-4 bg-slate-950/80 border border-blue-900/60 rounded-2xl space-y-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">🌙 Latest Shift Take-Home</span>
+                        <span class="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold">${lastShift ? lastShift.date : 'Recent'}</span>
+                    </div>
+                    ${lastShift ? `
+                    <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${lastShiftNet}">Ksh ${lastShiftNet.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                    <p class="text-[11px] text-gray-400">Earned <span class="text-white font-bold convertible-amount" data-kes="${lastShift.total_earned}">Ksh ${Number(lastShift.total_earned).toLocaleString()}</span> − Exp <span class="text-rose-400 font-bold convertible-amount" data-kes="${lastShiftTotalExp}">Ksh ${lastShiftTotalExp.toLocaleString()}</span></p>
+                    ` : `
+                    <p class="text-base font-bold text-gray-400 mt-2">Ready for first shift</p>
+                    <p class="text-[11px] text-gray-500">Log a shift below to see net take-home debrief.</p>
+                    `}
+                </div>
+            </div>
         </div>
 
         <!-- 🛵 Active Motorbike & Fleet Management Card -->

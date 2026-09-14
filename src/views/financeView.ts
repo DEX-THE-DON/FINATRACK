@@ -347,6 +347,43 @@ export function renderFinanceDashboard(data: any): string {
             }
         }
 
+        function updateSaccoProjection() {
+            const capital = parseFloat(document.getElementById('sacco-initial-capital')?.value || '0') || 0;
+            const monthly = parseFloat(document.getElementById('sacco-monthly-deposit')?.value || '0') || 0;
+            const ratePct = parseFloat(document.getElementById('sacco-rate-pct')?.value || '12') || 12;
+
+            const rate = ratePct / 100;
+            const year1Capital = capital + (monthly * 12);
+            const avgCapital = capital + (monthly * 6);
+            const annualDiv = avgCapital * rate;
+            const monthlyDiv = annualDiv / 12;
+
+            let compound3Yr = capital;
+            for (let yr = 1; yr <= 3; yr++) {
+                const avg = compound3Yr + (monthly * 6);
+                const div = avg * rate;
+                compound3Yr = compound3Yr + (monthly * 12) + div;
+            }
+
+            const curr = getCurrency();
+            const formatVal = (kes) => {
+                if (curr === 'USD') return '$' + (kes / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                return 'Ksh ' + kes.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            };
+
+            const yr1El = document.getElementById('sacco-yr1-capital');
+            if (yr1El) { yr1El.setAttribute('data-kes', year1Capital); yr1El.textContent = formatVal(year1Capital); }
+
+            const annEl = document.getElementById('sacco-annual-dividend');
+            if (annEl) { annEl.setAttribute('data-kes', annualDiv); annEl.textContent = formatVal(annualDiv); }
+
+            const monEl = document.getElementById('sacco-monthly-dividend');
+            if (monEl) { monEl.setAttribute('data-kes', monthlyDiv); monEl.textContent = formatVal(monthlyDiv); }
+
+            const compEl = document.getElementById('sacco-3yr-compound');
+            if (compEl) { compEl.setAttribute('data-kes', compound3Yr); compEl.textContent = formatVal(compound3Yr); }
+        }
+
         function switchTargetTab(timeframe) {
             ['weekly', 'monthly', 'yearly'].forEach(tf => {
                 const pane = document.getElementById('target-pane-' + tf);
@@ -754,6 +791,9 @@ export function renderFinanceDashboard(data: any): string {
             </button>
             <a href="/rider" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🛵 Log Shift</span>
+            </a>
+            <a href="/finance/export/csv" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>📥 Export CSV</span>
             </a>
             <button onclick="triggerAppInstall()" class="pwa-install-trigger flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-pink-600 to-rose-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>📲 Install</span>
@@ -1576,6 +1616,16 @@ export function renderFinanceDashboard(data: any): string {
                     const remaining = Math.max(0, target - current);
                     const icon = getGoalIcon(g.title);
 
+                    let daysLeft = 30;
+                    if (g.target_date) {
+                        const tTime = Date.parse(g.target_date.slice(0, 10));
+                        const nTime = Date.parse(new Date().toISOString().slice(0, 10));
+                        const diffMs = tTime - nTime;
+                        daysLeft = Math.max(1, Math.round(diffMs / 86400000));
+                    }
+                    const dailyNeeded = daysLeft > 0 ? (remaining / daysLeft) : 0;
+                    const weeklyNeeded = dailyNeeded * 7;
+
                     return `
                     <div class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-xs space-y-3 flex flex-col justify-between">
                         <div class="space-y-2.5">
@@ -1599,7 +1649,6 @@ export function renderFinanceDashboard(data: any): string {
                                 </div>
                             </div>
 
-
                             <!-- Progress Bar -->
                             <div class="space-y-1">
                                 <div class="flex justify-between text-xs items-baseline">
@@ -1613,6 +1662,17 @@ export function renderFinanceDashboard(data: any): string {
                                     <span class="font-bold ${percent >= 100 ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-indigo-600 dark:text-indigo-400'}">${percent}% Completed</span>
                                     <span>Remaining: <strong class="convertible-amount font-bold text-gray-700 dark:text-gray-300" data-kes="${remaining}">${formatKes(remaining)}</strong></span>
                                 </div>
+                            </div>
+
+                            <!-- Sinking Fund Target Pace Badge -->
+                            <div class="bg-indigo-50/60 dark:bg-indigo-950/40 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900/40 text-[11px] flex justify-between items-center">
+                                <div>
+                                    <span class="text-gray-500 dark:text-gray-400">Save pace:</span>
+                                    <strong class="text-indigo-600 dark:text-indigo-400 font-bold convertible-amount" data-kes="${dailyNeeded}">${formatKes(dailyNeeded)}</strong><span class="text-gray-400">/d (<span class="convertible-amount" data-kes="${weeklyNeeded}">${formatKes(weeklyNeeded)}</span>/wk)</span>
+                                </div>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${percent >= 100 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'}">
+                                    ${percent >= 100 ? '🎉 Achieved!' : g.target_date ? `⏳ ${daysLeft}d left` : '🎯 Target Pace'}
+                                </span>
                             </div>
                         </div>
 
@@ -1676,6 +1736,67 @@ export function renderFinanceDashboard(data: any): string {
                     <h4 class="font-bold text-gray-700 dark:text-gray-200">No Savings Goals Active</h4>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Click "➕ New Goal" above to create savings goals for your TV, Gas Cooker, Living Room Seats, etc.!</p>
                 </div>`}
+            </div>
+        </div>
+
+        <!-- 👥 SACCO & Chama Dividend Forecaster Card -->
+        <div id="sacco-card" class="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-6 rounded-2xl border border-indigo-800/50 text-white shadow-xl space-y-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-800/60 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-teal-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
+                        👥
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <span>SACCO & Chama Dividend Forecaster</span>
+                            <span class="text-[10px] bg-teal-500/20 text-teal-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-teal-500/30">10% - 15% Annual Rebates</span>
+                        </h2>
+                        <p class="text-xs text-indigo-200">Simulate wealth compounding and annual dividend payouts from your SACCO deposits and Chama merry-go-rounds.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic Input Form -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-indigo-300 mb-1">Current Share Capital (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" id="sacco-initial-capital" value="50000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-slate-950 border border-indigo-700 rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-teal-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-indigo-300 mb-1">Monthly Deposit / Contribution (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" id="sacco-monthly-deposit" value="5000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-slate-950 border border-indigo-700 rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-teal-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-indigo-300 mb-1">Annual Dividend / Interest Rate (%)</label>
+                    <input type="number" step="any" id="sacco-rate-pct" value="12" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-slate-950 border border-indigo-700 rounded-xl text-sm font-bold text-teal-400 focus:ring-2 focus:ring-teal-400">
+                </div>
+            </div>
+
+            <!-- Dynamic Projection Result Badges -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
+                    <p class="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">📈 1-Yr Total Capital</p>
+                    <p class="text-lg font-black text-white mt-1 convertible-amount" id="sacco-yr1-capital" data-kes="110000">Ksh 110,000.00</p>
+                    <p class="text-[10px] text-gray-400">Principal + 12 monthly deposits</p>
+                </div>
+
+                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
+                    <p class="text-[10px] text-teal-300 font-bold uppercase tracking-wider">💰 Estimated Annual Payout</p>
+                    <p class="text-lg font-black text-emerald-400 mt-1 convertible-amount" id="sacco-annual-dividend" data-kes="9600">Ksh 9,600.00</p>
+                    <p class="text-[10px] text-emerald-300">Annual dividend return</p>
+                </div>
+
+                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
+                    <p class="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">💵 Monthly Passive Equiv.</p>
+                    <p class="text-lg font-black text-teal-300 mt-1 convertible-amount" id="sacco-monthly-dividend" data-kes="800">Ksh 800.00</p>
+                    <p class="text-[10px] text-gray-400">Distributed monthly equivalent</p>
+                </div>
+
+                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
+                    <p class="text-[10px] text-purple-300 font-bold uppercase tracking-wider">🚀 3-Year Compounding</p>
+                    <p class="text-lg font-black text-purple-300 mt-1 convertible-amount" id="sacco-3yr-compound" data-kes="268480">Ksh 268,480.00</p>
+                    <p class="text-[10px] text-purple-200">Reinvesting dividends</p>
+                </div>
             </div>
         </div>
 
