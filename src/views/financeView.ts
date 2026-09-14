@@ -486,6 +486,19 @@ export function renderFinanceDashboard(data: any): string {
             });
         }
 
+        function onTxCategoryChange(val) {
+            const container = document.getElementById('custom-category-container');
+            const input = document.getElementById('tx-custom-category');
+            if (container) {
+                if (val === 'Other') {
+                    container.classList.remove('hidden');
+                    if (input) input.focus();
+                } else {
+                    container.classList.add('hidden');
+                }
+            }
+        }
+
         function parseMpesaClient() {
             const input = document.getElementById('mpesa-batch-input');
             const raw = input ? input.value : '';
@@ -2095,46 +2108,63 @@ export function renderFinanceDashboard(data: any): string {
             </div>
 
             <!-- Add Tx Form -->
-            <form action="/transactions/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-                <div>
-                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
-                    <select name="transaction_type" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
-                        <option value="EXPENSE">🔴 Expense</option>
-                        <option value="INCOME">🟢 Income</option>
-                    </select>
+            <form action="/transactions/create" method="POST" class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
+                        <select name="transaction_type" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                            <option value="EXPENSE">🔴 Expense</option>
+                            <option value="INCOME">🟢 Income</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account / Wallet</label>
+                        <select name="account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                            <option value="">-- No Account / Cash --</option>
+                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Category</label>
+                        <select name="category" id="tx-category-select" onchange="onTxCategoryChange(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                            <option value="Living Expenses">🏠 Living Expenses</option>
+                            <option value="Food & Groceries">🛒 Food & Groceries</option>
+                            <option value="Fuel & Petrol">⛽ Fuel & Petrol</option>
+                            <option value="EV Battery Swap & Charging">⚡ EV Battery Swap & Charging</option>
+                            <option value="Utilities & Bills">💡 Utilities & Bills</option>
+                            <option value="Bike Maintenance & Repairs">🔧 Bike Maintenance & Repairs</option>
+                            <option value="Rider & Boda Deliveries">🛵 Rider & Boda Deliveries</option>
+                            <option value="M-Pesa Income">📲 M-Pesa Income</option>
+                            <option value="MMF Interest">📈 MMF Yield / Interest</option>
+                            <option value="Debt & Loan Repayments">💳 Debt & Loan Repayments</option>
+                            <option value="Other">✏️ Other (Custom...)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
+                        <input type="date" name="t_date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold" required>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account</label>
-                    <select name="account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
-                        <option value="">-- No Account / Cash --</option>
-                        ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Category</label>
-                    <select name="category" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
-                        <option value="Living Expenses">Living Expenses</option>
-                        <option value="Food & Groceries">Food & Groceries</option>
-                        <option value="Fuel & Petrol">Fuel & Petrol</option>
-                        <option value="Utilities & Bills">Utilities & Bills</option>
-                        <option value="Rider & Boda Deliveries">Rider & Boda Deliveries</option>
-                        <option value="M-Pesa Income">M-Pesa Income</option>
-                        <option value="MMF Interest">MMF Interest</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
-                    <input type="date" name="t_date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold" required>
-                </div>
-                <div class="flex items-end">
-                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition shadow-xs active:scale-95">
-                        ➕ Save Tx
-                    </button>
+
+                <!-- Note / Custom Category Memo & Where money went/came in -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div id="custom-category-container" class="hidden">
+                        <label class="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-1">Specify Custom Category</label>
+                        <input type="text" name="custom_category" id="tx-custom-category" placeholder="e.g. Medical, Tithe, School Fees, Client Tip..." class="w-full p-2.5 border border-indigo-300 dark:border-indigo-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Where did money go / come from? (Note / Memo)</label>
+                        <input type="text" name="description" placeholder="e.g. Paid mechanic Kamau for brake pads, Client tip, Java lunch, KPLC Token..." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-sm transition shadow-xs active:scale-95 flex items-center justify-center gap-1.5">
+                            <span>➕ Record Transaction</span>
+                        </button>
+                    </div>
                 </div>
             </form>
 
@@ -2147,30 +2177,39 @@ export function renderFinanceDashboard(data: any): string {
                             <tr>
                                 <th class="py-3 px-3">Date</th>
                                 <th class="py-3 px-3">Type</th>
-                                <th class="py-3 px-3">Category</th>
+                                <th class="py-3 px-3">Category & Details</th>
                                 <th class="py-3 px-3">Amount</th>
                                 <th class="py-3 px-3 text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y dark:divide-gray-800">
-                            ${transactions.length > 0 ? transactions.slice(0, 15).map((t: any) => `
+                            ${transactions.length > 0 ? transactions.slice(0, 20).map((t: any) => {
+                                const acc = accounts.find((a: any) => a.id === t.account_id);
+                                return `
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
-                                <td class="py-2.5 px-3 font-medium text-gray-600 dark:text-gray-300">${t.date}</td>
-                                <td class="py-2.5 px-3">
+                                <td class="py-2.5 px-3 font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">${t.date}</td>
+                                <td class="py-2.5 px-3 whitespace-nowrap">
                                     <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${t.transaction_type === 'INCOME' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}">
                                         ${t.transaction_type}
                                     </span>
                                 </td>
-                                <td class="py-2.5 px-3 font-medium text-gray-800 dark:text-gray-200">${t.category}</td>
-                                <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount" data-kes="${t.amount}" data-prefix="${t.transaction_type === 'INCOME' ? '+' : '-'}">
+                                <td class="py-2.5 px-3">
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-gray-800 dark:text-gray-200">${t.category}</span>
+                                        ${t.description ? `<span class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">${t.description}</span>` : ''}
+                                        ${acc ? `<span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-semibold">• ${acc.name}</span>` : ''}
+                                    </div>
+                                </td>
+                                <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount whitespace-nowrap" data-kes="${t.amount}" data-prefix="${t.transaction_type === 'INCOME' ? '+' : '-'}">
                                     ${t.transaction_type === 'INCOME' ? '+' : '-'}${formatKes(t.amount)}
                                 </td>
-                                <td class="py-2.5 px-3 text-center">
+                                <td class="py-2.5 px-3 text-center whitespace-nowrap">
                                     <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
                                         <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold text-xs p-1">✕</button>
                                     </form>
                                 </td>
-                            </tr>`).join('') : `
+                            </tr>`;
+                            }).join('') : `
                             <tr>
                                 <td colspan="5" class="py-6 text-center text-gray-400">No transactions recorded yet. Use the form above or the M-Pesa SMS auto-parser!</td>
                             </tr>`}

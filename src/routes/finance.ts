@@ -168,10 +168,19 @@ financeRoutes.post('/transactions/create', async (c) => {
   const body = await c.req.parseBody();
   const accountId = String(body['account_id'] || '');
   const txType = String(body['transaction_type'] || 'EXPENSE').toUpperCase();
-  const category = String(body['category'] || 'General').trim();
+  const rawCategory = String(body['category'] || 'Living Expenses').trim();
+  const customCategory = body['custom_category'] ? String(body['custom_category']).trim() : '';
+  const description = body['description'] ? String(body['description']).trim() : null;
+
+  let category = rawCategory;
+  if (customCategory) {
+    category = customCategory;
+  } else if (rawCategory === 'Other' && description) {
+    category = description.length > 25 ? description.slice(0, 25) : description;
+  }
+
   const amtKes = parseFloat(String(body['amount'] || '0.0')) || 0.0;
   const tDate = String(body['t_date'] || new Date().toISOString().slice(0, 10));
-  const description = body['description'] ? String(body['description']).trim() : null;
 
   const { error } = await supabase.from('transactions').insert({
     ...(userId ? { user_id: userId } : {}),
