@@ -661,6 +661,9 @@ financeRoutes.post('/bills/delete/:id', async (c) => {
 // ------------------------------------------------------------------------------
 // DYNAMIC WATERFALL AUTO-SPLIT EXECUTION
 // ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
+// DYNAMIC WATERFALL AUTO-SPLIT EXECUTION
+// ------------------------------------------------------------------------------
 financeRoutes.post('/split/distribute', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
@@ -669,47 +672,115 @@ financeRoutes.post('/split/distribute', async (c) => {
 
   if (rawAmt <= 0) return c.redirect('/?toast=Please+enter+a+valid+amount', 303);
 
-  const { data: rules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
+  let query = supabase.from('allocation_rules').select('*').eq('is_active', 1);
+  if (userId) query = query.eq('user_id', userId);
+  let { data: rules } = await query;
 
-  if (rules && rules.length > 0) {
-    const splitResults = allocateWaterfallSplit(
-      rawAmt,
-      rules.map((r) => ({
-        id: r.id,
-        bucket_name: r.bucket_name,
-        target_type: r.target_type,
-        target_id: r.target_id,
-        percentage: Number(r.percentage),
-      }))
-    );
+  if (!rules || rules.length === 0) {
+    // Default fallback rules
+    rules = [
+      { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
+      { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
+      { id: 'rule-3', bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
+      { id: 'rule-4', bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
+      { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
+    ];
+  }
 
-    const today = new Date().toISOString().slice(0, 10);
+  // Get user accounts & goals for smart destination matching if target_id is not set
+  const [accRes, goalRes] = await Promise.all([
+    userId ? supabase.from('accounts').select('*').eq('user_id', userId) : supabase.from('accounts').select('*'),
+    userId ? supabase.from('goals').select('*').eq('user_id', userId) : supabase.from('goals').select('*'),
+  ]);
+  const userAccounts = accRes.data || [];
+  const userGoals = goalRes.data || [];
 
-    for (const res of splitResults) {
-      const splitAmt = parseFloat(res.allocated_amount);
-      if (splitAmt <= 0) continue;
+  // If a source account was chosen, deduct the total amount from source wallet
+  if (sourceAccountId) {
+    const srcAcc = userAccounts.find(a => a.id === sourceAccountId);
+    if (srcAcc) {
+      const newSrcBal = toDecimal(srcAcc.balance).minus(rawAmt).toNumber();
+      await supabase.from('accounts').update({ balance: newSrcBal }).eq('id', sourceAccountId);
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: sourceAccountId,
+        transaction_type: 'EXPENSE',
+        category: 'Waterfall Split Source',
+        amount: rawAmt,
+        description: `Waterfall Auto-Split: Distributed Ksh ${rawAmt.toLocaleString()}`,
+        date: new Date().toISOString().slice(0, 10),
+      });
+    }
+  }
 
-      if (res.target_type === 'ACCOUNT' && res.target_id) {
-        const { data: acc } = await supabase.from('accounts').select('*').eq('id', res.target_id).single();
-        if (acc) {
-          const newBal = toDecimal(acc.balance).plus(splitAmt).toNumber();
-          await supabase.from('accounts').update({ balance: newBal }).eq('id', res.target_id);
-          await supabase.from('transactions').insert({
-            ...(userId ? { user_id: userId } : {}),
-            account_id: res.target_id,
-            transaction_type: 'INCOME',
-            category: 'Auto-Split Deposit',
-            amount: splitAmt,
-            description: `Auto-Split Allocation: ${res.bucket_name} (${res.percentage}%)`,
-            date: today,
-          });
+  const splitResults = allocateWaterfallSplit(
+    rawAmt,
+    rules.map((r: any) => ({
+      id: r.id,
+      bucket_name: r.bucket_name,
+      target_type: r.target_type,
+      target_id: r.target_id,
+      percentage: Number(r.percentage),
+    }))
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const res of splitResults) {
+    const splitAmt = parseFloat(res.allocated_amount);
+    if (splitAmt <= 0) continue;
+
+    if (res.target_type === 'ACCOUNT') {
+      let targetAcc = userAccounts.find(a => a.id === res.target_id);
+      if (!targetAcc) {
+        // Smart match by bucket name or account type
+        const bName = res.bucket_name.toLowerCase();
+        if (bName.includes('mmf') || bName.includes('ziidi') || bName.includes('yield')) {
+          targetAcc = userAccounts.find(a => a.account_type === 'MMF' || a.name.toLowerCase().includes('mmf'));
+        } else if (bName.includes('lock') || bName.includes('sacco') || bName.includes('save')) {
+          targetAcc = userAccounts.find(a => a.account_type === 'SAVINGS' || a.name.toLowerCase().includes('sacco') || a.name.toLowerCase().includes('lock'));
+        } else if (bName.includes('bill') || bName.includes('utilit')) {
+          targetAcc = userAccounts.find(a => a.name.toLowerCase().includes('bill') || a.account_type === 'BANK');
         }
-      } else if (res.target_type === 'GOAL' && res.target_id) {
-        const { data: goal } = await supabase.from('goals').select('*').eq('id', res.target_id).single();
-        if (goal) {
-          const newAmt = toDecimal(goal.current_amount).plus(splitAmt).toNumber();
-          await supabase.from('goals').update({ current_amount: newAmt }).eq('id', res.target_id);
-        }
+      }
+
+      if (targetAcc) {
+        const newBal = toDecimal(targetAcc.balance).plus(splitAmt).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', targetAcc.id);
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: targetAcc.id,
+          transaction_type: 'INCOME',
+          category: 'Auto-Split Deposit',
+          amount: splitAmt,
+          description: `Auto-Split Allocation: ${res.bucket_name} (${res.percentage}%)`,
+          date: today,
+        });
+      }
+    } else if (res.target_type === 'GOAL') {
+      let targetGoal = userGoals.find(g => g.id === res.target_id);
+      if (!targetGoal && userGoals.length > 0) {
+        targetGoal = userGoals[0]; // distribute to primary goal
+      }
+      if (targetGoal) {
+        const newAmt = toDecimal(targetGoal.current_amount).plus(splitAmt).toNumber();
+        await supabase.from('goals').update({ current_amount: newAmt }).eq('id', targetGoal.id);
+      }
+    } else if (res.target_type === 'CASH') {
+      // Find cash or mobile wallet to record living cash transaction
+      const cashAcc = userAccounts.find(a => a.account_type === 'CASH' || a.account_type === 'MOBILE_MONEY');
+      if (cashAcc && !sourceAccountId) {
+        const newBal = toDecimal(cashAcc.balance).plus(splitAmt).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', cashAcc.id);
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: cashAcc.id,
+          transaction_type: 'INCOME',
+          category: 'Living Expenses',
+          amount: splitAmt,
+          description: `Daily Living Cash: ${res.bucket_name} (${res.percentage}%)`,
+          date: today,
+        });
       }
     }
   }
@@ -718,24 +789,94 @@ financeRoutes.post('/split/distribute', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// ALLOCATION RULES UPDATE
+// ALLOCATION RULES UPDATE (FULL BUCKET EDITING)
 // ------------------------------------------------------------------------------
 financeRoutes.post('/rules/update', async (c) => {
-  const { supabase } = await getRequestContext(c);
+  const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
-  const { data: rules } = await supabase.from('allocation_rules').select('*');
 
-  if (rules) {
-    for (const r of rules) {
-      const fieldName = `percentage_${r.id}`;
-      if (body[fieldName] !== undefined) {
-        const pct = parseFloat(String(body[fieldName])) || 0.0;
-        await supabase.from('allocation_rules').update({ percentage: pct }).eq('id', r.id);
-      }
+  const ruleIds = new Set<string>();
+  for (const key of Object.keys(body)) {
+    if (key.startsWith('percentage_')) {
+      ruleIds.add(key.replace('percentage_', ''));
     }
   }
 
-  return c.redirect('/?toast=Split+rules+updated+successfully', 303);
+  let query = supabase.from('allocation_rules').select('*');
+  if (userId) query = query.eq('user_id', userId);
+  const { data: existingRules } = await query;
+  const existingMap = new Map((existingRules || []).map((r: any) => [r.id, r]));
+
+  for (const id of ruleIds) {
+    const pct = parseFloat(String(body[`percentage_${id}`])) || 0.0;
+    const bucketName = body[`bucket_name_${id}`] ? String(body[`bucket_name_${id}`]).trim() : undefined;
+    const icon = body[`icon_${id}`] ? String(body[`icon_${id}`]).trim() : undefined;
+    const targetType = body[`target_type_${id}`] ? String(body[`target_type_${id}`]).trim() : undefined;
+    const rawTargetId = body[`target_id_${id}`] ? String(body[`target_id_${id}`]).trim() : null;
+    const targetId = rawTargetId && rawTargetId !== '' ? rawTargetId : null;
+
+    if (existingMap.has(id)) {
+      await supabase.from('allocation_rules').update({
+        percentage: pct,
+        ...(bucketName ? { bucket_name: bucketName } : {}),
+        ...(icon ? { icon } : {}),
+        ...(targetType ? { target_type: targetType } : {}),
+        target_id: targetId,
+        is_active: 1,
+      }).eq('id', id);
+    } else {
+      await supabase.from('allocation_rules').insert({
+        ...(userId ? { user_id: userId } : {}),
+        bucket_name: bucketName || 'Custom Bucket',
+        icon: icon || '💰',
+        percentage: pct,
+        target_type: targetType || 'CASH',
+        target_id: targetId,
+        is_active: 1,
+      });
+    }
+  }
+
+  return c.redirect('/?toast=Waterfall+split+rules+updated+successfully!', 303);
+});
+
+// ------------------------------------------------------------------------------
+// ALLOCATION RULE CREATE (ADD NEW BUCKET)
+// ------------------------------------------------------------------------------
+financeRoutes.post('/rules/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+
+  const bucketName = String(body['bucket_name'] || 'New Allocation Bucket').trim();
+  const icon = String(body['icon'] || '💰').trim();
+  const percentage = parseFloat(String(body['percentage'] || '10')) || 10.0;
+  const targetType = String(body['target_type'] || 'CASH');
+  const rawTargetId = body['target_id'] ? String(body['target_id']).trim() : null;
+  const targetId = rawTargetId && rawTargetId !== '' ? rawTargetId : null;
+
+  await supabase.from('allocation_rules').insert({
+    ...(userId ? { user_id: userId } : {}),
+    bucket_name: bucketName,
+    icon: icon,
+    percentage: percentage,
+    target_type: targetType,
+    target_id: targetId,
+    is_active: 1,
+  });
+
+  return c.redirect('/?toast=New+allocation+bucket+added+successfully!', 303);
+});
+
+// ------------------------------------------------------------------------------
+// ALLOCATION RULE DELETE (REMOVE BUCKET)
+// ------------------------------------------------------------------------------
+financeRoutes.post('/rules/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  if (id) {
+    await supabase.from('allocation_rules').delete().eq('id', id);
+  }
+  return c.redirect('/?toast=Allocation+bucket+removed', 303);
 });
 
 // ------------------------------------------------------------------------------

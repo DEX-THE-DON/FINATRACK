@@ -417,10 +417,54 @@ export function renderFinanceDashboard(data: any): string {
             }
             applyConversion();
             updateSplitBreakdown();
+            updateRulesModalTotal();
             if (!isRunningStandalone()) {
                 showInstallUi();
             }
         });
+
+        function openRulesModal() {
+            const m = document.getElementById('rules-modal');
+            if (m) {
+                m.classList.remove('hidden');
+                updateRulesModalTotal();
+            }
+        }
+
+        function updateRulesModalTotal() {
+            let total = 0;
+            document.querySelectorAll('.rule-pct-input').forEach(input => {
+                total += parseFloat(input.value) || 0;
+            });
+            const totalEl = document.getElementById('rules-modal-total');
+            const barEl = document.getElementById('rules-modal-bar');
+            const badgeEl = document.getElementById('rules-modal-badge');
+            if (totalEl) totalEl.innerText = total.toFixed(0) + '%';
+            if (barEl) {
+                barEl.style.width = Math.min(100, Math.max(0, total)) + '%';
+                if (total === 100) {
+                    barEl.className = 'h-full rounded-full transition-all duration-300 bg-emerald-500';
+                } else if (total < 100) {
+                    barEl.className = 'h-full rounded-full transition-all duration-300 bg-amber-500';
+                } else {
+                    barEl.className = 'h-full rounded-full transition-all duration-300 bg-rose-500';
+                }
+            }
+            if (badgeEl) {
+                if (total === 100) {
+                    badgeEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800';
+                    badgeEl.innerText = '✅ 100% (Balanced)';
+                } else if (total < 100) {
+                    const diff = 100 - total;
+                    badgeEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800';
+                    badgeEl.innerText = '⚠️ ' + diff.toFixed(0) + '% unallocated';
+                } else {
+                    const diff = total - 100;
+                    badgeEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800';
+                    badgeEl.innerText = '🚨 Exceeds by ' + diff.toFixed(0) + '%';
+                }
+            }
+        }
 
         function updateSplitBreakdown() {
             const curr = getCurrency();
@@ -1316,7 +1360,7 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                     <p class="text-xs text-indigo-200">Automatically calculate and distribute daily earnings across Ziidi MMF (10% auto-save), Lock Savings, Goals, and Living expenses.</p>
                 </div>
-                <button onclick="document.getElementById('rules-modal').classList.toggle('hidden')" class="text-xs bg-indigo-800/60 hover:bg-indigo-700 border border-indigo-600 px-3 py-1.5 rounded-lg font-semibold transition">
+                <button type="button" onclick="openRulesModal()" class="text-xs bg-indigo-800/60 hover:bg-indigo-700 border border-indigo-600 px-3 py-1.5 rounded-lg font-semibold transition active:scale-95">
                     ⚙️ Edit Split Rules
                 </button>
             </div>
@@ -2159,32 +2203,138 @@ export function renderFinanceDashboard(data: any): string {
     </main>
 
     <!-- ⚙️ Waterfall Split Rules Settings Modal -->
-    <div id="rules-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-        <div class="bg-white dark:bg-gray-900 rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-gray-100 dark:border-gray-800 space-y-4">
+    <div id="rules-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+        <div class="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 max-w-xl w-full shadow-2xl border border-gray-100 dark:border-gray-800 space-y-5 my-8">
             <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
-                <div class="flex items-center space-x-2">
-                    <span class="text-2xl">⚙️</span>
-                    <h3 class="font-bold text-gray-900 dark:text-white text-base">Waterfall Split Allocation Rules</h3>
+                <div class="flex items-center space-x-2.5">
+                    <span class="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl shrink-0">⚙️</span>
+                    <div>
+                        <h3 class="font-extrabold text-gray-900 dark:text-white text-base">Waterfall Split Allocation Rules</h3>
+                        <p class="text-[11px] text-gray-500 dark:text-gray-400">Configure bucket names, % splits, and target accounts</p>
+                    </div>
                 </div>
-                <button onclick="document.getElementById('rules-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+                <button type="button" onclick="document.getElementById('rules-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center text-gray-500 hover:text-gray-900 dark:hover:text-white text-sm transition">✕</button>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Configure how your daily income is split automatically across buckets (total should equal 100%).</p>
-            <form action="/rules/update" method="POST" class="space-y-3">
-                ${allocation_rules.map((r: any) => `
-                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-lg">${r.icon || '💰'}</span>
-                        <span class="text-xs font-bold text-gray-800 dark:text-gray-200">${r.bucket_name}</span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <input type="number" step="1" min="0" max="100" inputmode="numeric" name="percentage_${r.id}" value="${r.percentage}" class="w-16 p-2 text-base sm:text-sm font-bold text-center border dark:border-gray-700 dark:bg-gray-900 rounded-lg" required>
-                        <span class="text-xs font-bold text-gray-500">%</span>
-                    </div>
-                </div>`).join('')}
-                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs mt-2 active:scale-95">
-                    Save Allocation Rules
-                </button>
+
+            <!-- Live Total % Indicator & Progress Bar -->
+            <div class="p-3.5 bg-gray-50 dark:bg-gray-800/80 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2">
+                <div class="flex justify-between items-center text-xs">
+                    <span class="font-bold text-gray-700 dark:text-gray-300">Total Allocation: <strong id="rules-modal-total" class="text-sm font-black text-indigo-600 dark:text-indigo-400">100%</strong></span>
+                    <span id="rules-modal-badge" class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">✅ 100% (Balanced)</span>
+                </div>
+                <div class="w-full h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div id="rules-modal-bar" class="h-full rounded-full transition-all duration-300 bg-emerald-500" style="width: 100%"></div>
+                </div>
+            </div>
+
+            <!-- Main Rules Update Form -->
+            <form action="/rules/update" method="POST" class="space-y-3.5">
+                <div class="space-y-2.5 max-h-[50vh] overflow-y-auto no-scrollbar pr-1">
+                    ${allocation_rules.map((r: any) => `
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2.5 transition">
+                        <div class="flex items-center gap-2">
+                            <!-- Emoji Icon -->
+                            <input type="text" name="icon_${r.id}" value="${r.icon || '💰'}" class="w-10 p-2 text-center text-base bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold shrink-0">
+                            
+                            <!-- Bucket Name -->
+                            <input type="text" name="bucket_name_${r.id}" value="${r.bucket_name}" placeholder="Bucket Name" class="flex-1 p-2 text-xs font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white" required>
+                            
+                            <!-- Percentage -->
+                            <div class="flex items-center space-x-1 shrink-0">
+                                <input type="number" step="any" min="0" max="100" inputmode="decimal" name="percentage_${r.id}" value="${r.percentage}" oninput="updateRulesModalTotal()" class="rule-pct-input w-16 p-2 text-xs font-black text-center bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl text-indigo-600 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500" required>
+                                <span class="text-xs font-bold text-gray-500">%</span>
+                            </div>
+
+                            <!-- Delete Button -->
+                            <button type="submit" formaction="/rules/delete/${r.id}" onclick="return confirm('Delete bucket &quot;${r.bucket_name}&quot;?');" title="Delete Bucket" class="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition shrink-0">
+                                🗑️
+                            </button>
+                        </div>
+
+                        <!-- Target Destination Selector -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-gray-200 dark:border-gray-700/60">
+                            <div>
+                                <label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Bucket Type</label>
+                                <select name="target_type_${r.id}" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                    <option value="ACCOUNT" ${r.target_type === 'ACCOUNT' ? 'selected' : ''}>🏦 Bank / MMF / Sacco Account</option>
+                                    <option value="GOAL" ${r.target_type === 'GOAL' ? 'selected' : ''}>🎯 Savings Goal</option>
+                                    <option value="CASH" ${r.target_type === 'CASH' ? 'selected' : ''}>💵 Daily Cash / Living</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Destination Account / Goal</label>
+                                <select name="target_id_${r.id}" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                    <option value="">-- Smart Auto-Match --</option>
+                                    <optgroup label="Connected Accounts">
+                                        ${accounts.map((a: any) => `<option value="${a.id}" ${r.target_id === a.id ? 'selected' : ''}>${a.name} (${a.account_type || 'Account'})</option>`).join('')}
+                                    </optgroup>
+                                    <optgroup label="Active Goals">
+                                        ${goals.map((g: any) => `<option value="${g.id}" ${r.target_id === g.id ? 'selected' : ''}>${g.title}</option>`).join('')}
+                                    </optgroup>
+                                </select>
+                            </div>
+                        </div>
+                    </div>`).join('')}
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t dark:border-gray-800">
+                    <button type="submit" id="rules-save-btn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-2xl text-xs transition shadow-md active:scale-95 flex items-center justify-center gap-1.5">
+                        <span>💾 Save Split Rules & Percentages</span>
+                    </button>
+                    <button type="button" onclick="document.getElementById('add-rule-form-container').classList.toggle('hidden')" class="px-4 py-3 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold rounded-2xl text-xs transition active:scale-95 whitespace-nowrap">
+                        <span>➕ Add Bucket</span>
+                    </button>
+                </div>
             </form>
+
+            <!-- Collapsible Add New Rule Form -->
+            <div id="add-rule-form-container" class="hidden p-4 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h4 class="text-xs font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-wider">➕ Create New Allocation Bucket</h4>
+                    <button type="button" onclick="document.getElementById('add-rule-form-container').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                </div>
+                <form action="/rules/create" method="POST" class="space-y-2.5">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div class="sm:col-span-2">
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Bucket Name</label>
+                            <input type="text" name="bucket_name" placeholder="e.g. Emergency Fund or Tithe" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-bold" required>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Percentage %</label>
+                            <input type="number" step="any" min="0" max="100" name="percentage" value="10" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-bold text-center text-indigo-600 dark:text-indigo-400" required>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Icon Emoji</label>
+                            <input type="text" name="icon" value="🛡️" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-bold text-center">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Bucket Type</label>
+                            <select name="target_type" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-semibold">
+                                <option value="ACCOUNT">🏦 Bank / MMF / Sacco</option>
+                                <option value="GOAL">🎯 Savings Goal</option>
+                                <option value="CASH">💵 Daily Living Cash</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Target Destination</label>
+                            <select name="target_id" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-semibold">
+                                <option value="">-- Smart Auto-Match --</option>
+                                <optgroup label="Accounts">
+                                    ${accounts.map((a: any) => `<option value="${a.id}">${a.name}</option>`).join('')}
+                                </optgroup>
+                                <optgroup label="Goals">
+                                    ${goals.map((g: any) => `<option value="${g.id}">${g.title}</option>`).join('')}
+                                </optgroup>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 shadow-xs">
+                        ➕ Add Bucket to Split Rules
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 

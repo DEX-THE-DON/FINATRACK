@@ -178,7 +178,25 @@ app.get('/', async (c) => {
         goals = defaultToInsert.map((g, idx) => ({ id: `default-goal-${idx + 1}`, ...g }));
       }
     }
+
+    if (allocationRules.length === 0) {
+      const defaultRulesToInsert = [
+        { user_id: userId, bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
+        { user_id: userId, bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
+        { user_id: userId, bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
+        { user_id: userId, bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
+        { user_id: userId, bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
+      ];
+      try {
+        const { data: insertedRules } = await supabase.from('allocation_rules').insert(defaultRulesToInsert).select();
+        allocationRules = (insertedRules && insertedRules.length > 0) ? insertedRules : defaultRulesToInsert.map((r, idx) => ({ id: `default-rule-${idx + 1}`, ...r }));
+      } catch (e) {
+        allocationRules = defaultRulesToInsert.map((r, idx) => ({ id: `default-rule-${idx + 1}`, ...r }));
+      }
+    }
   } else {
+    const { data: guestRules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
+    allocationRules = guestRules || [];
     goals = [
       { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
       { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
