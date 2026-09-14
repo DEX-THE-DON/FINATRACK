@@ -882,8 +882,28 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Food / Lunch (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🍲 Food / Lunch (<span class="curr-symbol-label">Ksh</span>)</label>
                     <input type="number" step="any" inputmode="decimal" name="food_spent" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">📱 Airtime & Data (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" inputmode="decimal" name="airtime_spent" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🛠️ Daily Upkeep / Parking / Misc (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" inputmode="decimal" name="misc_expenses" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">📦 Trips Completed</label>
+                    <input type="number" step="1" min="0" inputmode="numeric" name="trips_completed" placeholder="e.g. 15 trips" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🛵 Kilometers Covered (KM)</label>
+                    <input type="number" step="any" inputmode="decimal" name="kilometers" placeholder="e.g. 85.5 km" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
                 </div>
 
                 <div>
@@ -1235,7 +1255,10 @@ export function renderRiderDashboard(data: any): string {
                         </tr>
                     </thead>
                     <tbody class="divide-y dark:divide-gray-800">
-                        ${rider_logs.length > 0 ? rider_logs.map((l: any) => `
+                        ${rider_logs.length > 0 ? rider_logs.map((l: any) => {
+                            const totalShiftExpenses = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
+                            const netShiftRemittance = Number(l.total_earned || 0) - totalShiftExpenses;
+                            return `
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
                             <td class="p-4 font-medium">${l.date}</td>
                             <td class="p-4">
@@ -1252,14 +1275,25 @@ export function renderRiderDashboard(data: any): string {
                                 ⚡ <span class="convertible-amount" data-kes="${Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))}">Ksh ${(Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>/hr
                             </td>
                             <td class="p-4 font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${l.total_earned}">Ksh ${(Number(l.total_earned) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td class="p-4 text-rose-500 font-medium convertible-amount" data-kes="${Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0)}">Ksh ${(Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400 convertible-amount" data-kes="${Number(l.total_earned || 0) - (Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0))}">Ksh ${(Number(l.total_earned || 0) - (Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td class="p-4 text-rose-500 font-medium">
+                                <div class="font-bold convertible-amount" data-kes="${totalShiftExpenses}">
+                                    Ksh ${totalShiftExpenses.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                </div>
+                                <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap gap-1">
+                                    ${Number(l.fuel_cost || 0) > 0 ? `<span>⛽ ${l.fuel_cost}</span>` : ''}
+                                    ${Number(l.food_spent || 0) > 0 ? `<span>🍲 ${l.food_spent}</span>` : ''}
+                                    ${Number(l.airtime_spent || 0) > 0 ? `<span>📱 ${l.airtime_spent}</span>` : ''}
+                                    ${Number(l.misc_expenses || 0) > 0 ? `<span>🛠️ ${l.misc_expenses}</span>` : ''}
+                                </div>
+                            </td>
+                            <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400 convertible-amount" data-kes="${netShiftRemittance}">Ksh ${netShiftRemittance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td class="p-4 text-center">
                                 <form action="/rider/logs/delete/${l.id}" method="POST" onsubmit="return confirm('Delete shift log?');">
                                     <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold">Delete</button>
                                 </form>
                             </td>
-                        </tr>`).join('') : `
+                        </tr>`;
+                        }).join('') : `
                         <tr>
                             <td colspan="8" class="p-6 text-center text-gray-400">No shift records logged yet.</td>
                         </tr>`}

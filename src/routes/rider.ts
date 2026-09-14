@@ -172,16 +172,43 @@ riderRoutes.post('/rider/logs', async (c) => {
       });
     }
 
-    // 4. Maintenance / Upkeep Expense Transaction
-    const otherUpkeep = toDecimal(maintCostKes).plus(airtimeSpentKes).plus(miscExpensesKes).toNumber();
-    if (otherUpkeep > 0) {
+    // 4. Airtime & Data Bundles Expense Transaction
+    if (airtimeSpentKes > 0) {
       txInserts.push({
         ...(userId ? { user_id: userId } : {}),
         account_id: targetAccId,
         transaction_type: 'EXPENSE',
-        category: 'Living Expenses',
-        amount: otherUpkeep,
-        description: `Rider Shift: Bike Maintenance & Airtime (${logDate})`,
+        category: 'Airtime & Data Bundles',
+        amount: airtimeSpentKes,
+        description: `Rider Shift: Airtime & Delivery App Data (${logDate})`,
+        rider_log_id: newLog.id,
+        date: logDate,
+      });
+    }
+
+    // 5. Bike Maintenance Expense Transaction
+    if (maintCostKes > 0) {
+      txInserts.push({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetAccId,
+        transaction_type: 'EXPENSE',
+        category: 'Bike Maintenance & Repairs',
+        amount: maintCostKes,
+        description: `Rider Shift: Bike Maintenance & Spares (${logDate})`,
+        rider_log_id: newLog.id,
+        date: logDate,
+      });
+    }
+
+    // 6. Daily Upkeep, Parking & Misc Expense Transaction
+    if (miscExpensesKes > 0) {
+      txInserts.push({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetAccId,
+        transaction_type: 'EXPENSE',
+        category: 'Daily Upkeep & Misc',
+        amount: miscExpensesKes,
+        description: `Rider Shift: Parking, Puncture & Daily Upkeep (${logDate})`,
         rider_log_id: newLog.id,
         date: logDate,
       });
