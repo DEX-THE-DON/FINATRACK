@@ -1084,17 +1084,19 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <!-- ⚡ Optional Online Stints / Multi-Session Splitter (Uber / Bolt) -->
-                <div class="sm:col-span-2 lg:col-span-4 bg-slate-50 dark:bg-slate-950/80 p-4 rounded-2xl border border-blue-200 dark:border-blue-900/60 space-y-3">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div>
+                <div class="sm:col-span-2 lg:col-span-4 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-blue-50/80 dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-blue-950/40 p-4 rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700/80 space-y-3">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div class="space-y-0.5">
                             <div class="flex items-center space-x-2">
-                                <span class="text-base">⚡</span>
-                                <h3 class="text-xs font-bold text-gray-900 dark:text-white">Optional: Log Multiple Online Stints (Uber / Bolt / Glovo Sessions)</h3>
+                                <span class="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider shadow-xs">NEW FEATURE</span>
+                                <h3 class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                                    <span>⚡ Multi-Session Online Stints (Uber / Bolt / Glovo)</span>
+                                </h3>
                             </div>
-                            <p class="text-[11px] text-gray-500 dark:text-gray-400">Go online, pause, and go online again? Log each session (e.g. 11am–2pm, 2:13pm–5pm) to pinpoint peak earning hours.</p>
+                            <p class="text-[11px] text-gray-600 dark:text-gray-300">Went online 11am–2pm, paused, then online again 2:13pm–5pm? Log each stint to see your best earning hours.</p>
                         </div>
-                        <button type="button" onclick="toggleStintsBuilder()" id="toggle-stints-btn" class="px-3 py-1.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900 rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 border border-blue-300 dark:border-blue-800">
-                            <span>⚡ Add Online Sessions</span>
+                        <button type="button" onclick="toggleStintsBuilder()" id="toggle-stints-btn" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 active:scale-95 shadow-md shrink-0">
+                            <span>⚡ Add Online Stints / Sessions</span>
                         </button>
                     </div>
 
