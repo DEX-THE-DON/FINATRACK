@@ -384,9 +384,10 @@ app.get('/', async (c) => {
   // Unified Deadlines & Renewals Timeline
   const complianceItems = (complianceDeadlines || []).map((c: any) => ({
     id: c.id,
-    name: c.item_type || c.name,
+    name: c.title || c.item_type || c.name || 'Vehicle Document',
+    title: c.title || c.item_type || c.name || 'Vehicle Document',
     expiryDate: c.expiry_date,
-    costKes: Number(c.cost || 0),
+    costKes: Number(c.renewal_cost || c.cost || 0),
     notes: c.notes,
   }));
   const unifiedTimeline = buildUnifiedTimeline({

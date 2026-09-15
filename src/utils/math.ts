@@ -789,7 +789,9 @@ export interface TimelineItem {
   id: string;
   title: string;
   itemType: 'LOAN' | 'BILL' | 'COMPLIANCE';
+  typeLabel?: string;
   amountKes?: number;
+  amount?: number;
   dueDate: string;
   daysRemaining: number;
   isOverdue: boolean;
@@ -798,6 +800,7 @@ export interface TimelineItem {
   statusBadge: string;
   icon: string;
   subtitle: string;
+  actionLink: string;
 }
 
 export function buildUnifiedTimeline(params: {
@@ -822,7 +825,9 @@ export function buildUnifiedTimeline(params: {
       id: `debt-${d.id}`,
       title: `${d.person_name || 'Loan'} (${d.debt_type === 'I_OWE' ? 'Borrowed' : 'Lent Out'})`,
       itemType: 'LOAN',
+      typeLabel: d.debt_type === 'I_OWE' ? 'Loan / Borrowed' : 'Lent Out',
       amountKes: remAmt,
+      amount: remAmt,
       dueDate: dueStr,
       daysRemaining: danger.daysRemaining,
       isOverdue: danger.isOverdue,
@@ -831,6 +836,7 @@ export function buildUnifiedTimeline(params: {
       statusBadge: danger.badgeLabel,
       icon: d.debt_type === 'I_OWE' ? '🔴' : '🟢',
       subtitle: `Remaining Balance: Ksh ${remAmt.toLocaleString()}`,
+      actionLink: '#debts-card',
     });
   }
 
@@ -849,7 +855,9 @@ export function buildUnifiedTimeline(params: {
       id: `bill-${b.id}`,
       title: b.title,
       itemType: 'BILL',
+      typeLabel: 'Recurring Bill',
       amountKes: Number(b.amount || 0),
+      amount: Number(b.amount || 0),
       dueDate: dueStr,
       daysRemaining: diffDays,
       isOverdue: diffDays < 0,
@@ -858,10 +866,11 @@ export function buildUnifiedTimeline(params: {
       statusBadge: diffDays === 0 ? '⚠️ Due Today' : `Due in ${diffDays}d`,
       icon: '⚡',
       subtitle: `Recurring Monthly Utility (Day ${dueDay})`,
+      actionLink: '#waterfall-card',
     });
   }
 
-  // 3. Compliance & Vehicle Items
+  // 3. Document Deadlines & Vehicle Items
   for (const c of complianceItems) {
     if (!c.expiryDate) continue;
     const expStr = c.expiryDate.slice(0, 10);
@@ -869,20 +878,45 @@ export function buildUnifiedTimeline(params: {
     expDate.setHours(0, 0, 0, 0);
     const diffDays = Math.ceil((expDate.getTime() - now.getTime()) / 86400000);
     const isDanger = diffDays <= 7;
+    const docName = c.name || c.title || 'Vehicle Document';
+    const docLower = docName.toLowerCase();
+
+    // Determine clean specific document type label and icon
+    let typeLabel = 'Vehicle Document';
+    let icon = '📋';
+    if (docLower.includes('insurance')) {
+      typeLabel = 'Insurance';
+      icon = '🛡️';
+    } else if (docLower.includes('license') || docLower.includes('dl')) {
+      typeLabel = 'Driving License';
+      icon = '🪪';
+    } else if (docLower.includes('psv') || docLower.includes('permit') || docLower.includes('sticker') || docLower.includes('county')) {
+      typeLabel = 'PSV Permit';
+      icon = '🎫';
+    } else if (docLower.includes('inspection') || docLower.includes('ntsa')) {
+      typeLabel = 'Inspection';
+      icon = '🔍';
+    } else if (docLower.includes('logbook')) {
+      typeLabel = 'Logbook';
+      icon = '📖';
+    }
 
     items.push({
-      id: `comp-${c.id || c.name}`,
-      title: c.name || 'Compliance Item',
+      id: `comp-${c.id || docName}`,
+      title: docName,
       itemType: 'COMPLIANCE',
+      typeLabel: typeLabel,
       amountKes: c.costKes || 0,
+      amount: c.costKes || 0,
       dueDate: expStr,
       daysRemaining: diffDays,
       isOverdue: diffDays < 0,
       isDueToday: diffDays === 0,
       isDangerZone: isDanger,
-      statusBadge: diffDays < 0 ? `🚨 Expired by ${Math.abs(diffDays)}d` : `Expires in ${diffDays}d`,
-      icon: '🛵',
-      subtitle: c.notes || 'Rider Compliance Renewal',
+      statusBadge: diffDays < 0 ? `🚨 Expired by ${Math.abs(diffDays)}d` : diffDays === 0 ? '🚨 Due TODAY!' : `Expires in ${diffDays}d`,
+      icon: icon,
+      subtitle: c.notes || `${typeLabel} Renewal Deadline`,
+      actionLink: '/rider#compliance-card',
     });
   }
 

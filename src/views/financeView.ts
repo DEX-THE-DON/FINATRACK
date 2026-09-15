@@ -1205,8 +1205,8 @@ export function renderFinanceDashboard(data: any): string {
                 ` : `
                 <div class="space-y-2.5 max-h-72 overflow-y-auto no-scrollbar">
                     ${unified_timeline.map((item: any) => {
-                        const isOverdue = item.urgencyStatus === 'OVERDUE';
-                        const isDanger = item.urgencyStatus === 'DANGER';
+                        const isOverdue = item.isOverdue || item.daysRemaining < 0;
+                        const isDanger = item.isDangerZone || item.daysRemaining <= 3;
                         const badgeStyle = isOverdue 
                             ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
                             : isDanger 
@@ -1217,12 +1217,12 @@ export function renderFinanceDashboard(data: any): string {
                         <div class="p-3 rounded-xl border ${isDanger || isOverdue ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20' : 'border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40'} flex items-center justify-between gap-3 text-xs">
                             <div class="flex items-center space-x-3">
                                 <div class="w-8 h-8 rounded-lg ${isOverdue ? 'bg-rose-600' : isDanger ? 'bg-amber-600' : 'bg-indigo-600'} text-white flex items-center justify-center text-sm shrink-0">
-                                    ${item.type === 'DEBT_PAYMENT' ? '💳' : item.type === 'BILL' ? '⚡' : '🛵'}
+                                    ${item.icon || (item.itemType === 'LOAN' ? '💳' : item.itemType === 'BILL' ? '⚡' : '📋')}
                                 </div>
                                 <div>
                                     <div class="flex items-center gap-1.5 flex-wrap">
                                         <p class="font-bold text-gray-900 dark:text-gray-100">${item.title}</p>
-                                        <span class="text-[9px] px-1.5 py-0.2 rounded-md font-bold ${badgeStyle}">${item.typeLabel}</span>
+                                        <span class="text-[9px] px-1.5 py-0.5 rounded-md font-bold ${badgeStyle}">${item.typeLabel || (item.itemType === 'LOAN' ? 'Loan' : item.itemType === 'BILL' ? 'Bill' : 'Document')}</span>
                                     </div>
                                     <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                                         📅 Due: <strong>${item.dueDate}</strong> • 
@@ -1233,8 +1233,8 @@ export function renderFinanceDashboard(data: any): string {
                                 </div>
                             </div>
                             <div class="text-right shrink-0">
-                                ${item.amount !== undefined ? `<p class="font-black text-gray-900 dark:text-white convertible-amount" data-kes="${item.amount}">${formatKes(item.amount)}</p>` : ''}
-                                <a href="${item.actionLink}" class="inline-block mt-1 text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold">View →</a>
+                                ${(item.amount || item.amountKes) ? `<p class="font-black text-gray-900 dark:text-white convertible-amount" data-kes="${item.amount || item.amountKes}">${formatKes(item.amount || item.amountKes)}</p>` : ''}
+                                <a href="${item.actionLink || '#'}" class="inline-block mt-1 text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold">View →</a>
                             </div>
                         </div>`;
                     }).join('')}

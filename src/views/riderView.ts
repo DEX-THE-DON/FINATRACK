@@ -453,6 +453,34 @@ export function renderRiderDashboard(data: any): string {
             if (drawer) drawer.classList.toggle('hidden');
         }
 
+        function onDocTypePresetChanged(typeVal) {
+            const titleInput = document.getElementById('new-doc-title-input');
+            const intervalSelect = document.getElementById('new-doc-interval-select');
+            if (!titleInput) return;
+            if (typeVal === 'INSURANCE_COMP') {
+                titleInput.value = 'Comprehensive Motorbike Insurance';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'INSURANCE_TP') {
+                titleInput.value = 'Third-Party Motorbike Insurance';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'DL') {
+                titleInput.value = 'NTSA Driving License (DL)';
+                if (intervalSelect) intervalSelect.value = '36';
+            } else if (typeVal === 'PSV') {
+                titleInput.value = 'County PSV Boda Permit / Sticker';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'INSPECTION') {
+                titleInput.value = 'NTSA Inspection Certificate';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'LOGBOOK') {
+                titleInput.value = 'Motorbike Logbook';
+                if (intervalSelect) intervalSelect.value = '36';
+            } else if (typeVal === 'CUSTOM') {
+                titleInput.value = '';
+                titleInput.focus();
+            }
+        }
+
         function toggleMaintDrawer() {
             const container = document.getElementById('maint-log-form-container');
             if (container) container.classList.toggle('hidden');
@@ -703,7 +731,7 @@ export function renderRiderDashboard(data: any): string {
                 <span>🛠️ Service</span>
             </button>
             <button onclick="document.getElementById('compliance-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-amber-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
-                <span>🛡️ Insurance</span>
+                <span>📜 Documents</span>
             </button>
             <button onclick="document.getElementById('fleet-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-slate-700 transition">
                 <span>🛵 Fleet</span>
@@ -1469,19 +1497,19 @@ export function renderRiderDashboard(data: any): string {
             </div>
         </div>
 
-        <!-- 🛡️ Statutory Compliance & Insurance Expiry Tracker Card -->
+        <!-- 📜 Statutory Documents & Vehicle Permits Card -->
         <div id="compliance-card" class="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent dark:from-amber-950/30 rounded-3xl p-6 shadow-sm border border-amber-200 dark:border-amber-900/50 space-y-5">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-amber-100 dark:border-amber-900/40 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-xl shadow-xs">
-                        🛡️
+                        📜
                     </div>
                     <div>
                         <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span>Statutory Compliance & Insurance Tracker</span>
+                            <span>Statutory Documents & Vehicle Permits</span>
                             <span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">${compliance_deadlines.length} Documents Registered</span>
                         </h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Keep your boda road-legal with automated countdowns for Insurance, Driving License, and County PSV permits.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Keep your boda road-legal with automated countdowns for Insurance, Driving License (DL), County PSV permits, and NTSA Inspections.</p>
                     </div>
                 </div>
 
@@ -1492,48 +1520,89 @@ export function renderRiderDashboard(data: any): string {
                 </div>
             </div>
 
-            <!-- ➕ Add New Compliance Document Form -->
+            <!-- ➕ Add New Statutory Document Form -->
             <div id="new-comp-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-amber-200 dark:border-amber-900 shadow-md space-y-3">
                 <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
                     <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <span>➕ Register Compliance Document / Permit</span>
+                        <span>➕ Register Statutory Document / Permit</span>
                     </h3>
                     <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
                 <form action="/rider/compliance/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div class="sm:col-span-2 lg:col-span-1">
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Title</label>
-                        <input type="text" name="title" placeholder="e.g. Motorbike Insurance, PSV Sticker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold" required>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Category</label>
+                        <select onchange="onDocTypePresetChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold cursor-pointer">
+                            <option value="INSURANCE_COMP">🛡️ Comprehensive Insurance</option>
+                            <option value="INSURANCE_TP">🛡️ Third-Party Insurance</option>
+                            <option value="DL">🪪 NTSA Driving License (DL)</option>
+                            <option value="PSV">🎫 County PSV Sticker / Permit</option>
+                            <option value="INSPECTION">🔍 NTSA Inspection Certificate</option>
+                            <option value="LOGBOOK">📖 Motorbike Logbook</option>
+                            <option value="CUSTOM">📋 Custom Document Name...</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2 lg:col-span-1">
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Title / Number</label>
+                        <input type="text" id="new-doc-title-input" name="title" value="Comprehensive Motorbike Insurance" placeholder="e.g. Motorbike Insurance, PSV Sticker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold" required>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Expiry Date</label>
                         <input type="date" name="expiry_date" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-bold" required>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Renewal Interval</label>
-                        <select name="interval_months" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold">
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Renewal Cycle</label>
+                        <select id="new-doc-interval-select" name="interval_months" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold">
                             <option value="12" selected>12 Months (Annual)</option>
                             <option value="3">3 Months (Quarterly)</option>
                             <option value="6">6 Months (Semi-Annual)</option>
                             <option value="36">36 Months (3 Years - DL)</option>
                         </select>
                     </div>
-                    <div class="flex items-end">
+                    <div class="sm:col-span-2 lg:col-span-3">
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Policy Number / Provider Notes (Optional)</label>
+                        <input type="text" name="notes" placeholder="e.g. Policy #POL-8900-X, Directline Insurance, Agent contact 07..." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs">
+                    </div>
+                    <div class="flex items-end sm:col-span-2 lg:col-span-1">
                         <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs active:scale-95">
-                            Save Compliance Record
+                            Save Document
                         </button>
                     </div>
                 </form>
             </div>
 
-            <!-- Compliance Grid -->
+            <!-- Documents Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 ${compliance_deadlines.length > 0 ? compliance_deadlines.map((c: any) => {
                     const diff = getDaysDiff(c.expiry_date);
                     const isUrgent = diff.status === 'EXPIRED' || diff.status === 'URGENT';
                     const isSoon = diff.status === 'SOON';
                     const badgeColor = isUrgent ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-black animate-pulse' : (isSoon ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold');
-                    const icon = c.title.toLowerCase().includes('insurance') ? '🛡️' : (c.title.toLowerCase().includes('license') || c.title.toLowerCase().includes('dl') ? '🪪' : '🎫');
+                    
+                    const titleLower = (c.title || '').toLowerCase();
+                    let docTypeLabel = 'Statutory Permit';
+                    let icon = '📋';
+                    let typeBadgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+                    if (titleLower.includes('insurance')) {
+                        docTypeLabel = 'Motorbike Insurance';
+                        icon = '🛡️';
+                        typeBadgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300';
+                    } else if (titleLower.includes('license') || titleLower.includes('dl')) {
+                        docTypeLabel = 'Driving License (DL)';
+                        icon = '🪪';
+                        typeBadgeClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
+                    } else if (titleLower.includes('psv') || titleLower.includes('permit') || titleLower.includes('sticker') || titleLower.includes('county')) {
+                        docTypeLabel = 'County PSV Permit';
+                        icon = '🎫';
+                        typeBadgeClass = 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300';
+                    } else if (titleLower.includes('inspection') || titleLower.includes('ntsa')) {
+                        docTypeLabel = 'NTSA Inspection';
+                        icon = '🔍';
+                        typeBadgeClass = 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300';
+                    } else if (titleLower.includes('logbook')) {
+                        docTypeLabel = 'Vehicle Logbook';
+                        icon = '📖';
+                        typeBadgeClass = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
+                    }
 
                     return `
                     <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border ${isUrgent ? 'border-rose-300 dark:border-rose-900 shadow-sm' : (isSoon ? 'border-amber-300 dark:border-amber-900/60' : 'border-gray-200 dark:border-gray-800')} space-y-3 flex flex-col justify-between shadow-xs">
@@ -1544,11 +1613,14 @@ export function renderRiderDashboard(data: any): string {
                                         ${icon}
                                     </div>
                                     <div>
-                                        <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug">${c.title}</h3>
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <span class="text-[9px] font-extrabold px-2 py-0.5 rounded-md ${typeBadgeClass}">${docTypeLabel}</span>
+                                        </div>
+                                        <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug mt-0.5">${c.title}</h3>
                                         <span class="text-[10px] text-gray-500 dark:text-gray-400">Renewal Cycle: ${c.interval_months || 12} Mos</span>
                                     </div>
                                 </div>
-                                <form action="/rider/compliance/delete/${c.id}" method="POST" onsubmit="return confirm('Delete compliance record?');">
+                                <form action="/rider/compliance/delete/${c.id}" method="POST" onsubmit="return confirm('Delete this document record?');">
                                     <button type="submit" title="Delete" class="text-gray-400 hover:text-rose-500 text-xs p-1">✕</button>
                                 </form>
                             </div>
@@ -1572,7 +1644,7 @@ export function renderRiderDashboard(data: any): string {
                         <div class="space-y-2 pt-1 border-t dark:border-gray-800">
                             <div class="flex gap-2">
                                 <button type="button" onclick="toggleComplianceDrawer('${c.id}')" class="flex-1 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 text-xs font-bold rounded-lg border border-amber-200 dark:border-amber-800 transition active:scale-95 flex items-center justify-center gap-1">
-                                    <span>🔄 Set Expiry / Renew</span>
+                                    <span>👁️ View Policy & Renew</span>
                                 </button>
                             </div>
 
@@ -1608,7 +1680,7 @@ export function renderRiderDashboard(data: any): string {
                     </div>`;
                 }).join('') : `
                 <div class="col-span-full p-4 text-center rounded-xl bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700">
-                    <p class="text-xs text-gray-500">No compliance records registered yet. Click "➕ Add Document" above to register your Insurance!</p>
+                    <p class="text-xs text-gray-500">No statutory documents registered yet. Click "➕ Add Document" above to register your Insurance or Driving License!</p>
                 </div>`}
             </div>
         </div>
