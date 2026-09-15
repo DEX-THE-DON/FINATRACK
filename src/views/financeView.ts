@@ -655,18 +655,19 @@ export function renderFinanceDashboard(data: any): string {
             }
 
             let text = raw
-                .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, ' ')
+                .replace(/\u00A0/g, ' ')
+                .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\uFEFF]/g, ' ')
                 .trim();
             // Normalize common Safaricom punctuation quirks (e.g. "PM.New M-PESA" -> "PM. New M-PESA")
             text = text.replace(/([0-9]|AM|PM|am|pm)\.New\s+M-PESA/gi, '$1. New M-PESA');
 
             const results = [];
-            const receivedRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:You have received\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+received from\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
-            const sentRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+sent to\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
-            const paidRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+paid to\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
-            const withdrawRegex = /([A-Z0-9]{8,12})\s+(?:Confirmed\.?\s+)?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)\s+withdrawn from\s+([\s\S]+?)(?=(?:\s+on\s+\d|\s+at\s+\d|\.?\s*New M-PESA|\.$|$))/i;
-            const dtRegex = /on\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?))?/i;
-            const splitRegex = /(?:^|\n|\b)([A-Z0-9]{8,12})\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn)[\s\S]*?(?=(?:(?:\n|\b)[A-Z0-9]{8,12}\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn))|$)/gi;
+            const receivedRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:You have received\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+received from\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
+            const sentRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+sent to\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
+            const paidRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+paid to\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
+            const withdrawRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+withdrawn from\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
+            const dtRegex = /on\\s+(\\d{1,2}[\\/\\-]\\d{1,2}[\\/\\-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})(?:\\s+at\\s+(\\d{1,2}:\\d{2}(?:\\s*(?:AM|PM|am|pm))?))?/i;
+            const splitRegex = /(?:^|\\n|\\b)([A-Z0-9]{8,12})\\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn)[\\s\\S]*?(?=(?:(?:\\n|\\b)[A-Z0-9]{8,12}\\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn))|$)/gi;
 
             let chunks = [];
             let rMatch;
@@ -677,7 +678,7 @@ export function renderFinanceDashboard(data: any): string {
             }
 
             if (chunks.length <= 1) {
-                const lineChunks = text.split(/\n+/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length >= 15 && /[A-Z0-9]{8,12}/.test(l); });
+                const lineChunks = text.split(/\\n+/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length >= 15 && /[A-Z0-9]{8,12}/.test(l); });
                 if (lineChunks.length > chunks.length) {
                     chunks = lineChunks;
                 }
@@ -695,21 +696,21 @@ export function renderFinanceDashboard(data: any): string {
                 if (match) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\.+$/, '');
+                    party = match[3].trim().replace(/\\.+$/, '');
                     type = 'INCOME';
                     cat = (party.toUpperCase().includes('BOLT') || party.toUpperCase().includes('UBER') || party.toUpperCase().includes('GLOVO')) ? 'Rider & Boda Deliveries' : 'M-Pesa Income';
                 } else if ((match = itemText.match(sentRegex))) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\.+$/, '');
+                    party = match[3].trim().replace(/\\.+$/, '');
                     type = 'EXPENSE';
                     cat = 'Living Expenses';
                 } else if ((match = itemText.match(paidRegex))) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\.+$/, '');
+                    party = match[3].trim().replace(/\\.+$/, '');
                     type = 'EXPENSE';
-                    const p = party.toUpperCase().replace(/\./g, '');
+                    const p = party.toUpperCase().replace(/\\./g, '');
                     if (p.includes('SPIRO') || p.includes('ROAM') || p.includes('AMPERSAND') || p.includes('KIRI') || p.includes('ARC RIDE') || p.includes('BASIGO') || p.includes('BATTERY') || p.includes('SWAP')) cat = 'EV Battery Swap & Charging';
                     else if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL') || p.includes('OLA') || p.includes('HASS') || p.includes('OIL')) cat = 'Fuel & Petrol';
                     else if (p.includes('KPLC') || p.includes('WATER') || p.includes('SAFARICOM') || p.includes('ZUKU')) cat = 'Utilities & Bills';
@@ -718,11 +719,11 @@ export function renderFinanceDashboard(data: any): string {
                 } else if ((match = itemText.match(withdrawRegex))) {
                     code = match[1].toUpperCase();
                     amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\.+$/, '');
+                    party = match[3].trim().replace(/\\.+$/, '');
                     type = 'EXPENSE';
                     cat = 'Cash Withdrawal';
                 } else {
-                    const genericMatch = itemText.match(/([A-Z0-9]{8,12})\s+.*?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+                    const genericMatch = itemText.match(/([A-Z0-9]{8,12})\\s+.*?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)/i);
                     if (genericMatch) {
                         code = genericMatch[1].toUpperCase();
                         amt = parseFloat(genericMatch[2].replace(/,/g, ''));
