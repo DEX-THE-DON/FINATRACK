@@ -241,6 +241,161 @@ export function renderRiderDashboard(data: any): string {
             if (hInput) hInput.value = hrs;
         }
 
+        let stintItems = [];
+
+        function toggleStintsBuilder() {
+            const container = document.getElementById('stints-builder-container');
+            const btn = document.getElementById('toggle-stints-btn');
+            if (container) {
+                container.classList.toggle('hidden');
+                if (!container.classList.contains('hidden')) {
+                    if (stintItems.length === 0) {
+                        addStintRow('11:00', '14:00', '567', 'Uber Eats');
+                        addStintRow('14:13', '17:00', '700', 'Bolt Deliveries');
+                    }
+                    if (btn) btn.innerHTML = '<span>✕ Close Sessions Splitter</span>';
+                } else {
+                    if (btn) btn.innerHTML = '<span>⚡ Add Online Sessions</span>';
+                }
+            }
+        }
+
+        function addStintRow(start = '11:00', end = '14:00', earned = '', platform = 'Uber Eats') {
+            const id = 'stint_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+            stintItems.push({ id, start_time: start, end_time: end, earned: earned, platform: platform, trips: '' });
+            renderStintsList(true);
+        }
+
+        function removeStintRow(id) {
+            stintItems = stintItems.filter(s => s.id !== id);
+            renderStintsList(true);
+        }
+
+        function onStintFieldChanged(id, field, value) {
+            const item = stintItems.find(s => s.id === id);
+            if (item) {
+                item[field] = value;
+                renderStintsList(false);
+            }
+        }
+
+        function renderStintsList(rebuildDom = true) {
+            const listEl = document.getElementById('stints-list');
+            let totalEarned = 0;
+            let totalMins = 0;
+
+            if (rebuildDom && listEl) {
+                listEl.innerHTML = stintItems.map((s, idx) => {
+                    const sM = s.start_time ? (parseInt(s.start_time.split(':')[0]) * 60 + parseInt(s.start_time.split(':')[1])) : 0;
+                    const eM = s.end_time ? (parseInt(s.end_time.split(':')[0]) * 60 + parseInt(s.end_time.split(':')[1])) : 0;
+                    let diff = eM - sM;
+                    if (diff <= 0) diff += 24 * 60;
+                    const hrs = (diff / 60);
+                    const earn = parseFloat(s.earned) || 0;
+                    const hrYield = hrs > 0 ? (earn / hrs).toFixed(0) : '0';
+
+                    return '<div id="row-' + s.id + '" class="p-2.5 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-900/60 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs">' +
+                        '<div class="sm:col-span-1 font-extrabold text-blue-600 dark:text-blue-400">#' + (idx + 1) + '</div>' +
+                        '<div class="sm:col-span-3 flex items-center gap-1">' +
+                            '<input type="time" value="' + (s.start_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'start_time\', this.value)" class="w-full p-1.5 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
+                            '<span class="text-gray-400">to</span>' +
+                            '<input type="time" value="' + (s.end_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'end_time\', this.value)" class="w-full p-1.5 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
+                        '</div>' +
+                        '<div class="sm:col-span-3">' +
+                            '<input type="number" step="any" inputmode="decimal" value="' + (s.earned || '') + '" placeholder="Earned Ksh" oninput="onStintFieldChanged(\'' + s.id + '\', \'earned\', this.value)" class="w-full p-1.5 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400" required>' +
+                        '</div>' +
+                        '<div class="sm:col-span-2">' +
+                            '<select onchange="onStintFieldChanged(\'' + s.id + '\', \'platform\', this.value)" class="w-full p-1.5 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium">' +
+                                '<option value="Uber Eats"' + (s.platform === 'Uber Eats' ? ' selected' : '') + '>Uber Eats</option>' +
+                                '<option value="Bolt Deliveries"' + (s.platform === 'Bolt Deliveries' ? ' selected' : '') + '>Bolt</option>' +
+                                '<option value="Glovo / Jumia"' + (s.platform === 'Glovo / Jumia' ? ' selected' : '') + '>Glovo/Jumia</option>' +
+                                '<option value="Boda Trips"' + (s.platform === 'Boda Trips' ? ' selected' : '') + '>Boda Passenger</option>' +
+                                '<option value="Direct Delivery"' + (s.platform === 'Direct Delivery' ? ' selected' : '') + '>Direct Client</option>' +
+                            '</select>' +
+                        '</div>' +
+                        '<div class="sm:col-span-3 flex items-center justify-between gap-1">' +
+                            '<span id="badge-' + s.id + '" class="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-[10px] whitespace-nowrap">' +
+                                '⚡ Ksh ' + hrYield + '/hr (' + hrs.toFixed(1) + 'h)' +
+                            '</span>' +
+                            '<button type="button" onclick="removeStintRow(\'' + s.id + '\')" class="text-rose-500 hover:text-rose-700 font-bold p-1">✕</button>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            }
+
+            stintItems.forEach(s => {
+                const earn = parseFloat(s.earned) || 0;
+                totalEarned += earn;
+                const sM = s.start_time ? (parseInt(s.start_time.split(':')[0]) * 60 + parseInt(s.start_time.split(':')[1])) : 0;
+                const eM = s.end_time ? (parseInt(s.end_time.split(':')[0]) * 60 + parseInt(s.end_time.split(':')[1])) : 0;
+                let diff = eM - sM;
+                if (diff <= 0) diff += 24 * 60;
+                const hrs = diff / 60;
+                totalMins += diff;
+
+                const badgeEl = document.getElementById('badge-' + s.id);
+                if (badgeEl) {
+                    const hrYield = hrs > 0 ? (earn / hrs).toFixed(0) : '0';
+                    badgeEl.innerText = '⚡ Ksh ' + hrYield + '/hr (' + hrs.toFixed(1) + 'h)';
+                }
+            });
+
+            const totalHours = (totalMins / 60).toFixed(1);
+            const sumHoursEl = document.getElementById('stints-summary-hours');
+            if (sumHoursEl) sumHoursEl.textContent = totalHours + ' hrs';
+
+            const sumEarnEl = document.getElementById('stints-summary-earned');
+            if (sumEarnEl) sumEarnEl.textContent = 'Ksh ' + totalEarned.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+            // Update parent shift inputs
+            if (stintItems.length > 0 && totalEarned > 0) {
+                const parentEarnInput = document.querySelector('input[name="total_earned"]');
+                if (parentEarnInput) parentEarnInput.value = totalEarned.toFixed(2);
+
+                const parentHoursInput = document.getElementById('input_shift_hours');
+                if (parentHoursInput) parentHoursInput.value = totalHours;
+
+                const parentBadge = document.getElementById('shift-duration-badge');
+                if (parentBadge) parentBadge.innerText = '⏱️ ' + totalHours + ' hrs (Multi-Stint)';
+
+                if (stintItems[0].start_time) {
+                    const startInput = document.getElementById('input_start_time');
+                    if (startInput) startInput.value = stintItems[0].start_time;
+                }
+                if (stintItems[stintItems.length - 1].end_time) {
+                    const endInput = document.getElementById('input_end_time');
+                    if (endInput) endInput.value = stintItems[stintItems.length - 1].end_time;
+                }
+            }
+
+            const jsonInput = document.getElementById('stints_json_input');
+            if (jsonInput) {
+                jsonInput.value = stintItems.length > 1 ? JSON.stringify(stintItems) : '';
+            }
+        }
+
+        function calcSimStintYield() {
+            const s = document.getElementById('sim_stint_start')?.value;
+            const e = document.getElementById('sim_stint_end')?.value;
+            const earn = parseFloat(document.getElementById('sim_stint_earned')?.value || '0') || 0;
+            if (!s || !e) return;
+            const sM = parseInt(s.split(':')[0]) * 60 + parseInt(s.split(':')[1]);
+            const eM = parseInt(e.split(':')[0]) * 60 + parseInt(e.split(':')[1]);
+            let diff = eM - sM;
+            if (diff <= 0) diff += 24 * 60;
+            const hrs = diff / 60;
+            const yieldVal = hrs > 0 ? (earn / hrs).toFixed(2) : '0.00';
+            const resEl = document.getElementById('sim_stint_result');
+            if (resEl) {
+                const curr = getCurrency();
+                if (curr === 'USD') {
+                    resEl.innerText = '$' + (parseFloat(yieldVal) / USD_TO_KES).toFixed(2) + ' / hr (' + hrs.toFixed(1) + 'h)';
+                } else {
+                    resEl.innerText = 'Ksh ' + parseFloat(yieldVal).toLocaleString(undefined, {minimumFractionDigits: 2}) + ' / hr (' + hrs.toFixed(1) + 'h)';
+                }
+            }
+        }
+
         function showTimeTab(tabId, btn) {
             document.querySelectorAll('.time-tab-content').forEach(el => el.classList.add('hidden'));
             const target = document.getElementById('time-tab-' + tabId);
@@ -788,16 +943,44 @@ export function renderRiderDashboard(data: any): string {
             </div>
 
             <!-- Windows Tab Content -->
-            <div id="time-tab-windows" class="time-tab-content grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+            <div id="time-tab-windows" class="time-tab-content grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
                 ${(ti.time_window_analysis || []).map((w: any) => `
-                <div class="p-3.5 bg-slate-950/80 border border-blue-900/50 rounded-2xl space-y-1.5">
-                    <div class="flex justify-between items-center text-xs">
-                        <span class="font-bold text-blue-200">${w.window_label}</span>
-                        <span class="text-[10px] px-1.5 py-0.5 bg-blue-900/60 rounded text-blue-300 font-semibold">${w.share_pct}% share</span>
+                <div class="p-3 bg-slate-950/80 border border-blue-900/50 rounded-2xl space-y-1.5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-blue-200">${w.window_label}</span>
+                            <span class="text-[10px] px-1.5 py-0.5 bg-blue-900/60 rounded text-blue-300 font-semibold">${w.share_pct}%</span>
+                        </div>
+                        <p class="text-lg font-black text-emerald-400 mt-1"><span class="convertible-amount" data-kes="${w.gross_hourly || 0}">Ksh ${(Number(w.gross_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> <span class="text-xs font-normal text-gray-400">/ hr</span></p>
                     </div>
-                    <p class="text-lg font-black text-emerald-400"><span class="convertible-amount" data-kes="${w.gross_hourly || 0}">Ksh ${(Number(w.gross_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> <span class="text-xs font-normal text-gray-400">/ hr</span></p>
-                    <p class="text-[11px] text-gray-400">Net: <strong class="text-cyan-300 convertible-amount" data-kes="${w.net_hourly || 0}">Ksh ${(Number(w.net_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>/hr • ${w.shifts_count} shifts</p>
+                    <p class="text-[11px] text-gray-400 pt-1 border-t border-blue-900/40">Net: <strong class="text-cyan-300 convertible-amount" data-kes="${w.net_hourly || 0}">Ksh ${(Number(w.net_hourly) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>/hr • ${w.shifts_count} sessions</p>
                 </div>`).join('')}
+            </div>
+
+            <!-- ⚡ Quick Stint & Session Yield Analyzer -->
+            <div class="p-4 bg-slate-950/80 border border-blue-800/50 rounded-2xl space-y-3 pt-3">
+                <div class="flex justify-between items-center text-xs">
+                    <span class="font-bold text-blue-200">⚡ Live Stint Yield Analyzer (e.g. 11am – 2pm vs 2:13pm – 5pm)</span>
+                    <span class="text-[10px] text-gray-400">Calculate any session on Uber / Bolt</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-0.5">Start Time</label>
+                        <input type="time" id="sim_stint_start" value="11:00" onchange="calcSimStintYield()" class="w-full p-2 bg-slate-900 border border-blue-900 rounded-xl text-xs font-bold text-white">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-0.5">End Time</label>
+                        <input type="time" id="sim_stint_end" value="14:00" onchange="calcSimStintYield()" class="w-full p-2 bg-slate-900 border border-blue-900 rounded-xl text-xs font-bold text-white">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-0.5">Earned (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" id="sim_stint_earned" value="567" oninput="calcSimStintYield()" class="w-full p-2 bg-slate-900 border border-blue-900 rounded-xl text-xs font-bold text-emerald-400">
+                    </div>
+                    <div class="p-2.5 bg-blue-950/60 border border-blue-800/60 rounded-xl text-center">
+                        <p class="text-[10px] text-blue-300 uppercase font-semibold">Calculated Yield</p>
+                        <p class="text-base font-black text-cyan-300" id="sim_stint_result">Ksh 189.00 / hr (3.0h)</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Days Tab Content -->
@@ -897,6 +1080,41 @@ export function renderRiderDashboard(data: any): string {
                         <button type="button" onclick="setShiftPreset('06:00', '14:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 active:scale-95 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded-lg font-semibold transition">🌅 6am – 2pm (8h)</button>
                         <button type="button" onclick="setShiftPreset('14:00', '23:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 active:scale-95 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded-lg font-semibold transition">🌆 2pm – 11pm (9h)</button>
                         <button type="button" onclick="setShiftPreset('20:00', '04:00')" class="text-[10px] bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 active:scale-95 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded-lg font-semibold transition">🌙 8pm – 4am (8h)</button>
+                    </div>
+                </div>
+
+                <!-- ⚡ Optional Online Stints / Multi-Session Splitter (Uber / Bolt) -->
+                <div class="sm:col-span-2 lg:col-span-4 bg-slate-50 dark:bg-slate-950/80 p-4 rounded-2xl border border-blue-200 dark:border-blue-900/60 space-y-3">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-base">⚡</span>
+                                <h3 class="text-xs font-bold text-gray-900 dark:text-white">Optional: Log Multiple Online Stints (Uber / Bolt / Glovo Sessions)</h3>
+                            </div>
+                            <p class="text-[11px] text-gray-500 dark:text-gray-400">Go online, pause, and go online again? Log each session (e.g. 11am–2pm, 2:13pm–5pm) to pinpoint peak earning hours.</p>
+                        </div>
+                        <button type="button" onclick="toggleStintsBuilder()" id="toggle-stints-btn" class="px-3 py-1.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900 rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 border border-blue-300 dark:border-blue-800">
+                            <span>⚡ Add Online Sessions</span>
+                        </button>
+                    </div>
+
+                    <!-- Hidden input to transmit stints JSON -->
+                    <input type="hidden" name="stints_json" id="stints_json_input" value="">
+
+                    <!-- Stints Container -->
+                    <div id="stints-builder-container" class="hidden space-y-2.5 pt-2 border-t border-blue-100 dark:border-blue-900/40">
+                        <div id="stints-list" class="space-y-2">
+                            <!-- Stint rows dynamically rendered by JS -->
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-gray-200 dark:border-gray-800 text-xs">
+                            <button type="button" onclick="addStintRow()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95 text-xs">
+                                <span>➕ Add Another Stint</span>
+                            </button>
+                            <div class="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                Total Sessions: <span id="stints-summary-hours" class="text-blue-600 dark:text-blue-400 font-black">0.0 hrs</span> • Gross: <span id="stints-summary-earned" class="text-emerald-600 dark:text-emerald-400 font-extrabold">Ksh 0.00</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

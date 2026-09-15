@@ -156,6 +156,21 @@ export function formatTimeDisplay(timeStr?: string | null): string {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
+export function calculateStintHourlyYield(
+  startTime?: string | null,
+  endTime?: string | null,
+  earnedAmount: number | string | Decimal = 0
+): { hours: number; hourlyYield: number; displayYield: string } {
+  const hours = calculateShiftHours(startTime, endTime, 1.0);
+  const earned = toDecimal(earnedAmount);
+  const yieldVal = hours > 0 ? earned.dividedBy(hours).toDecimalPlaces(2).toNumber() : 0;
+  return {
+    hours,
+    hourlyYield: yieldVal,
+    displayYield: `Ksh ${yieldVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/hr`,
+  };
+}
+
 // ------------------------------------------------------------------------------
 // BUDGET BURN RATE & SAFE DAILY SPEND PACING
 // ------------------------------------------------------------------------------

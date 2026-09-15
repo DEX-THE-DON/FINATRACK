@@ -22,16 +22,18 @@ function getExchangeRate(): number {
 export function classifyShiftWindow(startTime?: string | null, endTime?: string | null): { windowKey: string; windowLabel: string; windowIcon: string } {
   const startMins = parseTimeToMinutes(startTime);
   if (startMins === null) {
-    return { windowKey: 'MIDDAY', windowLabel: 'Midday & Afternoon (11:00 – 16:00)', windowIcon: '☀️' };
+    return { windowKey: 'LUNCH', windowLabel: 'Midday & Lunch Rush (11:00 – 14:00)', windowIcon: '🍲' };
   }
 
   const h = Math.floor(startMins / 60);
   if (h >= 5 && h < 11) {
     return { windowKey: 'MORNING', windowLabel: 'Early Morning Rush (05:00 – 11:00)', windowIcon: '🌅' };
-  } else if (h >= 11 && h < 16) {
-    return { windowKey: 'MIDDAY', windowLabel: 'Midday & Lunch (11:00 – 16:00)', windowIcon: '☀️' };
-  } else if (h >= 16 && h < 21) {
-    return { windowKey: 'EVENING', windowLabel: 'Evening Rush (16:00 – 21:00)', windowIcon: '🌆' };
+  } else if (h >= 11 && h < 14) {
+    return { windowKey: 'LUNCH', windowLabel: 'Midday & Lunch Rush (11:00 – 14:00)', windowIcon: '🍲' };
+  } else if (h >= 14 && h < 17) {
+    return { windowKey: 'AFTERNOON', windowLabel: 'Afternoon Window (14:00 – 17:00)', windowIcon: '☀️' };
+  } else if (h >= 17 && h < 21) {
+    return { windowKey: 'EVENING', windowLabel: 'Evening & Dinner Rush (17:00 – 21:00)', windowIcon: '🌆' };
   } else {
     return { windowKey: 'NIGHT', windowLabel: 'Late Night / Graveyard (21:00 – 05:00)', windowIcon: '🌙' };
   }
@@ -48,6 +50,16 @@ riderRoutes.post('/rider/logs', async (c) => {
   const logDate = String(body['date'] || new Date().toISOString().slice(0, 10));
   const startTime = body['start_time'] ? String(body['start_time']).trim() : null;
   const endTime = body['end_time'] ? String(body['end_time']).trim() : null;
+
+  let parsedStints: any[] = [];
+  if (body['stints_json']) {
+    try {
+      const parsed = JSON.parse(String(body['stints_json']));
+      if (Array.isArray(parsed) && parsed.length > 1) {
+        parsedStints = parsed.filter((s: any) => (parseFloat(String(s.earned || '0')) > 0 || (s.start_time && s.end_time)));
+      }
+    } catch (e) {}
+  }
 
   const rawShiftHours = parseFloat(String(body['shift_hours'] || '0.0'));
   const shiftHours = (startTime && endTime)
@@ -83,48 +95,92 @@ riderRoutes.post('/rider/logs', async (c) => {
     .plus(miscExpensesKes)
     .toNumber();
 
-  const insertPayload: any = {
-    bike_id: bikeId || null,
-    power_type: powerType,
-    date: logDate,
-    start_time: startTime,
-    end_time: endTime,
-    shift_hours: shiftHours,
-    trips_completed: trips,
-    kilometers: km,
-    total_earned: totalEarnedKes,
-    fuel_station: fuelStation,
-    fuel_litres: fuelLitres,
-    swaps_count: swapsCount,
-    fuel_cost: fuelCostKes,
-    food_spent: foodSpentKes,
-    airtime_spent: airtimeSpentKes,
-    maintenance_cost: maintCostKes,
-    misc_expenses: miscExpensesKes,
-    earnings_account_id: earningsAccId || null,
-    expense_account_id: expenseAccId || null,
-  };
-  if (userId) {
-    insertPayload.user_id = userId;
-  }
+  let primaryLogId: string | null = null;
 
-  let { data: newLog, error } = await supabase.from('rider_logs').insert(insertPayload).select().single();
+  if (parsedStints.length > 1) {
+    // Multi-stint entry: Insert each stint for exact granular time intelligence
+    for (let i = 0; i < parsedStints.length; i++) {
+      const s = parsedStints[i];
+      const sStart = s.start_time || startTime;
+      const sEnd = s.end_time || endTime;
+      const sHours = calculateShiftHours(sStart, sEnd, 1.0);
+      const sEarned = parseFloat(String(s.earned || '0.0')) || 0.0;
+      const sTrips = parseInt(String(s.trips || '0'), 10);
 
-  if (error && error.code === 'PGRST204') {
-    delete insertPayload.power_type;
-    delete insertPayload.swaps_count;
-    const retryRes = await supabase.from('rider_logs').insert(insertPayload).select().single();
-    newLog = retryRes.data;
-    error = retryRes.error;
-  }
+      const stintPayload: any = {
+        bike_id: bikeId || null,
+        power_type: powerType,
+        date: logDate,
+        start_time: sStart,
+        end_time: sEnd,
+        shift_hours: sHours,
+        trips_completed: sTrips > 0 ? sTrips : Math.round(trips / parsedStints.length),
+        kilometers: km > 0 ? (km / parsedStints.length) : 0,
+        total_earned: sEarned,
+        fuel_station: fuelStation,
+        fuel_litres: i === 0 ? fuelLitres : 0,
+        swaps_count: i === 0 ? swapsCount : 0,
+        fuel_cost: i === 0 ? fuelCostKes : 0,
+        food_spent: i === 0 ? foodSpentKes : 0,
+        airtime_spent: i === 0 ? airtimeSpentKes : 0,
+        maintenance_cost: i === 0 ? maintCostKes : 0,
+        misc_expenses: i === 0 ? miscExpensesKes : 0,
+        earnings_account_id: earningsAccId || null,
+        expense_account_id: expenseAccId || null,
+      };
+      if (userId) stintPayload.user_id = userId;
 
-  if (error) {
-    console.error('Failed to save shift log:', error);
-    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to save shift: ' + error.message)}`, 303);
+      const { data: stintRes } = await supabase.from('rider_logs').insert(stintPayload).select().single();
+      if (stintRes && !primaryLogId) {
+        primaryLogId = stintRes.id;
+      }
+    }
+  } else {
+    // Standard Single Shift Log
+    const insertPayload: any = {
+      bike_id: bikeId || null,
+      power_type: powerType,
+      date: logDate,
+      start_time: startTime,
+      end_time: endTime,
+      shift_hours: shiftHours,
+      trips_completed: trips,
+      kilometers: km,
+      total_earned: totalEarnedKes,
+      fuel_station: fuelStation,
+      fuel_litres: fuelLitres,
+      swaps_count: swapsCount,
+      fuel_cost: fuelCostKes,
+      food_spent: foodSpentKes,
+      airtime_spent: airtimeSpentKes,
+      maintenance_cost: maintCostKes,
+      misc_expenses: miscExpensesKes,
+      earnings_account_id: earningsAccId || null,
+      expense_account_id: expenseAccId || null,
+    };
+    if (userId) {
+      insertPayload.user_id = userId;
+    }
+
+    let { data: newLog, error } = await supabase.from('rider_logs').insert(insertPayload).select().single();
+
+    if (error && error.code === 'PGRST204') {
+      delete insertPayload.power_type;
+      delete insertPayload.swaps_count;
+      const retryRes = await supabase.from('rider_logs').insert(insertPayload).select().single();
+      newLog = retryRes.data;
+      error = retryRes.error;
+    }
+
+    if (error) {
+      console.error('Failed to save shift log:', error);
+      return c.redirect(`/rider?toast=${encodeURIComponent('Failed to save shift: ' + error.message)}`, 303);
+    }
+    if (newLog) primaryLogId = newLog.id;
   }
 
   // Automatic Finance Ledger Integration (Sync Income AND Expenses)
-  if (newLog) {
+  if (primaryLogId) {
     const targetAccId = earningsAccId || expenseAccId || null;
     const txInserts: any[] = [];
 
@@ -136,8 +192,8 @@ riderRoutes.post('/rider/logs', async (c) => {
         transaction_type: 'INCOME',
         category: 'Rider & Boda Deliveries',
         amount: totalEarnedKes,
-        description: `Rider Shift Gross Revenue (${logDate} • ${shiftHours}h shift)`,
-        rider_log_id: newLog.id,
+        description: `Rider Shift Gross Revenue (${logDate} • ${shiftHours}h shift${parsedStints.length > 1 ? ` • ${parsedStints.length} stints` : ''})`,
+        rider_log_id: primaryLogId,
         date: logDate,
       });
     }
@@ -153,7 +209,7 @@ riderRoutes.post('/rider/logs', async (c) => {
         category: energyCategory,
         amount: fuelCostKes,
         description: `Rider Shift: ${energyLabel}`,
-        rider_log_id: newLog.id,
+        rider_log_id: primaryLogId,
         date: logDate,
       });
     }
@@ -167,7 +223,7 @@ riderRoutes.post('/rider/logs', async (c) => {
         category: 'Food & Groceries',
         amount: foodSpentKes,
         description: `Rider Shift: Food & Lunch (${logDate})`,
-        rider_log_id: newLog.id,
+        rider_log_id: primaryLogId,
         date: logDate,
       });
     }
@@ -181,7 +237,7 @@ riderRoutes.post('/rider/logs', async (c) => {
         category: 'Airtime & Data Bundles',
         amount: airtimeSpentKes,
         description: `Rider Shift: Airtime & Delivery App Data (${logDate})`,
-        rider_log_id: newLog.id,
+        rider_log_id: primaryLogId,
         date: logDate,
       });
     }
@@ -195,7 +251,7 @@ riderRoutes.post('/rider/logs', async (c) => {
         category: 'Bike Maintenance & Repairs',
         amount: maintCostKes,
         description: `Rider Shift: Bike Maintenance & Spares (${logDate})`,
-        rider_log_id: newLog.id,
+        rider_log_id: primaryLogId,
         date: logDate,
       });
     }
@@ -209,21 +265,24 @@ riderRoutes.post('/rider/logs', async (c) => {
         category: 'Daily Upkeep & Misc',
         amount: miscExpensesKes,
         description: `Rider Shift: Parking, Puncture & Daily Upkeep (${logDate})`,
-        rider_log_id: newLog.id,
+        rider_log_id: primaryLogId,
         date: logDate,
       });
     }
 
     if (txInserts.length > 0) {
-      await supabase.from('transactions').insert(txInserts);
+      const { error: txError } = await supabase.from('transactions').insert(txInserts);
+      if (txError) {
+        console.error('Failed to sync shift with finance transactions:', txError);
+      }
     }
 
-    // Update target account balance with net take-home
+    // Update target account balance if specified
     if (targetAccId) {
-      const { data: acc } = await supabase.from('accounts').select('*').eq('id', targetAccId).single();
-      if (acc) {
-        const netTakeHome = toDecimal(totalEarnedKes).minus(totalExpensesKes);
-        const newBalance = toDecimal(acc.balance).plus(netTakeHome).toNumber();
+      const netDelta = totalEarnedKes - totalExpensesKes;
+      const { data: targetAcc } = await supabase.from('accounts').select('*').eq('id', targetAccId).single();
+      if (targetAcc) {
+        const newBalance = toDecimal(targetAcc.balance).plus(netDelta).toNumber();
         await supabase.from('accounts').update({ balance: newBalance }).eq('id', targetAccId);
       }
     }

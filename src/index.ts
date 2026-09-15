@@ -495,8 +495,9 @@ app.get('/rider', async (c) => {
 
   const windowMap: Record<string, { label: string; hours: number; gross: number; net: number; count: number }> = {
     MORNING: { label: '🌅 Early Morning (05:00 – 11:00)', hours: 0, gross: 0, net: 0, count: 0 },
-    MIDDAY: { label: '☀️ Midday & Lunch (11:00 – 16:00)', hours: 0, gross: 0, net: 0, count: 0 },
-    EVENING: { label: '🌆 Evening Rush (16:00 – 21:00)', hours: 0, gross: 0, net: 0, count: 0 },
+    LUNCH: { label: '🍲 Midday & Lunch (11:00 – 14:00)', hours: 0, gross: 0, net: 0, count: 0 },
+    AFTERNOON: { label: '☀️ Afternoon Window (14:00 – 17:00)', hours: 0, gross: 0, net: 0, count: 0 },
+    EVENING: { label: '🌆 Evening Rush (17:00 – 21:00)', hours: 0, gross: 0, net: 0, count: 0 },
     NIGHT: { label: '🌙 Late Night (21:00 – 05:00)', hours: 0, gross: 0, net: 0, count: 0 },
   };
 
@@ -513,7 +514,7 @@ app.get('/rider', async (c) => {
   for (const l of shiftLogs) {
     const hrs = Number(l.shift_hours || 8);
     const gross = Number(l.total_earned || 0);
-    const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0) + Number(l.airtime_spent || 0);
+    const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.maintenance_cost || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0);
     const net = gross - exp;
 
     totalHours += hrs;
@@ -551,16 +552,22 @@ app.get('/rider', async (c) => {
       day_name: d.name,
       avg_earned: avg,
       avg_earned_display: avg.toLocaleString(),
-      top_window: 'Midday (11am – 10pm)',
+      top_window: 'Evening (17:00 – 21:00)',
       is_best: false,
     };
   });
   dayAnalysis.forEach((d) => { if (d.day_name === bestDayName) d.is_best = true; });
 
+  let topWindowName = 'Evening Rush (17:00 – 21:00)';
+  let topWindowHourly = 0;
   const timeWindowAnalysis = Object.entries(windowMap).map(([_, w]) => {
     const gRate = w.hours > 0 ? Math.round(w.gross / w.hours) : 0;
     const nRate = w.hours > 0 ? Math.round(w.net / w.hours) : 0;
     const share = totalEarnedKes > 0 ? Math.round((w.gross / totalEarnedKes) * 100) : 0;
+    if (gRate > topWindowHourly) {
+      topWindowHourly = gRate;
+      topWindowName = `${w.label} • Peak Ksh ${gRate.toLocaleString()}/hr`;
+    }
     return {
       window_label: w.label,
       gross_hourly: gRate,
@@ -574,7 +581,7 @@ app.get('/rider', async (c) => {
     overall_avg_gross_hourly: grossHourlyRate,
     overall_avg_net_hourly: netHourlyRate,
     best_day: `${bestDayName} • Avg Ksh ${bestDayAvg.toLocaleString()} / shift`,
-    best_time_window: 'Midday & Lunch (11:00 – 16:00)',
+    best_time_window: topWindowName,
     time_window_analysis: timeWindowAnalysis,
     day_analysis: dayAnalysis,
     weekly_breakdown: [],

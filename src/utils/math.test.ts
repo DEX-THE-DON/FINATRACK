@@ -136,10 +136,22 @@ console.assert(goalPace.progressPct === 30, `Progress pct should be 30%, got ${g
 console.log(`✅ Goal Pace (3k/10k in 10d): Needed=${goalPace.dailyNeeded}/day, Weekly=${goalPace.weeklyNeeded}/wk (${goalPace.statusBadge})`);
 
 // Test 12: SACCO & Chama Dividend Forecaster
+// Test 12: SACCO & Chama Dividend Forecaster
 import { calculateSaccoDividendProjection } from './math';
 const saccoProj = calculateSaccoDividendProjection(50000, 5000, 12);
 console.assert(saccoProj.projectedYearEndCapital === 110000, `Year end capital should be 110,000, got ${saccoProj.projectedYearEndCapital}`);
 console.assert(saccoProj.annualDividend === 9600, `Annual dividend should be 9,600, got ${saccoProj.annualDividend}`);
 console.log(`✅ SACCO Forecaster (50k initial + 5k/mo @ 12%): Year-end=${saccoProj.projectedYearEndCapital} KES, Div=${saccoProj.annualDividend} KES`);
+
+// Test 13: Stint & Session Hourly Yield Calculator (Uber / Bolt)
+import { calculateStintHourlyYield } from './math';
+const stint1 = calculateStintHourlyYield('11:00', '14:00', 567);
+console.assert(stint1.hours === 3.0, `Stint 1 hours should be 3.0, got ${stint1.hours}`);
+console.assert(stint1.hourlyYield === 189.0, `Stint 1 yield should be 189.0, got ${stint1.hourlyYield}`);
+
+const stint2 = calculateStintHourlyYield('14:13', '17:00', 700);
+console.assert(stint2.hours === 2.8, `Stint 2 hours should be ~2.8, got ${stint2.hours}`);
+console.assert(Math.round(stint2.hourlyYield) === 250, `Stint 2 yield should be ~250, got ${stint2.hourlyYield}`);
+console.log(`✅ Stint Yields: 11am-2pm (567 KES)=${stint1.displayYield}, 2:13pm-5pm (700 KES)=${stint2.displayYield}`);
 
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
