@@ -243,21 +243,10 @@ export function renderRiderDashboard(data: any): string {
 
         let stintItems = [];
 
-        function toggleStintsBuilder() {
-            const container = document.getElementById('stints-builder-container');
-            const btn = document.getElementById('toggle-stints-btn');
-            if (container) {
-                container.classList.toggle('hidden');
-                if (!container.classList.contains('hidden')) {
-                    if (stintItems.length === 0) {
-                        addStintRow('11:00', '14:00', '567', 'Uber Eats');
-                        addStintRow('14:13', '17:00', '700', 'Bolt Deliveries');
-                    }
-                    if (btn) btn.innerHTML = '<span>✕ Close Sessions Splitter</span>';
-                } else {
-                    if (btn) btn.innerHTML = '<span>⚡ Add Online Sessions</span>';
-                }
-            }
+        function clearAllStints() {
+            stintItems = [];
+            renderStintsList(true);
+            calcDuration();
         }
 
         function addStintRow(start = '11:00', end = '14:00', earned = '', platform = 'Uber Eats') {
@@ -269,6 +258,9 @@ export function renderRiderDashboard(data: any): string {
         function removeStintRow(id) {
             stintItems = stintItems.filter(s => s.id !== id);
             renderStintsList(true);
+            if (stintItems.length === 0) {
+                calcDuration();
+            }
         }
 
         function onStintFieldChanged(id, field, value) {
@@ -294,18 +286,15 @@ export function renderRiderDashboard(data: any): string {
                     const earn = parseFloat(s.earned) || 0;
                     const hrYield = hrs > 0 ? (earn / hrs).toFixed(0) : '0';
 
-                    return '<div id="row-' + s.id + '" class="p-2.5 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-900/60 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs">' +
+                    return '<div id="row-' + s.id + '" class="p-2.5 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-900/60 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs shadow-xs">' +
                         '<div class="sm:col-span-1 font-extrabold text-blue-600 dark:text-blue-400">#' + (idx + 1) + '</div>' +
-                        '<div class="sm:col-span-3 flex items-center gap-1">' +
-                            '<input type="time" value="' + (s.start_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'start_time\', this.value)" class="w-full p-1.5 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
-                            '<span class="text-gray-400">to</span>' +
-                            '<input type="time" value="' + (s.end_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'end_time\', this.value)" class="w-full p-1.5 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
-                        '</div>' +
-                        '<div class="sm:col-span-3">' +
-                            '<input type="number" step="any" inputmode="decimal" value="' + (s.earned || '') + '" placeholder="Earned Ksh" oninput="onStintFieldChanged(\'' + s.id + '\', \'earned\', this.value)" class="w-full p-1.5 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400" required>' +
+                        '<div class="sm:col-span-4 flex items-center gap-1.5">' +
+                            '<input type="time" value="' + (s.start_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'start_time\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
+                            '<span class="text-gray-400 text-xs font-semibold">to</span>' +
+                            '<input type="time" value="' + (s.end_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'end_time\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
                         '</div>' +
                         '<div class="sm:col-span-2">' +
-                            '<select onchange="onStintFieldChanged(\'' + s.id + '\', \'platform\', this.value)" class="w-full p-1.5 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium">' +
+                            '<select onchange="onStintFieldChanged(\'' + s.id + '\', \'platform\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium">' +
                                 '<option value="Uber Eats"' + (s.platform === 'Uber Eats' ? ' selected' : '') + '>Uber Eats</option>' +
                                 '<option value="Bolt Deliveries"' + (s.platform === 'Bolt Deliveries' ? ' selected' : '') + '>Bolt</option>' +
                                 '<option value="Glovo / Jumia"' + (s.platform === 'Glovo / Jumia' ? ' selected' : '') + '>Glovo/Jumia</option>' +
@@ -313,11 +302,14 @@ export function renderRiderDashboard(data: any): string {
                                 '<option value="Direct Delivery"' + (s.platform === 'Direct Delivery' ? ' selected' : '') + '>Direct Client</option>' +
                             '</select>' +
                         '</div>' +
-                        '<div class="sm:col-span-3 flex items-center justify-between gap-1">' +
-                            '<span id="badge-' + s.id + '" class="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-[10px] whitespace-nowrap">' +
+                        '<div class="sm:col-span-2">' +
+                            '<input type="number" step="any" inputmode="decimal" value="' + (s.earned || '') + '" placeholder="Earned Ksh" oninput="onStintFieldChanged(\'' + s.id + '\', \'earned\', this.value)" class="w-full p-2 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400" required>' +
+                        '</div>' +
+                        '<div class="sm:col-span-3 flex items-center justify-between gap-1.5">' +
+                            '<span id="badge-' + s.id + '" class="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold text-[11px] whitespace-nowrap border border-blue-200 dark:border-blue-900">' +
                                 '⚡ Ksh ' + hrYield + '/hr (' + hrs.toFixed(1) + 'h)' +
                             '</span>' +
-                            '<button type="button" onclick="removeStintRow(\'' + s.id + '\')" class="text-rose-500 hover:text-rose-700 font-bold p-1">✕</button>' +
+                            '<button type="button" onclick="removeStintRow(\'' + s.id + '\')" class="text-rose-500 hover:text-rose-700 font-bold p-1 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-md transition" title="Delete stint">✕</button>' +
                         '</div>' +
                     '</div>';
                 }).join('');
@@ -373,6 +365,13 @@ export function renderRiderDashboard(data: any): string {
                 jsonInput.value = stintItems.length > 1 ? JSON.stringify(stintItems) : '';
             }
         }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (stintItems.length === 0) {
+                addStintRow('11:00', '14:00', '', 'Uber Eats');
+                addStintRow('14:13', '17:00', '', 'Bolt Deliveries');
+            }
+        });
 
         function calcSimStintYield() {
             const s = document.getElementById('sim_stint_start')?.value;
@@ -1084,36 +1083,41 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <!-- ⚡ Optional Online Stints / Multi-Session Splitter (Uber / Bolt) -->
-                <div class="sm:col-span-2 lg:col-span-4 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-blue-50/80 dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-blue-950/40 p-4 rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700/80 space-y-3">
+                <div class="sm:col-span-2 lg:col-span-4 bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/90 dark:from-blue-950/50 dark:via-indigo-950/30 dark:to-blue-950/50 p-4 sm:p-5 rounded-2xl border-2 border-blue-400 dark:border-blue-700/80 space-y-3.5 shadow-xs">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                        <div class="space-y-0.5">
+                        <div class="space-y-1">
                             <div class="flex items-center space-x-2">
-                                <span class="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider shadow-xs">NEW FEATURE</span>
-                                <h3 class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                                <span class="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider shadow-xs">OPTIONAL TOOL</span>
+                                <h3 class="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-white flex items-center gap-1.5">
                                     <span>⚡ Multi-Session Online Stints (Uber / Bolt / Glovo)</span>
                                 </h3>
                             </div>
-                            <p class="text-[11px] text-gray-600 dark:text-gray-300">Went online 11am–2pm, paused, then online again 2:13pm–5pm? Log each stint to see your best earning hours.</p>
+                            <p class="text-[11px] text-gray-600 dark:text-gray-300">Went online 11am–2pm, took a break, then 2:13pm–5pm? Enter each session to see your peak earning hours.</p>
                         </div>
-                        <button type="button" onclick="toggleStintsBuilder()" id="toggle-stints-btn" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 active:scale-95 shadow-md shrink-0">
-                            <span>⚡ Add Online Stints / Sessions</span>
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="addStintRow('17:00', '21:00', '', 'Uber Eats')" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-xs shrink-0">
+                                <span>➕ Add Stint</span>
+                            </button>
+                            <button type="button" onclick="clearAllStints()" class="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Clear stints and use simple shift inputs">
+                                <span>Reset</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Hidden input to transmit stints JSON -->
                     <input type="hidden" name="stints_json" id="stints_json_input" value="">
 
-                    <!-- Stints Container -->
-                    <div id="stints-builder-container" class="hidden space-y-2.5 pt-2 border-t border-blue-100 dark:border-blue-900/40">
+                    <!-- Stints Container (Permanently Visible) -->
+                    <div id="stints-builder-container" class="space-y-2.5 pt-2 border-t border-blue-200 dark:border-blue-900/60">
                         <div id="stints-list" class="space-y-2">
-                            <!-- Stint rows dynamically rendered by JS -->
+                            <!-- Stint rows rendered dynamically on load -->
                         </div>
 
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-gray-200 dark:border-gray-800 text-xs">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-blue-200/60 dark:border-gray-800 text-xs">
                             <button type="button" onclick="addStintRow()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95 text-xs">
-                                <span>➕ Add Another Stint</span>
+                                <span>➕ Add Another Session</span>
                             </button>
-                            <div class="text-xs font-bold text-gray-700 dark:text-gray-300">
+                            <div class="text-xs font-bold text-gray-700 dark:text-gray-300 bg-white/80 dark:bg-gray-900/80 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900">
                                 Total Sessions: <span id="stints-summary-hours" class="text-blue-600 dark:text-blue-400 font-black">0.0 hrs</span> • Gross: <span id="stints-summary-earned" class="text-emerald-600 dark:text-emerald-400 font-extrabold">Ksh 0.00</span>
                             </div>
                         </div>
