@@ -1075,7 +1075,7 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- ⚡ EV vs. Petrol Cost-Savings & ROI Comparator Banner -->
-        <div id="ev-savings-card" class="bg-gradient-to-br from-teal-500/10 via-cyan-500/5 to-transparent dark:from-teal-950/30 p-6 rounded-2xl border border-teal-200 dark:border-teal-900/50 shadow-sm space-y-4">
+        <div id="ev-savings-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-teal-500/10 via-cyan-500/5 to-transparent dark:from-teal-950/30 p-6 rounded-2xl border border-teal-200 dark:border-teal-900/50 shadow-sm space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-teal-100 dark:border-teal-900/40 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
@@ -1243,7 +1243,7 @@ export function renderFinanceDashboard(data: any): string {
                 `}
             </div>
         </div>
-        <div id="targets-card" class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/30 p-5 sm:p-6 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm space-y-6 text-gray-900 dark:text-white">
+        <div id="targets-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/30 p-5 sm:p-6 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm space-y-6 text-gray-900 dark:text-white">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-emerald-100 dark:border-emerald-900/40 pb-4">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
@@ -1519,7 +1519,7 @@ export function renderFinanceDashboard(data: any): string {
 
 
         <!-- 🌊 Dynamic Waterfall Auto-Split Card -->
-        <div id="waterfall-card" class="bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-4 text-gray-900 dark:text-white">
+        <div id="waterfall-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-4 text-gray-900 dark:text-white">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div>
                     <div class="flex items-center space-x-2">
@@ -1644,7 +1644,7 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 🎯 Savings Goals & Asset Targets Card -->
-        <div id="goals-card" class="bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 space-y-5">
+        <div id="goals-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 space-y-5">
             <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl shadow-xs shrink-0">
@@ -1682,32 +1682,32 @@ export function renderFinanceDashboard(data: any): string {
             </div>
 
             <!-- 🔒 Master Holding Vault & Financial Discipline Banner -->
-            <div class="bg-gradient-to-r from-indigo-900/90 via-purple-900/80 to-slate-900 text-white p-4 rounded-2xl border border-indigo-700/60 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div class="bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-emerald-50/70 dark:from-indigo-950/90 dark:via-purple-950/80 dark:to-slate-900 text-gray-900 dark:text-white p-4 sm:p-5 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div class="flex items-center space-x-3">
-                    <div class="w-11 h-11 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                    <div class="w-11 h-11 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-400/40 flex items-center justify-center text-2xl shadow-xs shrink-0">
                         🔒
                     </div>
                     <div>
                         <div class="flex items-center gap-2">
-                            <span class="text-xs font-bold uppercase tracking-wider text-indigo-300">Master Holding Vault</span>
-                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${vaultReconciled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">
+                            <span class="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Master Holding Vault</span>
+                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${vaultReconciled ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30'}">
                                 ${vaultReconciled ? '✅ Fully Backed in Vault' : '⚠️ Vault Underfunded'}
                             </span>
                         </div>
-                        <h3 class="text-base font-black text-white">${masterVaultAccount ? masterVaultAccount.name : 'Lock Savings / Sacco Vault'}</h3>
-                        <p class="text-xs text-indigo-200">
-                            Physical Balance: <strong class="text-emerald-300 font-black convertible-amount" data-kes="${masterVaultBalance}">${formatKes(masterVaultBalance)}</strong>
-                            &bull; Allocated across ${goals.length} Goals: <strong class="text-indigo-200 font-bold convertible-amount" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)}</strong>
-                            ${vaultBuffer > 0 ? `&bull; Buffer: <strong class="text-emerald-300 convertible-amount" data-kes="${vaultBuffer}">+${formatKes(vaultBuffer)}</strong>` : ''}
+                        <h3 class="text-base font-black text-gray-900 dark:text-white">${masterVaultAccount ? masterVaultAccount.name : 'Lock Savings / Sacco Vault'}</h3>
+                        <p class="text-xs text-gray-600 dark:text-indigo-200">
+                            Physical Balance: <strong class="text-emerald-600 dark:text-emerald-300 font-black convertible-amount" data-kes="${masterVaultBalance}">${formatKes(masterVaultBalance)}</strong>
+                            &bull; Allocated across ${goals.length} Goals: <strong class="text-indigo-700 dark:text-indigo-200 font-bold convertible-amount" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)}</strong>
+                            ${vaultBuffer > 0 ? `&bull; Buffer: <strong class="text-emerald-600 dark:text-emerald-300 convertible-amount" data-kes="${vaultBuffer}">+${formatKes(vaultBuffer)}</strong>` : ''}
                         </p>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-2 self-end md:self-center">
-                    <button type="button" onclick="document.getElementById('link-vault-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-indigo-800/80 hover:bg-indigo-700 border border-indigo-600/60 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                    <button type="button" onclick="document.getElementById('link-vault-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3.5 py-1.5 bg-white dark:bg-indigo-900/80 hover:bg-indigo-50 dark:hover:bg-indigo-800 border border-indigo-200 dark:border-indigo-600/60 text-indigo-700 dark:text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
                         <span>🔗 Change Vault Account</span>
                     </button>
-                    <button type="button" onclick="document.getElementById('vault-deposit-container')?.classList.toggle('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 text-xs font-black rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                    <button type="button" onclick="document.getElementById('vault-deposit-container')?.classList.toggle('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
                         <span>⚡ Deposit Funds</span>
                     </button>
                 </div>
@@ -1725,7 +1725,7 @@ export function renderFinanceDashboard(data: any): string {
                 <form action="/goals/link-vault" method="POST" class="flex flex-col sm:flex-row gap-3 items-end">
                     <div class="flex-1 w-full">
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Select Vault Account</label>
-                        <select name="vault_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
+                        <select name="vault_account_id" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold" required>
                             ${accounts.map((a: any) => `<option value="${a.id}" ${masterVaultAccount?.id === a.id ? 'selected' : ''}>${a.name} (${a.account_type}) - Balance: ${formatKes(a.balance)}</option>`).join('')}
                         </select>
                     </div>
@@ -1785,7 +1785,7 @@ export function renderFinanceDashboard(data: any): string {
                                 <div>
                                     <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Sub-Split Share (%)</label>
                                     <div class="relative">
-                                        <input type="number" step="0.1" min="0" max="100" name="split_${g.id}" value="${defaultPct}" data-remaining="${remaining}" oninput="recalcGoalSubSplitsTotal()" class="goal-split-input w-full p-2 pr-7 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded-lg text-xs font-bold" required>
+                                        <input type="number" step="0.1" min="0" max="100" name="split_${g.id}" value="${defaultPct}" data-remaining="${remaining}" oninput="recalcGoalSubSplitsTotal()" class="goal-split-input w-full p-2 pr-7 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg text-xs font-bold" required>
                                         <span class="absolute right-2.5 top-2 text-xs font-bold text-gray-400">%</span>
                                     </div>
                                 </div>
@@ -1817,18 +1817,18 @@ export function renderFinanceDashboard(data: any): string {
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                             <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Deposit Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                            <input type="number" id="vault-deposit-amt-input" step="any" inputmode="decimal" name="amount" placeholder="1500" data-placeholder-base="1500" oninput="updateVaultDepositPreview()" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
+                            <input type="number" id="vault-deposit-amt-input" step="any" inputmode="decimal" name="amount" placeholder="1500" data-placeholder-base="1500" oninput="updateVaultDepositPreview()" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Source Wallet (Deduct From)</label>
-                            <select name="source_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-medium">
+                            <select name="source_account_id" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-medium">
                                 <option value="">-- No Deduction (Direct Cash / External) --</option>
                                 ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
                             </select>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Master Holding Vault</label>
-                            <select name="vault_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold">
+                            <select name="vault_account_id" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
                                 ${accounts.map((a: any) => `<option value="${a.id}" ${masterVaultAccount?.id === a.id ? 'selected' : ''}>${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
                             </select>
                         </div>
@@ -1868,19 +1868,19 @@ export function renderFinanceDashboard(data: any): string {
                 <form action="/goals/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div class="sm:col-span-2 lg:col-span-1">
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Goal Title</label>
-                        <input type="text" name="title" placeholder="e.g. 55&quot; 4K Smart TV, Sofa Seat, Gas Cooker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
+                        <input type="text" name="title" placeholder="e.g. 55&quot; 4K Smart TV, Sofa Seat, Gas Cooker" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold" required>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="target_amount" placeholder="45000" data-placeholder-base="45000" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
+                        <input type="number" step="any" inputmode="decimal" name="target_amount" placeholder="45000" data-placeholder-base="45000" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Sub-Split Share % (Optional)</label>
-                        <input type="number" step="0.1" name="split_percentage" placeholder="30" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold">
+                        <input type="number" step="0.1" name="split_percentage" placeholder="30" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Deadline (Optional)</label>
-                        <input type="date" name="target_date" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold">
+                        <input type="date" name="target_date" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
                     </div>
                     <div class="flex flex-col justify-end space-y-2">
                         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs active:scale-95">
@@ -2043,7 +2043,7 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 👥 SACCO & Chama Dividend Forecaster Card -->
-        <div id="sacco-card" class="bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-5 text-gray-900 dark:text-white">
+        <div id="sacco-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-5 text-gray-900 dark:text-white">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-teal-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
@@ -2350,7 +2350,7 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 📈 MMF & Passive Yields Section -->
-        <div class="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 space-y-4">
+        <div class="bg-white dark:bg-gray-900 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-sm space-y-4">
             <div class="flex justify-between items-center">
                 <div>
                     <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -2471,9 +2471,9 @@ export function renderFinanceDashboard(data: any): string {
 
                 <!-- Add Account Form -->
                 <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, Ziidi MMF)" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm" required>
-                    <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm">
-                    <select name="account_type" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm">
+                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, Ziidi MMF)" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium" required>
+                    <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium">
+                    <select name="account_type" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
                         <option value="MOBILE">Mobile Money (M-Pesa, Airtel)</option>
                         <option value="BANK">Bank Account</option>
                         <option value="SAVINGS">Savings Account (Sacco / Fixed)</option>
@@ -2481,8 +2481,8 @@ export function renderFinanceDashboard(data: any): string {
                         <option value="LOOP">Loop Business</option>
                         <option value="CASH">Cash / Petty Cash</option>
                     </select>
-                    <input type="number" step="any" inputmode="decimal" name="interest_rate_p_a" placeholder="APY % (e.g. 13.45)" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm">
-                    <input type="number" step="any" inputmode="decimal" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm convertible-placeholder" required>
+                    <input type="number" step="any" inputmode="decimal" name="interest_rate_p_a" placeholder="APY % (e.g. 13.45)" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium">
+                    <input type="number" step="any" inputmode="decimal" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
                     <div class="sm:col-span-2 lg:col-span-5">
                         <button type="submit" class="w-full bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-sm font-semibold py-2.5 rounded-xl transition">Add Account</button>
                     </div>
@@ -2497,19 +2497,19 @@ export function renderFinanceDashboard(data: any): string {
                     <form action="/transfers/create" method="POST" class="space-y-3">
                         <div>
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">From Account</label>
-                            <select name="from_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm" required>
+                            <select name="from_account_id" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium" required>
                                 ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                             </select>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">To Account</label>
-                            <select name="to_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm" required>
+                            <select name="to_account_id" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium" required>
                                 ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                             </select>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                            <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm convertible-placeholder" required>
+                            <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
                         </div>
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition mt-2">Transfer Funds</button>
                     </form>
@@ -2536,21 +2536,21 @@ export function renderFinanceDashboard(data: any): string {
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
-                        <select name="transaction_type" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <select name="transaction_type" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
                             <option value="EXPENSE">🔴 Expense</option>
                             <option value="INCOME">🟢 Income</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account / Wallet</label>
-                        <select name="account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <select name="account_id" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
                             <option value="">-- No Account / Cash --</option>
                             ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                         </select>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Category</label>
-                        <select name="category" id="tx-category-select" onchange="onTxCategoryChange(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <select name="category" id="tx-category-select" onchange="onTxCategoryChange(this.value)" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
                             <option value="Living Expenses">🏠 Living Expenses</option>
                             <option value="Food & Groceries">🛒 Food & Groceries</option>
                             <option value="Fuel & Petrol">⛽ Fuel & Petrol</option>
@@ -2566,11 +2566,11 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
+                        <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
-                        <input type="date" name="t_date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-base sm:text-sm font-semibold" required>
+                        <input type="date" name="t_date" value="${today}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold" required>
                     </div>
                 </div>
 
@@ -2578,11 +2578,11 @@ export function renderFinanceDashboard(data: any): string {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                     <div id="custom-category-container" class="hidden">
                         <label class="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-1">Specify Custom Category</label>
-                        <input type="text" name="custom_category" id="tx-custom-category" placeholder="e.g. Medical, Tithe, School Fees, Client Tip..." class="w-full p-2.5 border border-indigo-300 dark:border-indigo-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
+                        <input type="text" name="custom_category" id="tx-custom-category" placeholder="e.g. Medical, Tithe, School Fees, Client Tip..." class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 text-gray-900 dark:text-white rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Where did money go / come from? (Note / Memo)</label>
-                        <input type="text" name="description" placeholder="e.g. Paid mechanic Kamau for brake pads, Client tip, Java lunch, KPLC Token..." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500">
+                        <input type="text" name="description" placeholder="e.g. Paid mechanic Kamau for brake pads, Client tip, Java lunch, KPLC Token..." class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500">
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-sm transition shadow-xs active:scale-95 flex items-center justify-center gap-1.5">
@@ -2760,21 +2760,21 @@ export function renderFinanceDashboard(data: any): string {
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div class="sm:col-span-2">
                             <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Bucket Name</label>
-                            <input type="text" name="bucket_name" placeholder="e.g. Emergency Fund or Tithe" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-bold" required>
+                            <input type="text" name="bucket_name" placeholder="e.g. Emergency Fund or Tithe" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold" required>
                         </div>
                         <div>
                             <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Percentage %</label>
-                            <input type="number" step="any" min="0" max="100" name="percentage" value="10" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-bold text-center text-indigo-600 dark:text-indigo-400" required>
+                            <input type="number" step="any" min="0" max="100" name="percentage" value="10" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-center text-indigo-600 dark:text-indigo-400" required>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div>
                             <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Icon Emoji</label>
-                            <input type="text" name="icon" value="🛡️" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-bold text-center">
+                            <input type="text" name="icon" value="🛡️" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold text-center">
                         </div>
                         <div>
                             <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Bucket Type</label>
-                            <select name="target_type" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-semibold">
+                            <select name="target_type" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
                                 <option value="ACCOUNT">🏦 Bank / MMF / Sacco</option>
                                 <option value="GOAL">🎯 Savings Goal</option>
                                 <option value="CASH">💵 Daily Living Cash</option>
@@ -2782,7 +2782,7 @@ export function renderFinanceDashboard(data: any): string {
                         </div>
                         <div>
                             <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Target Destination</label>
-                            <select name="target_id" class="w-full p-2 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl text-xs font-semibold">
+                            <select name="target_id" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
                                 <option value="">-- Smart Auto-Match --</option>
                                 <optgroup label="Accounts">
                                     ${accounts.map((a: any) => `<option value="${a.id}">${a.name}</option>`).join('')}
