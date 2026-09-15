@@ -234,4 +234,3 @@ export function parseMultipleMpesaMessages(rawBatchText: string): ParsedMpesaTx[
 
   return results;
 }
-

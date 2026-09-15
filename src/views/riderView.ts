@@ -573,9 +573,19 @@ export function renderRiderDashboard(data: any): string {
             }
         }
 
+        function updateThemeIcon() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const btns = document.querySelectorAll('.dark-mode-toggle-btn');
+            btns.forEach(btn => {
+                btn.innerHTML = isDark ? '☀️' : '🌙';
+                btn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+            });
+        }
+
         function toggleDarkMode() {
             const isDark = document.documentElement.classList.toggle('dark');
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateThemeIcon();
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -585,6 +595,7 @@ export function renderRiderDashboard(data: any): string {
             } else {
                 document.documentElement.classList.remove('dark');
             }
+            updateThemeIcon();
             applyConversion();
             calcDuration();
             setPowerType(currentPowerType);
@@ -647,7 +658,7 @@ export function renderRiderDashboard(data: any): string {
                 </a>
                 `}
 
-                <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                <button onclick="toggleDarkMode()" class="dark-mode-toggle-btn p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Toggle Dark/Light Mode">
                     🌙
                 </button>
             </div>
