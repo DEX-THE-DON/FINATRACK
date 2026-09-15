@@ -82,5 +82,22 @@ if (!parsedLive || parsedLive.code !== 'UID8Z6A6N6' || parsedLive.amount_kes !==
 }
 console.log('✅ 8. User Live Rubis SMS:', parsedLive.code, parsedLive.amount_kes, 'KES -> Party:', parsedLive.party, 'Time:', parsedLive.time, 'Date:', parsedLive.date);
 
+// Test 9: 4-Message Full Batch Extraction (Multi-line and continuous)
+const batch4Sms = `
+QA11111111 Confirmed. Ksh2,400.00 received from BOLT DELIVERIES on 12/9/26 at 6:00 PM. New M-PESA balance is Ksh7,170.00.
+QB22222222 Confirmed. Ksh630.00 paid to TOTAL ENERGIES. on 12/9/26 at 7:30 PM. New M-PESA balance is Ksh6,540.00.
+QC33333333 Confirmed. Ksh1,000.00 sent to JANE WAMBUI 0722000000 on 12/9/26 at 8:15 PM. New M-PESA balance is Ksh5,540.00.
+QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.
+`;
+const parsedBatch4 = parseMultipleMpesaMessages(batch4Sms);
+if (parsedBatch4.length !== 4) {
+  console.error('❌ Failed Test 9: Expected 4 batch SMS messages, got:', parsedBatch4.length);
+  process.exit(1);
+}
+console.log('✅ 9. 4-Message Batch Paste: Successfully extracted all 4 records!');
+parsedBatch4.forEach((t, i) => {
+  console.log(`   [${i+1}] #${t.code} ${t.type} Ksh ${t.amount_kes} -> ${t.party} (${t.suggested_category})`);
+});
+
 console.log('🎉 ALL M-PESA REGEX & BATCH SMS TESTS PASSED 100%!');
 

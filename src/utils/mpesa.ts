@@ -19,7 +19,7 @@ export interface ParsedMpesaTx {
  * Categorizes an M-Pesa transaction based on counterparty and keywords
  */
 export function categorizeMpesaParty(party: string, type: 'INCOME' | 'EXPENSE'): string {
-  const p = party.toUpperCase();
+  const p = party.toUpperCase().replace(/\./g, '');
   if (type === 'INCOME') {
     if (p.includes('BOLT') || p.includes('UBER') || p.includes('GLOVO') || p.includes('DELIVERY') || p.includes('RIDER')) {
       return 'Rider & Boda Deliveries';
@@ -46,7 +46,7 @@ export function categorizeMpesaParty(party: string, type: 'INCOME' | 'EXPENSE'):
   if (p.includes('GARAGE') || p.includes('SPARES') || p.includes('MOTOR') || p.includes('SERVICE') || p.includes('MECHANIC') || p.includes('TYRE') || p.includes('AUTO')) {
     return 'Bike Maintenance';
   }
-  if (p.includes('AIRTIME') || p.includes('BUNDLES') || p.includes('SAFARICOM PREPAY')) {
+  if (p.includes('AIRTIME') || p.includes('BUNDLES') || p.includes('SAFARICOM PREPAY') || p.includes('SAFARICOM')) {
     return 'Airtime & Internet';
   }
   if (p.includes('HOSPITAL') || p.includes('CLINIC') || p.includes('PHARMACY') || p.includes('CHEMIST')) {
@@ -204,27 +204,32 @@ export function parseMultipleMpesaMessages(rawBatchText: string): ParsedMpesaTx[
     .trim();
   const results: ParsedMpesaTx[] = [];
 
-  // Match messages starting with alphanumeric receipt code followed by Confirmed/received
-  const regex = /(?:^|\b)([A-Z0-9]{8,12})\s+(?:Confirmed|You have received)[\s\S]*?(?=(?:\b[A-Z0-9]{8,12}\s+(?:Confirmed|You have received))|$)/gi;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    const chunk = match[0].trim();
-    const parsed = parseSingleMpesaMessage(chunk);
-    if (parsed) results.push(parsed);
-  }
+  // Match messages starting with alphanumeric receipt code
+  const splitRegex = /(?:^|\n|\b)([A-Z0-9]{8,12})\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn)[\s\S]*?(?=(?:(?:\n|\b)[A-Z0-9]{8,12}\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn))|$)/gi;
 
-  // Fallback if regex loop didn't catch (e.g. line-separated or single message)
-  if (results.length === 0) {
-    const lines = text.split(/\n+/).map(l => l.trim()).filter(l => l.length >= 15);
-    for (const l of lines) {
-      const p = parseSingleMpesaMessage(l);
-      if (p) results.push(p);
+  let chunks: string[] = [];
+  let rMatch;
+  while ((rMatch = splitRegex.exec(text)) !== null) {
+    if (rMatch[0].trim().length >= 15) {
+      chunks.push(rMatch[0].trim());
     }
   }
 
-  if (results.length === 0) {
-    const single = parseSingleMpesaMessage(text);
-    if (single) results.push(single);
+  // Fallback if regex split returned <= 1 chunk but multiple lines exist
+  if (chunks.length <= 1) {
+    const lineChunks = text.split(/\n+/).map(l => l.trim()).filter(l => l.length >= 15 && /[A-Z0-9]{8,12}/.test(l));
+    if (lineChunks.length > chunks.length) {
+      chunks = lineChunks;
+    }
+  }
+
+  if (chunks.length === 0 && text.length >= 15) {
+    chunks.push(text);
+  }
+
+  for (const chunk of chunks) {
+    const parsed = parseSingleMpesaMessage(chunk);
+    if (parsed) results.push(parsed);
   }
 
   return results;
