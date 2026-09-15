@@ -885,13 +885,13 @@ export function renderFinanceDashboard(data: any): string {
             <button onclick="document.getElementById('timeline-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🗓️ Timeline (${unified_timeline.length})</span>
             </button>
-            <button onclick="document.getElementById('expense-breakdown-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
+            <button onclick="document.getElementById('expense-breakdown-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>📊 Chart</span>
             </button>
             <button onclick="document.getElementById('tx-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>➕ Add Tx</span>
             </button>
-            <button onclick="pasteSampleMpesa('batch'); document.getElementById('mpesa-card')?.scrollIntoView({behavior: 'smooth'});" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gray-900 dark:bg-gray-800 active:scale-95 text-emerald-400 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-gray-700 transition">
+            <button onclick="pasteSampleMpesa('batch'); document.getElementById('mpesa-card')?.scrollIntoView({behavior: 'smooth'});" class="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 active:scale-95 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl shadow-xs shrink-0 border border-emerald-200 dark:border-emerald-800 transition">
                 <span>📲 Parse M-Pesa</span>
             </button>
             <button onclick="document.getElementById('goals-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-purple-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
@@ -944,22 +944,22 @@ export function renderFinanceDashboard(data: any): string {
         <!-- 🛡️ & 🏆 Emergency Runway & Financial Health Score Twin Cards -->
         <div id="runway-score-card" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <!-- 🛡️ Emergency Fund Runway Meter ("Months of Freedom") -->
-            <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-indigo-800/50 space-y-4">
-                <div class="flex items-center justify-between border-b border-indigo-800/60 pb-3">
+            <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
                     <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center text-xl shadow-md shrink-0">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
                             🛡️
                         </div>
                         <div>
-                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                 <span>Emergency Fund Runway</span>
                                 <span class="text-[10px] ${getBadgeStyles(runway_status.statusBadge)} font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${runway_status.statusLabel}</span>
                             </h2>
-                            <p class="text-xs text-indigo-200">Months of Freedom you can survive without new income</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Months of Freedom you can survive without new income</p>
                         </div>
                     </div>
                     <div class="text-right">
-                        <span class="text-2xl font-black text-amber-400">${runway_status.displayMonths}</span>
+                        <span class="text-2xl font-black text-amber-500 dark:text-amber-400">${runway_status.displayMonths}</span>
                         <p class="text-[10px] text-gray-400">Target: 6.0 mo</p>
                     </div>
                 </div>
@@ -967,129 +967,129 @@ export function renderFinanceDashboard(data: any): string {
                 <!-- Progress Meter -->
                 <div class="space-y-1.5">
                     <div class="flex justify-between text-xs">
-                        <span class="text-gray-300 font-semibold">Freedom Cushion Progress</span>
-                        <span class="font-extrabold text-amber-300">${runway_status.percentageOfGoal}% of 6-mo goal</span>
+                        <span class="text-gray-600 dark:text-gray-300 font-semibold">Freedom Cushion Progress</span>
+                        <span class="font-extrabold text-amber-600 dark:text-amber-400">${runway_status.percentageOfGoal}% of 6-mo goal</span>
                     </div>
-                    <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-indigo-900/80 p-0.5">
+                    <div class="w-full h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 p-0.5">
                         <div class="h-full rounded-full transition-all duration-500 ${runway_status.months >= 3 ? 'bg-gradient-to-r from-amber-500 to-emerald-500' : 'bg-gradient-to-r from-rose-500 to-amber-500'}" style="width: ${Math.min(100, Math.max(2, runway_status.percentageOfGoal))}%"></div>
                     </div>
                 </div>
 
                 <!-- Stats Breakdown Row -->
                 <div class="grid grid-cols-2 gap-3 pt-1">
-                    <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
-                        <p class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Liquid Reserves</p>
-                        <p class="text-base font-bold text-emerald-400 convertible-amount" data-kes="${runway_status.liquidBalance}">${formatKes(runway_status.liquidBalance)}</p>
-                        <p class="text-[10px] text-gray-500">M-Pesa, Cash & MMF</p>
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl">
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Liquid Reserves</p>
+                        <p class="text-base font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${runway_status.liquidBalance}">${formatKes(runway_status.liquidBalance)}</p>
+                        <p class="text-[10px] text-gray-400">M-Pesa, Cash & MMF</p>
                     </div>
-                    <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
-                        <p class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Monthly Burn Rate</p>
-                        <p class="text-base font-bold text-rose-400 convertible-amount" data-kes="${runway_status.monthlyBurn}">${formatKes(runway_status.monthlyBurn)}</p>
-                        <p class="text-[10px] text-gray-500">Essential living expenses</p>
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl">
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Monthly Burn Rate</p>
+                        <p class="text-base font-bold text-rose-600 dark:text-rose-400 convertible-amount" data-kes="${runway_status.monthlyBurn}">${formatKes(runway_status.monthlyBurn)}</p>
+                        <p class="text-[10px] text-gray-400">Essential living expenses</p>
                     </div>
                 </div>
 
                 <!-- Actionable Advice -->
-                <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5">
+                <div class="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl flex items-start gap-2.5">
                     <span class="text-base shrink-0">💡</span>
-                    <p class="text-xs text-amber-200 leading-relaxed">${runway_status.advice}</p>
+                    <p class="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">${runway_status.advice}</p>
                 </div>
             </div>
 
             <!-- 🏆 Financial Freedom & Health Score (0-100) -->
-            <div class="bg-gradient-to-br from-slate-900 via-gray-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-gray-800 space-y-4">
-                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+            <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
                     <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
                             🏆
                         </div>
                         <div>
-                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                 <span>Financial Health Score</span>
                                 <span class="text-[10px] px-2 py-0.5 rounded-full ${health_score.badgeClass}">${health_score.grade} Grade</span>
                             </h2>
-                            <p class="text-xs text-gray-400">${health_score.tierLabel}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${health_score.tierLabel}</p>
                         </div>
                     </div>
                     <div class="text-right">
-                        <span class="text-3xl font-black ${health_score.totalScore >= 75 ? 'text-emerald-400' : health_score.totalScore >= 50 ? 'text-amber-400' : 'text-rose-400'}">${health_score.totalScore}</span>
+                        <span class="text-3xl font-black ${health_score.totalScore >= 75 ? 'text-emerald-600 dark:text-emerald-400' : health_score.totalScore >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}">${health_score.totalScore}</span>
                         <span class="text-xs text-gray-400">/ 100</span>
                     </div>
                 </div>
 
                 <!-- 4 Pillars Breakdown -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl space-y-1">
                         <div class="flex justify-between items-center text-xs">
-                            <span class="text-gray-300 font-semibold">🛡️ Runway</span>
-                            <span class="font-bold text-emerald-400">${health_score.pillarScores.runway.score}/25</span>
+                            <span class="text-gray-700 dark:text-gray-300 font-semibold">🛡️ Runway</span>
+                            <span class="font-bold text-emerald-600 dark:text-emerald-400">${health_score.pillarScores.runway.score}/25</span>
                         </div>
-                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div class="h-full bg-emerald-500 rounded-full" style="width: ${(health_score.pillarScores.runway.score / 25) * 100}%"></div>
                         </div>
-                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.runway.detail}</p>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">${health_score.pillarScores.runway.detail}</p>
                     </div>
 
-                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl space-y-1">
                         <div class="flex justify-between items-center text-xs">
-                            <span class="text-gray-300 font-semibold">💳 Debt Health</span>
-                            <span class="font-bold text-emerald-400">${health_score.pillarScores.debt.score}/25</span>
+                            <span class="text-gray-700 dark:text-gray-300 font-semibold">💳 Debt Health</span>
+                            <span class="font-bold text-cyan-600 dark:text-cyan-400">${health_score.pillarScores.debt.score}/25</span>
                         </div>
-                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div class="h-full bg-cyan-500 rounded-full" style="width: ${(health_score.pillarScores.debt.score / 25) * 100}%"></div>
                         </div>
-                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.debt.detail}</p>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">${health_score.pillarScores.debt.detail}</p>
                     </div>
 
-                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl space-y-1">
                         <div class="flex justify-between items-center text-xs">
-                            <span class="text-gray-300 font-semibold">🎯 Target Pace</span>
-                            <span class="font-bold text-emerald-400">${health_score.pillarScores.incomeTarget.score}/25</span>
+                            <span class="text-gray-700 dark:text-gray-300 font-semibold">🎯 Target Pace</span>
+                            <span class="font-bold text-indigo-600 dark:text-indigo-400">${health_score.pillarScores.incomeTarget.score}/25</span>
                         </div>
-                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div class="h-full bg-indigo-500 rounded-full" style="width: ${(health_score.pillarScores.incomeTarget.score / 25) * 100}%"></div>
                         </div>
-                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.incomeTarget.detail}</p>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">${health_score.pillarScores.incomeTarget.detail}</p>
                     </div>
 
-                    <div class="p-3 bg-slate-950/80 border border-gray-800 rounded-xl space-y-1">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl space-y-1">
                         <div class="flex justify-between items-center text-xs">
-                            <span class="text-gray-300 font-semibold">⚖️ Discipline</span>
-                            <span class="font-bold text-emerald-400">${health_score.pillarScores.budgetDiscipline.score}/25</span>
+                            <span class="text-gray-700 dark:text-gray-300 font-semibold">⚖️ Discipline</span>
+                            <span class="font-bold text-purple-600 dark:text-purple-400">${health_score.pillarScores.budgetDiscipline.score}/25</span>
                         </div>
-                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div class="h-full bg-purple-500 rounded-full" style="width: ${(health_score.pillarScores.budgetDiscipline.score / 25) * 100}%"></div>
                         </div>
-                        <p class="text-[10px] text-gray-400">${health_score.pillarScores.budgetDiscipline.detail}</p>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">${health_score.pillarScores.budgetDiscipline.detail}</p>
                     </div>
                 </div>
 
                 <!-- Strategic Recommendations -->
                 <div class="pt-1">
                     ${(health_score.recommendations || []).map((rec: string) => `
-                    <p class="text-xs text-gray-300 flex items-center gap-1.5"><span class="text-emerald-400 font-bold">✓</span> ${rec}</p>
+                    <p class="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><span class="text-emerald-500 font-bold">✓</span> ${rec}</p>
                     `).join('')}
                 </div>
             </div>
         </div>
 
         <!-- ⚡ EV vs. Petrol Cost-Savings & ROI Comparator Banner -->
-        <div id="ev-savings-card" class="bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-teal-800/50 space-y-4">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-teal-800/60 pb-3">
+        <div id="ev-savings-card" class="bg-gradient-to-br from-teal-500/10 via-cyan-500/5 to-transparent dark:from-teal-950/30 p-6 rounded-2xl border border-teal-200 dark:border-teal-900/50 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-teal-100 dark:border-teal-900/40 pb-3">
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
                         ⚡
                     </div>
                     <div>
-                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <span>EV vs. Petrol Cost-Savings & ROI Comparator</span>
-                            <span class="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${ev_roi_stats.savingsPercentage}% Cheaper</span>
+                            <span class="text-[10px] bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${ev_roi_stats.savingsPercentage}% Cheaper</span>
                         </h2>
-                        <p class="text-xs text-teal-200">Real-time savings analytics based on your logged rider shifts and battery swaps</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Real-time savings analytics based on your logged rider shifts and battery swaps</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <a href="/rider" class="px-3 py-1.5 bg-teal-800/60 hover:bg-teal-700 text-teal-200 hover:text-white rounded-xl text-xs font-bold border border-teal-700/60 transition active:scale-95">
+                    <a href="/rider" class="px-3 py-1.5 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-700 dark:text-teal-300 rounded-xl text-xs font-bold border border-teal-200 dark:border-teal-800 transition active:scale-95">
                         🛵 View Rider Shifts
                     </a>
                 </div>
@@ -1097,28 +1097,28 @@ export function renderFinanceDashboard(data: any): string {
 
             <!-- Savings Metrics Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
-                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Total Distance</p>
-                    <p class="text-xl font-black text-white mt-0.5">${formatNum(ev_roi_stats.totalKm)} <span class="text-xs font-normal text-gray-400">km</span></p>
-                    <p class="text-[10px] text-gray-400">EV: ${formatNum(ev_roi_stats.evKm)} km • Petrol: ${formatNum(ev_roi_stats.petrolKm)} km</p>
+                <div class="p-3.5 bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-teal-700 dark:text-teal-300 uppercase tracking-wider font-semibold">Total Distance</p>
+                    <p class="text-xl font-black text-gray-900 dark:text-white mt-0.5">${formatNum(ev_roi_stats.totalKm)} <span class="text-xs font-normal text-gray-500">km</span></p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">EV: ${formatNum(ev_roi_stats.evKm)} km • Petrol: ${formatNum(ev_roi_stats.petrolKm)} km</p>
                 </div>
 
-                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
-                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Net Shillings Saved</p>
-                    <p class="text-xl font-black text-emerald-400 mt-0.5 convertible-amount" data-kes="${ev_roi_stats.netSavingsKes}">${formatKes(ev_roi_stats.netSavingsKes)}</p>
-                    <p class="text-[10px] text-emerald-300">vs. pure petrol baseline</p>
+                <div class="p-3.5 bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-teal-700 dark:text-teal-300 uppercase tracking-wider font-semibold">Net Shillings Saved</p>
+                    <p class="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5 convertible-amount" data-kes="${ev_roi_stats.netSavingsKes}">${formatKes(ev_roi_stats.netSavingsKes)}</p>
+                    <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">vs. pure petrol baseline</p>
                 </div>
 
-                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
-                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">Unit Running Cost</p>
-                    <p class="text-xl font-black text-cyan-300 mt-0.5">Ksh ${ev_roi_stats.costPerKmEv.toFixed(2)} <span class="text-xs font-normal text-gray-400">/ km</span></p>
-                    <p class="text-[10px] text-gray-400">Petrol avg: Ksh ${ev_roi_stats.costPerKmPetrol.toFixed(2)}/km</p>
+                <div class="p-3.5 bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-teal-700 dark:text-teal-300 uppercase tracking-wider font-semibold">Unit Running Cost</p>
+                    <p class="text-xl font-black text-cyan-600 dark:text-cyan-400 mt-0.5">Ksh ${ev_roi_stats.costPerKmEv.toFixed(2)} <span class="text-xs font-normal text-gray-500">/ km</span></p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Petrol avg: Ksh ${ev_roi_stats.costPerKmPetrol.toFixed(2)}/km</p>
                 </div>
 
-                <div class="p-3.5 bg-slate-950/80 border border-teal-900/60 rounded-xl">
-                    <p class="text-[10px] text-teal-300 uppercase tracking-wider font-semibold">🍃 CO2 Offset</p>
-                    <p class="text-xl font-black text-emerald-300 mt-0.5">${formatNum(ev_roi_stats.co2SavedKg)} <span class="text-xs font-normal text-gray-400">kg</span></p>
-                    <p class="text-[10px] text-gray-400">Clean energy reduction</p>
+                <div class="p-3.5 bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-teal-700 dark:text-teal-300 uppercase tracking-wider font-semibold">🍃 CO2 Offset</p>
+                    <p class="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">${formatNum(ev_roi_stats.co2SavedKg)} <span class="text-xs font-normal text-gray-500">kg</span></p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Clean energy reduction</p>
                 </div>
             </div>
         </div>
@@ -1242,105 +1242,105 @@ export function renderFinanceDashboard(data: any): string {
                 `}
             </div>
         </div>
-        <div id="targets-card" class="bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 p-5 sm:p-6 rounded-2xl text-white shadow-lg border border-indigo-900/60 space-y-6">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-800/60 pb-4">
+        <div id="targets-card" class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/30 p-5 sm:p-6 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm space-y-6 text-gray-900 dark:text-white">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-emerald-100 dark:border-emerald-900/40 pb-4">
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
                         🎯
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <span>Income & Expense Target Checkers</span>
-                            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/30">Weekly • Monthly • Yearly</span>
+                            <span class="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-200 dark:border-emerald-500/30">Weekly • Monthly • Yearly</span>
                         </h2>
-                        <p class="text-xs text-indigo-200">Track target income milestones vs expense budget burn rates with safe daily run-rate pacing.</p>
+                        <p class="text-xs text-gray-600 dark:text-emerald-200/80">Track target income milestones vs expense budget burn rates with safe daily run-rate pacing.</p>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
                     <!-- Timeframe Tab Switcher -->
-                    <div class="flex p-1 bg-slate-950/80 border border-indigo-800/80 rounded-xl">
-                        <button type="button" id="target-btn-weekly" onclick="switchTargetTab('weekly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">
+                    <div class="flex p-1 bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 rounded-xl">
+                        <button type="button" id="target-btn-weekly" onclick="switchTargetTab('weekly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                             Weekly
                         </button>
                         <button type="button" id="target-btn-monthly" onclick="switchTargetTab('monthly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow-xs">
                             Monthly
                         </button>
-                        <button type="button" id="target-btn-yearly" onclick="switchTargetTab('yearly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">
+                        <button type="button" id="target-btn-yearly" onclick="switchTargetTab('yearly')" class="target-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                             Yearly
                         </button>
                     </div>
 
-                    <button type="button" onclick="document.getElementById('targets-edit-form-container')?.classList.toggle('hidden')" class="px-3 py-2 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white text-xs font-bold rounded-xl border border-indigo-700/60 transition active:scale-95 flex items-center gap-1.5">
+                    <button type="button" onclick="document.getElementById('targets-edit-form-container')?.classList.toggle('hidden')" class="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 transition active:scale-95 flex items-center gap-1.5 shadow-2xs">
                         <span>⚙️ Set Targets</span>
                     </button>
                 </div>
             </div>
 
             <!-- Collapsible Edit Targets Form -->
-            <div id="targets-edit-form-container" class="hidden bg-slate-950/90 p-5 rounded-2xl border border-indigo-700/60 shadow-inner space-y-4">
-                <div class="flex justify-between items-center border-b border-indigo-800/60 pb-2">
-                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <div id="targets-edit-form-container" class="hidden bg-white dark:bg-gray-950 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 shadow-md space-y-4">
+                <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-2">
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <span>⚙️ Customize Income Targets & Expense Ceilings</span>
                     </h3>
-                    <button type="button" onclick="document.getElementById('targets-edit-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-white text-sm">✕</button>
+                    <button type="button" onclick="document.getElementById('targets-edit-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm">✕</button>
                 </div>
 
                 <form action="/targets/update" method="POST" class="space-y-4">
                     <div>
-                        <p class="text-xs font-extrabold text-emerald-400 uppercase tracking-wider mb-2">💵 Target Income Milestones (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <p class="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">💵 Target Income Milestones (<span class="curr-symbol-label">Ksh</span>)</p>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">Weekly Target Income</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_income_weekly" value="${income_targets.weekly.target}" placeholder="15000" data-placeholder-base="15000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Weekly Target Income</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_weekly" value="${income_targets.weekly.target}" placeholder="15000" data-placeholder-base="15000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
                             </div>
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">Monthly Target Income</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_income_monthly" value="${income_targets.monthly.target}" placeholder="65000" data-placeholder-base="65000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Monthly Target Income</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_monthly" value="${income_targets.monthly.target}" placeholder="65000" data-placeholder-base="65000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
                             </div>
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">Yearly Target Income</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_income_yearly" value="${income_targets.yearly.target}" placeholder="780000" data-placeholder-base="780000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Yearly Target Income</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_yearly" value="${income_targets.yearly.target}" placeholder="780000" data-placeholder-base="780000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
                             </div>
                         </div>
                     </div>
 
                     <div>
-                        <p class="text-xs font-extrabold text-rose-400 uppercase tracking-wider mb-2">🛑 Expense Target & Budget Ceilings (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <p class="text-xs font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wider mb-2">🛑 Expense Target & Budget Ceilings (<span class="curr-symbol-label">Ksh</span>)</p>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">Weekly Expense Budget</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_expense_weekly" value="${expense_targets.weekly.target}" placeholder="6000" data-placeholder-base="6000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Weekly Expense Budget</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_weekly" value="${expense_targets.weekly.target}" placeholder="6000" data-placeholder-base="6000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
                             </div>
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">Monthly Expense Budget</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_expense_monthly" value="${expense_targets.monthly.target}" placeholder="25000" data-placeholder-base="25000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Monthly Expense Budget</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_monthly" value="${expense_targets.monthly.target}" placeholder="25000" data-placeholder-base="25000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
                             </div>
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">Yearly Expense Budget</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_expense_yearly" value="${expense_targets.yearly.target}" placeholder="300000" data-placeholder-base="300000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Yearly Expense Budget</label>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_yearly" value="${expense_targets.yearly.target}" placeholder="300000" data-placeholder-base="300000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
                             </div>
                         </div>
                     </div>
 
                     <div>
-                        <p class="text-xs font-extrabold text-amber-400 uppercase tracking-wider mb-2">🏷️ Monthly Category Spending Limits (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <p class="text-xs font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🏷️ Monthly Category Spending Limits (<span class="curr-symbol-label">Ksh</span>)</p>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">🏠 Living Expenses</label>
-                                <input type="number" step="any" name="cat_limit_living" value="${(budgets.find((b: any) => b.category === 'Living Expenses') || {}).limit || 8000}" placeholder="8000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">🏠 Living Expenses</label>
+                                <input type="number" step="any" name="cat_limit_living" value="${(budgets.find((b: any) => b.category === 'Living Expenses') || {}).limit || 8000}" placeholder="8000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white">
                             </div>
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">🛒 Food & Groceries</label>
-                                <input type="number" step="any" name="cat_limit_food" value="${(budgets.find((b: any) => b.category === 'Food & Groceries') || {}).limit || 6000}" placeholder="6000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">🛒 Food & Groceries</label>
+                                <input type="number" step="any" name="cat_limit_food" value="${(budgets.find((b: any) => b.category === 'Food & Groceries') || {}).limit || 6000}" placeholder="6000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white">
                             </div>
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">⛽ Fuel / EV Swaps</label>
-                                <input type="number" step="any" name="cat_limit_fuel" value="${(budgets.find((b: any) => b.category.includes('Fuel')) || {}).limit || 7000}" placeholder="7000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">⛽ Fuel / EV Swaps</label>
+                                <input type="number" step="any" name="cat_limit_fuel" value="${(budgets.find((b: any) => b.category.includes('Fuel')) || {}).limit || 7000}" placeholder="7000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white">
                             </div>
                             <div>
-                                <label class="block text-[11px] text-gray-400 mb-1">⚡ Utilities & Bills</label>
-                                <input type="number" step="any" name="cat_limit_bills" value="${(budgets.find((b: any) => b.category.includes('Utilities')) || {}).limit || 4000}" placeholder="4000" class="w-full p-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white">
+                                <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">⚡ Utilities & Bills</label>
+                                <input type="number" step="any" name="cat_limit_bills" value="${(budgets.find((b: any) => b.category.includes('Utilities')) || {}).limit || 4000}" placeholder="4000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white">
                             </div>
                         </div>
                     </div>
@@ -1364,14 +1364,14 @@ export function renderFinanceDashboard(data: any): string {
                 <div id="target-pane-${tf}" class="${isHidden ? 'hidden' : ''} space-y-5">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- 💵 Target Income Checker Card -->
-                        <div class="bg-slate-950/80 border border-emerald-500/40 p-5 rounded-2xl shadow-inner space-y-4 flex flex-col justify-between">
+                        <div class="bg-white dark:bg-gray-950 border border-emerald-200 dark:border-emerald-800/80 p-5 rounded-2xl shadow-xs space-y-4 flex flex-col justify-between">
                             <div class="space-y-3">
                                 <div class="flex justify-between items-start gap-2">
                                     <div class="flex items-center space-x-2">
                                         <span class="text-xl">💵</span>
                                         <div>
-                                            <h3 class="text-sm font-bold text-white">Target Income Checker</h3>
-                                            <p class="text-[10px] text-emerald-300 font-semibold">${tfTitle}</p>
+                                            <h3 class="text-sm font-bold text-gray-900 dark:text-white">Target Income Checker</h3>
+                                            <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">${tfTitle}</p>
                                         </div>
                                     </div>
                                     <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full ${getBadgeStyles(inc.statusBadge)}">
@@ -1381,51 +1381,51 @@ export function renderFinanceDashboard(data: any): string {
 
                                 <div class="flex justify-between items-baseline pt-1">
                                     <div>
-                                        <p class="text-[10px] uppercase font-bold text-gray-400">Earned So Far</p>
-                                        <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${inc.actual}">${formatKes(inc.actual)}</p>
+                                        <p class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Earned So Far</p>
+                                        <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${inc.actual}">${formatKes(inc.actual)}</p>
                                     </div>
                                     <div class="text-right">
-                                        <p class="text-[10px] uppercase font-bold text-gray-400">Target Goal</p>
-                                        <p class="text-sm font-black text-gray-200 convertible-amount" data-kes="${inc.target}">${formatKes(inc.target)}</p>
+                                        <p class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Target Goal</p>
+                                        <p class="text-sm font-black text-gray-700 dark:text-gray-200 convertible-amount" data-kes="${inc.target}">${formatKes(inc.target)}</p>
                                     </div>
                                 </div>
 
                                 <!-- Progress Bar -->
                                 <div class="space-y-1">
-                                    <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-emerald-950">
-                                        <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-teal-500 to-emerald-400 shadow-sm" style="width: ${inc.displayPercentage}%;"></div>
+                                    <div class="w-full bg-gray-100 dark:bg-gray-800 h-3 rounded-full overflow-hidden p-0.5 border border-gray-200 dark:border-gray-700">
+                                        <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-teal-500 to-emerald-500 shadow-xs" style="width: ${inc.displayPercentage}%;"></div>
                                     </div>
-                                    <div class="flex justify-between text-[11px] text-gray-400 font-semibold">
-                                        <span class="text-emerald-300 font-black">${inc.percentage}% Achieved</span>
-                                        <span>Remaining: <strong class="convertible-amount text-white" data-kes="${inc.remaining}">${formatKes(inc.remaining)}</strong></span>
+                                    <div class="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 font-semibold">
+                                        <span class="text-emerald-600 dark:text-emerald-400 font-black">${inc.percentage}% Achieved</span>
+                                        <span>Remaining: <strong class="convertible-amount text-gray-900 dark:text-white" data-kes="${inc.remaining}">${formatKes(inc.remaining)}</strong></span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="p-3 bg-emerald-950/40 rounded-xl border border-emerald-900/60 text-xs">
+                            <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-900/60 text-xs">
                                 ${inc.actual >= inc.target ? `
-                                <div class="flex items-center space-x-2 text-emerald-300 font-bold">
+                                <div class="flex items-center space-x-2 text-emerald-700 dark:text-emerald-300 font-bold">
                                     <span>🎉</span>
-                                    <span>Goal exceeded by <span class="convertible-amount font-black text-emerald-200" data-kes="${inc.actual - inc.target}">${formatKes(inc.actual - inc.target)}</span>! Fantastic momentum!</span>
+                                    <span>Goal exceeded by <span class="convertible-amount font-black text-emerald-800 dark:text-emerald-200" data-kes="${inc.actual - inc.target}">${formatKes(inc.actual - inc.target)}</span>! Fantastic momentum!</span>
                                 </div>
                                 ` : `
                                 <div class="flex justify-between items-center">
-                                    <span class="text-emerald-200 font-semibold">⚡ Required Run-Rate:</span>
-                                    <span class="font-extrabold text-white"><span class="convertible-amount text-emerald-300" data-kes="${inc.dailyRate}">${formatKes(inc.dailyRate)}</span> <span class="text-[10px] text-gray-400">/ day (${inc.daysRemaining} days left)</span></span>
+                                    <span class="text-emerald-800 dark:text-emerald-200 font-semibold">⚡ Required Run-Rate:</span>
+                                    <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-300" data-kes="${inc.dailyRate}">${formatKes(inc.dailyRate)}</span> <span class="text-[10px] text-gray-500 dark:text-gray-400">/ day (${inc.daysRemaining} days left)</span></span>
                                 </div>
                                 `}
                             </div>
                         </div>
 
                         <!-- 🛑 Expense Target & Budget Checker Card -->
-                        <div class="bg-slate-950/80 border border-rose-500/30 p-5 rounded-2xl shadow-inner space-y-4 flex flex-col justify-between">
+                        <div class="bg-white dark:bg-gray-950 border border-rose-200 dark:border-rose-800/80 p-5 rounded-2xl shadow-xs space-y-4 flex flex-col justify-between">
                             <div class="space-y-3">
                                 <div class="flex justify-between items-start gap-2">
                                     <div class="flex items-center space-x-2">
                                         <span class="text-xl">🛑</span>
                                         <div>
-                                            <h3 class="text-sm font-bold text-white">Expense Target / Budget Checker</h3>
-                                            <p class="text-[10px] text-rose-300 font-semibold">${tfTitle}</p>
+                                            <h3 class="text-sm font-bold text-gray-900 dark:text-white">Expense Target / Budget Checker</h3>
+                                            <p class="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">${tfTitle}</p>
                                         </div>
                                     </div>
                                     <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full ${getBadgeStyles(exp.statusBadge)}">
@@ -1435,37 +1435,37 @@ export function renderFinanceDashboard(data: any): string {
 
                                 <div class="flex justify-between items-baseline pt-1">
                                     <div>
-                                        <p class="text-[10px] uppercase font-bold text-gray-400">Spent So Far</p>
-                                        <p class="text-2xl font-black text-rose-400 convertible-amount" data-kes="${exp.actual}">${formatKes(exp.actual)}</p>
+                                        <p class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Spent So Far</p>
+                                        <p class="text-2xl font-black text-rose-600 dark:text-rose-400 convertible-amount" data-kes="${exp.actual}">${formatKes(exp.actual)}</p>
                                     </div>
                                     <div class="text-right">
-                                        <p class="text-[10px] uppercase font-bold text-gray-400">Budget Limit</p>
-                                        <p class="text-sm font-black text-gray-200 convertible-amount" data-kes="${exp.target}">${formatKes(exp.target)}</p>
+                                        <p class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Budget Limit</p>
+                                        <p class="text-sm font-black text-gray-700 dark:text-gray-200 convertible-amount" data-kes="${exp.target}">${formatKes(exp.target)}</p>
                                     </div>
                                 </div>
 
                                 <!-- Progress Bar -->
                                 <div class="space-y-1">
-                                    <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-rose-950">
-                                        <div class="h-full rounded-full transition-all duration-500 ${exp.percentage >= 100 ? 'bg-gradient-to-r from-rose-600 to-red-500' : exp.percentage > exp.expectedPacePct + 15 ? 'bg-gradient-to-r from-amber-500 to-rose-500' : 'bg-gradient-to-r from-emerald-500 to-teal-400'}" style="width: ${exp.displayPercentage}%;"></div>
+                                    <div class="w-full bg-gray-100 dark:bg-gray-800 h-3 rounded-full overflow-hidden p-0.5 border border-gray-200 dark:border-gray-700">
+                                        <div class="h-full rounded-full transition-all duration-500 ${exp.percentage >= 100 ? 'bg-gradient-to-r from-rose-600 to-red-500' : exp.percentage > exp.expectedPacePct + 15 ? 'bg-gradient-to-r from-amber-500 to-rose-500' : 'bg-gradient-to-r from-emerald-500 to-teal-500'}" style="width: ${exp.displayPercentage}%;"></div>
                                     </div>
-                                    <div class="flex justify-between text-[11px] text-gray-400 font-semibold">
-                                        <span class="${exp.percentage >= 100 ? 'text-rose-400 font-black' : 'text-gray-300'}">${exp.percentage}% Spent</span>
-                                        <span>Remaining: <strong class="convertible-amount text-white" data-kes="${exp.remaining}">${formatKes(exp.remaining)}</strong></span>
+                                    <div class="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 font-semibold">
+                                        <span class="${exp.percentage >= 100 ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-gray-600 dark:text-gray-300'}">${exp.percentage}% Spent</span>
+                                        <span>Remaining: <strong class="convertible-amount text-gray-900 dark:text-white" data-kes="${exp.remaining}">${formatKes(exp.remaining)}</strong></span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="p-3 bg-slate-900/90 rounded-xl border border-indigo-900/60 text-xs">
+                            <div class="p-3 bg-gray-50 dark:bg-gray-900/90 rounded-xl border border-gray-200 dark:border-gray-800 text-xs">
                                 ${exp.actual > exp.target ? `
-                                <div class="flex items-center space-x-2 text-rose-400 font-bold">
+                                <div class="flex items-center space-x-2 text-rose-600 dark:text-rose-400 font-bold">
                                     <span>🚨</span>
                                     <span>Over budget limit by <span class="convertible-amount font-black" data-kes="${exp.actual - exp.target}">${formatKes(exp.actual - exp.target)}</span>!</span>
                                 </div>
                                 ` : `
                                 <div class="flex justify-between items-center">
-                                    <span class="text-indigo-200 font-semibold">🛡️ Safe Daily Spend Limit:</span>
-                                    <span class="font-extrabold text-white"><span class="convertible-amount text-emerald-400" data-kes="${exp.dailyRate}">${formatKes(exp.dailyRate)}</span> <span class="text-[10px] text-gray-400">/ day max (${exp.daysRemaining} days left)</span></span>
+                                    <span class="text-gray-700 dark:text-gray-300 font-semibold">🛡️ Safe Daily Spend Limit:</span>
+                                    <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${exp.dailyRate}">${formatKes(exp.dailyRate)}</span> <span class="text-[10px] text-gray-500 dark:text-gray-400">/ day max (${exp.daysRemaining} days left)</span></span>
                                 </div>
                                 `}
                             </div>
@@ -1475,22 +1475,22 @@ export function renderFinanceDashboard(data: any): string {
             }).join('')}
 
             <!-- 🏷️ Monthly Category Budgets & Burn Rates Breakdown -->
-            <div class="pt-2 border-t border-indigo-800/60 space-y-3">
+            <div class="pt-2 border-t border-emerald-100 dark:border-emerald-900/40 space-y-3">
                 <div class="flex justify-between items-center">
-                    <h3 class="text-xs font-extrabold uppercase text-indigo-200 tracking-wider flex items-center gap-1.5">
+                    <h3 class="text-xs font-extrabold uppercase text-gray-700 dark:text-emerald-200 tracking-wider flex items-center gap-1.5">
                         <span>🏷️ Monthly Category Budget Burn Rates</span>
                     </h3>
-                    <span class="text-[10px] text-gray-400 font-semibold">Live auto-calculated from transactions</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold">Live auto-calculated from transactions</span>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     ${category_budgets.map((b: any) => `
-                    <div class="p-3.5 bg-slate-950/70 border border-indigo-900/60 rounded-xl space-y-2.5 flex flex-col justify-between">
+                    <div class="p-3.5 bg-white dark:bg-gray-950/70 border border-gray-200 dark:border-gray-800 rounded-xl space-y-2.5 flex flex-col justify-between shadow-2xs">
                         <div>
                             <div class="flex justify-between items-start">
                                 <div class="flex items-center space-x-2">
                                     <span class="text-lg">${b.icon || '🏷️'}</span>
-                                    <span class="text-xs font-bold text-gray-200 truncate max-w-[120px]">${b.category}</span>
+                                    <span class="text-xs font-bold text-gray-800 dark:text-gray-200 truncate max-w-[120px]">${b.category}</span>
                                 </div>
                                 <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full ${getBadgeStyles(b.burnBadge)}">
                                     ${b.burnLabel}
@@ -1498,18 +1498,18 @@ export function renderFinanceDashboard(data: any): string {
                             </div>
 
                             <div class="flex justify-between text-xs mt-2">
-                                <span class="font-black text-white convertible-amount" data-kes="${b.spent}">${formatKes(b.spent)}</span>
-                                <span class="text-gray-400 text-[11px]">/ <span class="convertible-amount font-semibold" data-kes="${b.limit}">${formatKes(b.limit)}</span></span>
+                                <span class="font-black text-gray-900 dark:text-white convertible-amount" data-kes="${b.spent}">${formatKes(b.spent)}</span>
+                                <span class="text-gray-500 dark:text-gray-400 text-[11px]">/ <span class="convertible-amount font-semibold" data-kes="${b.limit}">${formatKes(b.limit)}</span></span>
                             </div>
 
-                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden mt-1.5 border border-indigo-950">
+                            <div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-1.5 border border-gray-200 dark:border-gray-700">
                                 <div class="h-full rounded-full transition-all duration-500 ${b.burnBadge === 'rose' ? 'bg-rose-500' : b.burnBadge === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'}" style="width: ${b.displayPercentage}%;"></div>
                             </div>
                         </div>
 
-                        <div class="pt-2 border-t border-indigo-950/80 flex justify-between items-center text-[10px] text-gray-400">
+                        <div class="pt-2 border-t border-gray-100 dark:border-gray-800/80 flex justify-between items-center text-[10px] text-gray-500 dark:text-gray-400">
                             <span>Safe daily:</span>
-                            <strong class="text-emerald-400 font-bold convertible-amount" data-kes="${b.safeDailySpend}">${formatKes(b.safeDailySpend)}/d</strong>
+                            <strong class="text-emerald-600 dark:text-emerald-400 font-bold convertible-amount" data-kes="${b.safeDailySpend}">${formatKes(b.safeDailySpend)}/d</strong>
                         </div>
                     </div>`).join('')}
                 </div>
@@ -1518,28 +1518,28 @@ export function renderFinanceDashboard(data: any): string {
 
 
         <!-- 🌊 Dynamic Waterfall Auto-Split Card -->
-        <div id="waterfall-card" class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-md border border-indigo-800/40 space-y-4">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-indigo-800/60 pb-3">
+        <div id="waterfall-card" class="bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-4 text-gray-900 dark:text-white">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div>
                     <div class="flex items-center space-x-2">
                         <span class="text-2xl">🌊</span>
-                        <h2 class="text-lg font-bold">Dynamic Waterfall Income Auto-Split (Zero Cent Leakage)</h2>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Dynamic Waterfall Income Auto-Split (Zero Cent Leakage)</h2>
                     </div>
-                    <p class="text-xs text-indigo-200">Automatically calculate and distribute daily earnings across Ziidi MMF (10% auto-save), Lock Savings, Goals, and Living expenses.</p>
+                    <p class="text-xs text-gray-600 dark:text-indigo-200/80">Automatically calculate and distribute daily earnings across Ziidi MMF (10% auto-save), Lock Savings, Goals, and Living expenses.</p>
                 </div>
-                <button type="button" onclick="openRulesModal()" class="text-xs bg-indigo-800/60 hover:bg-indigo-700 border border-indigo-600 px-3 py-1.5 rounded-lg font-semibold transition active:scale-95">
+                <button type="button" onclick="openRulesModal()" class="text-xs bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-xl font-bold transition active:scale-95 shadow-2xs">
                     ⚙️ Edit Split Rules
                 </button>
             </div>
 
             <form action="/split/distribute" method="POST" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                 <div>
-                    <label class="block text-xs text-indigo-300 mb-1">Enter Today's Income (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" name="amount" id="split-amount-input" value="500" oninput="updateSplitBreakdown()" class="w-full px-3 py-2 bg-slate-950 border border-indigo-700 rounded-xl text-lg font-bold text-white focus:ring-2 focus:ring-emerald-400" required>
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-indigo-300 mb-1">Enter Today's Income (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" name="amount" id="split-amount-input" value="500" oninput="updateSplitBreakdown()" class="w-full px-3 py-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-xl text-lg font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400" required>
                 </div>
                 <div>
-                    <label class="block text-xs text-indigo-300 mb-1">Source / Wallet Account</label>
-                    <select name="source_account_id" class="w-full px-3 py-2.5 bg-slate-950 border border-indigo-700 rounded-xl text-sm font-medium text-white">
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-indigo-300 mb-1">Source / Wallet Account</label>
+                    <select name="source_account_id" class="w-full px-3 py-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-900 dark:text-white">
                         <option value="">-- Direct External Income --</option>
                         ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                     </select>
@@ -1553,13 +1553,13 @@ export function renderFinanceDashboard(data: any): string {
 
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2">
                 ${allocation_rules.map((r: any) => `
-                <div class="p-3 bg-slate-950/70 border border-indigo-900/60 rounded-xl">
-                    <div class="flex items-center space-x-1.5 text-xs text-indigo-300 font-bold">
+                <div class="p-3 bg-white dark:bg-gray-950/70 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                    <div class="flex items-center space-x-1.5 text-xs text-gray-700 dark:text-indigo-300 font-bold">
                         <span>${r.icon || '💰'}</span>
                         <span class="truncate">${r.bucket_name}</span>
                     </div>
-                    <p class="text-sm font-black text-emerald-400 mt-1" id="rule-calc-${r.id}">Ksh 0.00</p>
-                    <p class="text-[10px] text-gray-400 font-medium">${r.percentage}% Allocation</p>
+                    <p class="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1" id="rule-calc-${r.id}">Ksh 0.00</p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400 font-medium">${r.percentage}% Allocation</p>
                 </div>`).join('')}
             </div>
         </div>
@@ -2042,18 +2042,18 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 👥 SACCO & Chama Dividend Forecaster Card -->
-        <div id="sacco-card" class="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-6 rounded-2xl border border-indigo-800/50 text-white shadow-xl space-y-5">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-800/60 pb-3">
+        <div id="sacco-card" class="bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-5 text-gray-900 dark:text-white">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-teal-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
                         👥
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <span>SACCO & Chama Dividend Forecaster</span>
-                            <span class="text-[10px] bg-teal-500/20 text-teal-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-teal-500/30">10% - 15% Annual Rebates</span>
+                            <span class="text-[10px] bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-teal-200 dark:border-teal-500/30">10% - 15% Annual Rebates</span>
                         </h2>
-                        <p class="text-xs text-indigo-200">Simulate wealth compounding and annual dividend payouts from your SACCO deposits and Chama merry-go-rounds.</p>
+                        <p class="text-xs text-gray-600 dark:text-indigo-200/80">Simulate wealth compounding and annual dividend payouts from your SACCO deposits and Chama merry-go-rounds.</p>
                     </div>
                 </div>
             </div>
@@ -2061,60 +2061,60 @@ export function renderFinanceDashboard(data: any): string {
             <!-- Dynamic Input Form -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                    <label class="block text-xs font-bold text-indigo-300 mb-1">Current Share Capital (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" id="sacco-initial-capital" value="50000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-slate-950 border border-indigo-700 rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-teal-400">
+                    <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Current Share Capital (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" id="sacco-initial-capital" value="50000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-400">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-indigo-300 mb-1">Monthly Deposit / Contribution (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" id="sacco-monthly-deposit" value="5000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-slate-950 border border-indigo-700 rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-teal-400">
+                    <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Monthly Deposit / Contribution (<span class="curr-symbol-label">Ksh</span>)</label>
+                    <input type="number" step="any" id="sacco-monthly-deposit" value="5000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-400">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-indigo-300 mb-1">Annual Dividend / Interest Rate (%)</label>
-                    <input type="number" step="any" id="sacco-rate-pct" value="12" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-slate-950 border border-indigo-700 rounded-xl text-sm font-bold text-teal-400 focus:ring-2 focus:ring-teal-400">
+                    <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Annual Dividend / Interest Rate (%)</label>
+                    <input type="number" step="any" id="sacco-rate-pct" value="12" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-teal-600 dark:text-teal-400 focus:ring-2 focus:ring-teal-400">
                 </div>
             </div>
 
             <!-- Dynamic Projection Result Badges -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
-                    <p class="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">📈 1-Yr Total Capital</p>
-                    <p class="text-lg font-black text-white mt-1 convertible-amount" id="sacco-yr1-capital" data-kes="110000">Ksh 110,000.00</p>
-                    <p class="text-[10px] text-gray-400">Principal + 12 monthly deposits</p>
+                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-indigo-600 dark:text-indigo-300 font-bold uppercase tracking-wider">📈 1-Yr Total Capital</p>
+                    <p class="text-lg font-black text-gray-900 dark:text-white mt-1 convertible-amount" id="sacco-yr1-capital" data-kes="110000">Ksh 110,000.00</p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Principal + 12 monthly deposits</p>
                 </div>
 
-                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
-                    <p class="text-[10px] text-teal-300 font-bold uppercase tracking-wider">💰 Estimated Annual Payout</p>
-                    <p class="text-lg font-black text-emerald-400 mt-1 convertible-amount" id="sacco-annual-dividend" data-kes="9600">Ksh 9,600.00</p>
-                    <p class="text-[10px] text-emerald-300">Annual dividend return</p>
+                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-teal-600 dark:text-teal-300 font-bold uppercase tracking-wider">💰 Estimated Annual Payout</p>
+                    <p class="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1 convertible-amount" id="sacco-annual-dividend" data-kes="9600">Ksh 9,600.00</p>
+                    <p class="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold">Annual dividend return</p>
                 </div>
 
-                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
-                    <p class="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">💵 Monthly Passive Equiv.</p>
-                    <p class="text-lg font-black text-teal-300 mt-1 convertible-amount" id="sacco-monthly-dividend" data-kes="800">Ksh 800.00</p>
-                    <p class="text-[10px] text-gray-400">Distributed monthly equivalent</p>
+                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-indigo-600 dark:text-indigo-300 font-bold uppercase tracking-wider">💵 Monthly Passive Equiv.</p>
+                    <p class="text-lg font-black text-teal-600 dark:text-teal-300 mt-1 convertible-amount" id="sacco-monthly-dividend" data-kes="800">Ksh 800.00</p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Distributed monthly equivalent</p>
                 </div>
 
-                <div class="p-3 bg-slate-950/80 border border-indigo-900/60 rounded-xl">
-                    <p class="text-[10px] text-purple-300 font-bold uppercase tracking-wider">🚀 3-Year Compounding</p>
-                    <p class="text-lg font-black text-purple-300 mt-1 convertible-amount" id="sacco-3yr-compound" data-kes="268480">Ksh 268,480.00</p>
-                    <p class="text-[10px] text-purple-200">Reinvesting dividends</p>
+                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                    <p class="text-[10px] text-purple-600 dark:text-purple-300 font-bold uppercase tracking-wider">🚀 3-Year Compounding</p>
+                    <p class="text-lg font-black text-purple-600 dark:text-purple-300 mt-1 convertible-amount" id="sacco-3yr-compound" data-kes="268480">Ksh 268,480.00</p>
+                    <p class="text-[10px] text-purple-700 dark:text-purple-200">Reinvesting dividends</p>
                 </div>
             </div>
         </div>
 
         <!-- 💳 Loans & Debts Tracker (Borrowed vs Lent + Danger Zone Deadlines) -->
-        <div id="debts-card" class="bg-gradient-to-br from-slate-900 via-gray-900 to-slate-950 p-6 rounded-2xl border border-rose-900/40 text-white shadow-xl space-y-5">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-800 pb-4">
+        <div id="debts-card" class="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 text-gray-900 dark:text-white shadow-sm space-y-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-600 text-white flex items-center justify-center text-xl shadow-md shrink-0">
                         💳
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <span>Loans & Debts Tracker</span>
-                            <span class="text-[10px] bg-rose-500/20 text-rose-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-rose-500/30">Danger Zone & Due Dates</span>
+                            <span class="text-[10px] bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-rose-200 dark:border-rose-500/30">Danger Zone & Due Dates</span>
                         </h2>
-                        <p class="text-xs text-gray-400">Segregated tracking for Borrowed Loans (Fuliza, Hustler Fund, Tala) vs Money Lent with deadline alerts.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Segregated tracking for Borrowed Loans (Fuliza, Hustler Fund, Tala) vs Money Lent with deadline alerts.</p>
                     </div>
                 </div>
 
@@ -2127,31 +2127,31 @@ export function renderFinanceDashboard(data: any): string {
 
             <!-- Summary KPI Badges (Borrowed vs Lent vs Danger Zone) -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div class="p-3.5 bg-rose-950/40 border border-rose-800/60 rounded-xl space-y-1">
-                    <div class="flex justify-between items-center text-xs text-rose-300 font-bold">
+                <div class="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl space-y-1">
+                    <div class="flex justify-between items-center text-xs text-rose-700 dark:text-rose-300 font-bold">
                         <span>🔴 Money Borrowed (I Owe)</span>
-                        <span class="text-[10px] bg-rose-900/80 px-2 py-0.5 rounded-full">${borrowedDebts.length} active</span>
+                        <span class="text-[10px] bg-rose-100 dark:bg-rose-900/80 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full">${borrowedDebts.length} active</span>
                     </div>
-                    <p class="text-xl font-black text-rose-400 convertible-amount" data-kes="${totalBorrowedBalance}">${formatKes(totalBorrowedBalance)}</p>
-                    <p class="text-[10px] text-gray-400">Total liabilities to settle</p>
+                    <p class="text-xl font-black text-rose-600 dark:text-rose-400 convertible-amount" data-kes="${totalBorrowedBalance}">${formatKes(totalBorrowedBalance)}</p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Total liabilities to settle</p>
                 </div>
 
-                <div class="p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-xl space-y-1">
-                    <div class="flex justify-between items-center text-xs text-emerald-300 font-bold">
+                <div class="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl space-y-1">
+                    <div class="flex justify-between items-center text-xs text-emerald-700 dark:text-emerald-300 font-bold">
                         <span>🟢 Money Lent Out (Owed to Me)</span>
-                        <span class="text-[10px] bg-emerald-900/80 px-2 py-0.5 rounded-full">${lentDebts.length} active</span>
+                        <span class="text-[10px] bg-emerald-100 dark:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full">${lentDebts.length} active</span>
                     </div>
-                    <p class="text-xl font-black text-emerald-400 convertible-amount" data-kes="${totalLentBalance}">${formatKes(totalLentBalance)}</p>
-                    <p class="text-[10px] text-gray-400">Receivables owed to you</p>
+                    <p class="text-xl font-black text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${totalLentBalance}">${formatKes(totalLentBalance)}</p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Receivables owed to you</p>
                 </div>
 
-                <div class="p-3.5 ${dangerCount > 0 ? 'bg-amber-950/60 border border-amber-500/80 ring-1 ring-amber-500/50' : 'bg-slate-800/50 border border-slate-700/60'} rounded-xl space-y-1">
-                    <div class="flex justify-between items-center text-xs ${dangerCount > 0 ? 'text-amber-300' : 'text-gray-300'} font-bold">
+                <div class="p-3.5 ${dangerCount > 0 ? 'bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-500/80 ring-1 ring-amber-400 dark:ring-amber-500/50' : 'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60'} rounded-xl space-y-1">
+                    <div class="flex justify-between items-center text-xs ${dangerCount > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-700 dark:text-gray-300'} font-bold">
                         <span>🚨 Danger Zone Deadlines</span>
-                        <span class="text-[10px] ${dangerCount > 0 ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-700 text-gray-300'} px-2 py-0.5 rounded-full">${dangerCount} Urgent</span>
+                        <span class="text-[10px] ${dangerCount > 0 ? 'bg-amber-500 text-slate-950 font-black' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300'} px-2 py-0.5 rounded-full">${dangerCount} Urgent</span>
                     </div>
-                    <p class="text-xl font-black ${dangerCount > 0 ? 'text-amber-400' : 'text-gray-300'}">${dangerCount > 0 ? `${dangerCount} Need Action` : 'All Clear 👍'}</p>
-                    <p class="text-[10px] text-gray-400">Due in ≤ 3 days or overdue</p>
+                    <p class="text-xl font-black ${dangerCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'}">${dangerCount > 0 ? `${dangerCount} Need Action` : 'All Clear 👍'}</p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Due in ≤ 3 days or overdue</p>
                 </div>
             </div>
 
@@ -2160,59 +2160,59 @@ export function renderFinanceDashboard(data: any): string {
                 <button type="button" id="debt-tab-btn-all" onclick="switchDebtTab('all')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs bg-indigo-600 text-white">
                     All (${debts.length})
                 </button>
-                <button type="button" id="debt-tab-btn-borrowed" onclick="switchDebtTab('borrowed')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700">
+                <button type="button" id="debt-tab-btn-borrowed" onclick="switchDebtTab('borrowed')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700">
                     🔴 Borrowed Loans (${borrowedDebts.length})
                 </button>
-                <button type="button" id="debt-tab-btn-lent" onclick="switchDebtTab('lent')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700">
+                <button type="button" id="debt-tab-btn-lent" onclick="switchDebtTab('lent')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700">
                     🟢 Money Lent (${lentDebts.length})
                 </button>
-                <button type="button" id="debt-tab-btn-danger" onclick="switchDebtTab('danger')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700">
+                <button type="button" id="debt-tab-btn-danger" onclick="switchDebtTab('danger')" class="debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700">
                     🚨 Danger Zone (${dangerCount})
                 </button>
             </div>
 
             <!-- Collapsible Create Loan / Debt Form -->
-            <div id="new-debt-form-container" class="hidden bg-slate-950 p-5 rounded-2xl border border-rose-900/60 shadow-lg space-y-3">
-                <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <div id="new-debt-form-container" class="hidden bg-gray-50 dark:bg-gray-950 p-5 rounded-2xl border border-gray-200 dark:border-rose-900/60 shadow-md space-y-3">
+                <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <span>➕ Record New Loan or Debt</span>
                     </h3>
-                    <button type="button" onclick="document.getElementById('new-debt-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-200 text-sm">✕</button>
+                    <button type="button" onclick="document.getElementById('new-debt-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
                 <form action="/debts/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
                     <div>
-                        <label class="block text-gray-400 font-bold mb-1">Debt Direction / Type</label>
-                        <select name="debt_type" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-bold" required>
+                        <label class="block text-gray-600 dark:text-gray-400 font-bold mb-1">Debt Direction / Type</label>
+                        <select name="debt_type" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl font-bold" required>
                             <option value="I_OWE">🔴 I Borrowed (Loan I Owe - e.g. Hustler, Fuliza, Tala)</option>
                             <option value="OWED_TO_ME">🟢 I Lent Out (Money Owed to Me - Friend/Advance)</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-gray-400 font-bold mb-1">Lender / Borrower / Platform Name</label>
-                        <input type="text" name="person_name" placeholder="e.g. Hustler Fund, Fuliza, Tala, Brian Boda" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold" required>
+                        <label class="block text-gray-600 dark:text-gray-400 font-bold mb-1">Lender / Borrower / Platform Name</label>
+                        <input type="text" name="person_name" placeholder="e.g. Hustler Fund, Fuliza, Tala, Brian Boda" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl font-semibold" required>
                     </div>
                     <div>
-                        <label class="block text-gray-400 font-bold mb-1">Total Principal (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="total_amount" placeholder="5000" data-placeholder-base="5000" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-bold convertible-placeholder" required>
+                        <label class="block text-gray-600 dark:text-gray-400 font-bold mb-1">Total Principal (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="total_amount" placeholder="5000" data-placeholder-base="5000" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl font-bold convertible-placeholder" required>
                     </div>
                     <div>
-                        <label class="block text-gray-400 font-bold mb-1">Already Repaid Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="paid_amount" placeholder="0" data-placeholder-base="0" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold convertible-placeholder">
+                        <label class="block text-gray-600 dark:text-gray-400 font-bold mb-1">Already Repaid Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="paid_amount" placeholder="0" data-placeholder-base="0" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl font-semibold convertible-placeholder">
                     </div>
                     <div>
-                        <label class="block text-gray-400 font-bold mb-1">Due Date / Danger Zone Deadline</label>
-                        <input type="date" name="due_at" value="${today}" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold" required>
+                        <label class="block text-gray-600 dark:text-gray-400 font-bold mb-1">Due Date / Danger Zone Deadline</label>
+                        <input type="date" name="due_at" value="${today}" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl font-semibold" required>
                     </div>
                     <div>
-                        <label class="block text-gray-400 font-bold mb-1">Disbursement / Source Account (Optional)</label>
-                        <select name="account_id" class="w-full p-2.5 bg-gray-900 border border-gray-700 text-white rounded-xl font-semibold">
+                        <label class="block text-gray-600 dark:text-gray-400 font-bold mb-1">Disbursement / Source Account (Optional)</label>
+                        <select name="account_id" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl font-semibold">
                             <option value="">-- No Account Link --</option>
                             ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
                         </select>
                     </div>
                     <div class="sm:col-span-2 lg:col-span-2 flex items-center gap-3">
-                        <label class="flex items-center space-x-2 text-gray-300 font-medium cursor-pointer">
-                            <input type="checkbox" name="link_account" value="1" class="rounded border-gray-700 text-rose-600 focus:ring-rose-500">
+                        <label class="flex items-center space-x-2 text-gray-700 dark:text-gray-300 font-medium cursor-pointer">
+                            <input type="checkbox" name="link_account" value="1" class="rounded border-gray-300 dark:border-gray-700 text-rose-600 focus:ring-rose-500">
                             <span>Sync initial loan disbursement to account balance & financial ledger</span>
                         </label>
                     </div>
@@ -2236,41 +2236,41 @@ export function renderFinanceDashboard(data: any): string {
                     const percent = d.percent ?? (totalAmt > 0 ? Math.min(100, Math.round((paidAmt / totalAmt) * 100)) : 0);
 
                     return `
-                    <div class="debt-card-item ${isDanger ? 'border-2 border-rose-500 ring-2 ring-rose-500/30 shadow-lg shadow-rose-950/50' : 'border border-gray-800'} bg-slate-950 p-4 rounded-xl space-y-3 flex flex-col justify-between transition-all" data-debt-type="${d.debt_type}" data-is-danger="${isDanger ? 'true' : 'false'}">
+                    <div class="debt-card-item ${isDanger ? 'border-2 border-rose-500 ring-2 ring-rose-500/30 shadow-md' : 'border border-gray-200 dark:border-gray-800 shadow-2xs'} bg-gray-50 dark:bg-gray-950 p-4 rounded-xl space-y-3 flex flex-col justify-between transition-all" data-debt-type="${d.debt_type}" data-is-danger="${isDanger ? 'true' : 'false'}">
                         <div class="space-y-2.5">
                             <div class="flex justify-between items-start gap-2">
                                 <div>
                                     <div class="flex items-center gap-1.5 flex-wrap">
-                                        <span class="text-xs font-black ${isBorrowed ? 'text-rose-400' : 'text-emerald-400'}">
+                                        <span class="text-xs font-black ${isBorrowed ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
                                             ${isBorrowed ? '🔴 Borrowed' : '🟢 Lent Out'}
                                         </span>
                                         ${d.is_settled ? `
-                                            <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 font-extrabold px-2 py-0.2 rounded-full">✓ Settled</span>
+                                            <span class="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-extrabold px-2 py-0.2 rounded-full">✓ Settled</span>
                                         ` : `
-                                            <span class="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 font-extrabold px-2 py-0.2 rounded-full">Active</span>
+                                            <span class="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-extrabold px-2 py-0.2 rounded-full">Active</span>
                                         `}
                                     </div>
-                                    <h3 class="font-bold text-white text-base mt-0.5">${d.person_name || d.name || 'Unnamed Debt'}</h3>
+                                    <h3 class="font-bold text-gray-900 dark:text-white text-base mt-0.5">${d.person_name || d.name || 'Unnamed Debt'}</h3>
                                 </div>
                                 <div class="flex items-center space-x-1 shrink-0">
                                     <form action="/debts/toggle-status/${d.id}" method="POST" class="inline">
-                                        <button type="submit" title="Toggle Paid/Active" class="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white text-xs transition">
+                                        <button type="submit" title="Toggle Paid/Active" class="p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xs transition">
                                             ${d.is_settled ? '🔄 Reopen' : '✓ Mark Paid'}
                                         </button>
                                     </form>
                                     <form action="/debts/delete/${d.id}" method="POST" onsubmit="return confirm('Delete this debt record?');" class="inline">
-                                        <button type="submit" class="p-1 hover:bg-rose-950 rounded-lg text-rose-400 hover:text-rose-300 text-xs transition">🗑️</button>
+                                        <button type="submit" class="p-1 hover:bg-rose-100 dark:hover:bg-rose-950 rounded-lg text-rose-500 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 text-xs transition">🗑️</button>
                                     </form>
                                 </div>
                             </div>
 
                             <!-- Danger Zone Alert / Due Date Badge -->
                             ${danger ? `
-                            <div class="flex items-center justify-between p-2 rounded-lg ${isDanger ? 'bg-rose-950/80 border border-rose-800/80' : 'bg-gray-900/90 border border-gray-800'}">
+                            <div class="flex items-center justify-between p-2 rounded-lg ${isDanger ? 'bg-rose-100 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800/80' : 'bg-white dark:bg-gray-900/90 border border-gray-200 dark:border-gray-800'}">
                                 <span class="text-[11px] font-bold ${danger.badgeClass}">
                                     ${danger.label}
                                 </span>
-                                <span class="text-[10px] text-gray-400 font-mono">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono">
                                     ${danger.formattedDue ? `Due: ${danger.formattedDue}` : ''}
                                 </span>
                             </div>
@@ -2278,60 +2278,60 @@ export function renderFinanceDashboard(data: any): string {
 
                             <!-- Financial Numbers -->
                             <div class="grid grid-cols-2 gap-2 text-xs">
-                                <div class="p-2 bg-gray-900 rounded-lg">
-                                    <p class="text-[10px] text-gray-400">Total Principal</p>
-                                    <p class="font-bold text-white convertible-amount" data-kes="${totalAmt}">${formatKes(totalAmt)}</p>
+                                <div class="p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg">
+                                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Total Principal</p>
+                                    <p class="font-bold text-gray-900 dark:text-white convertible-amount" data-kes="${totalAmt}">${formatKes(totalAmt)}</p>
                                 </div>
-                                <div class="p-2 ${isBorrowed ? 'bg-rose-950/40' : 'bg-emerald-950/40'} rounded-lg">
-                                    <p class="text-[10px] ${isBorrowed ? 'text-rose-300' : 'text-emerald-300'} font-medium">Remaining Balance</p>
-                                    <p class="font-bold ${isBorrowed ? 'text-rose-400' : 'text-emerald-400'} convertible-amount" data-kes="${remainingAmt}">${formatKes(remainingAmt)}</p>
+                                <div class="p-2 ${isBorrowed ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40' : 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40'} rounded-lg">
+                                    <p class="text-[10px] ${isBorrowed ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'} font-medium">Remaining Balance</p>
+                                    <p class="font-bold ${isBorrowed ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'} convertible-amount" data-kes="${remainingAmt}">${formatKes(remainingAmt)}</p>
                                 </div>
                             </div>
 
                             <!-- Repayment Progress Bar -->
                             <div class="space-y-1">
-                                <div class="flex justify-between text-[11px] text-gray-400">
-                                    <span>Repaid: <strong class="text-white convertible-amount" data-kes="${paidAmt}">${formatKes(paidAmt)}</strong></span>
+                                <div class="flex justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                                    <span>Repaid: <strong class="text-gray-900 dark:text-white convertible-amount" data-kes="${paidAmt}">${formatKes(paidAmt)}</strong></span>
                                     <span>${percent}%</span>
                                 </div>
-                                <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                <div class="w-full bg-gray-200 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
                                     <div class="h-full rounded-full transition-all duration-300 ${isBorrowed ? 'bg-rose-500' : 'bg-emerald-500'}" style="width: ${percent}%;"></div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Repay / Settle Action Drawer -->
-                        <div class="space-y-2 pt-2 border-t border-gray-800/80">
+                        <div class="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-800/80">
                             ${!d.is_settled ? `
-                            <button type="button" onclick="toggleDebtForm('${d.id}')" class="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center space-x-1 active:scale-95">
+                            <button type="button" onclick="toggleDebtForm('${d.id}')" class="w-full bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-white font-bold py-2 rounded-xl text-xs transition border border-gray-200 dark:border-gray-700 shadow-2xs flex items-center justify-center space-x-1 active:scale-95">
                                 <span>${isBorrowed ? '💳 Record Repayment' : '📥 Record Collection'}</span>
                             </button>
                             ` : `
-                            <p class="text-center text-xs text-emerald-400 font-bold py-1">🎉 Fully Settled & Closed</p>
+                            <p class="text-center text-xs text-emerald-600 dark:text-emerald-400 font-bold py-1">🎉 Fully Settled & Closed</p>
                             `}
 
-                            <div id="debt-repay-${d.id}" class="hidden p-3 bg-gray-900 border border-gray-700 rounded-xl space-y-2.5">
+                            <div id="debt-repay-${d.id}" class="hidden p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl space-y-2.5">
                                 <form action="/debts/repay/${d.id}" method="POST" class="space-y-2">
                                     <div>
-                                        <label class="block text-[11px] font-bold text-gray-300 mb-0.5">Amount to ${isBorrowed ? 'Repay' : 'Collect'} (<span class="curr-symbol-label">Ksh</span>)</label>
-                                        <input type="number" step="any" inputmode="decimal" name="amount" value="${remainingAmt}" max="${remainingAmt}" placeholder="${remainingAmt}" data-placeholder-base="${remainingAmt}" class="w-full p-2 bg-slate-950 border border-gray-600 text-white rounded-lg text-xs font-bold convertible-placeholder" required>
+                                        <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">Amount to ${isBorrowed ? 'Repay' : 'Collect'} (<span class="curr-symbol-label">Ksh</span>)</label>
+                                        <input type="number" step="any" inputmode="decimal" name="amount" value="${remainingAmt}" max="${remainingAmt}" placeholder="${remainingAmt}" data-placeholder-base="${remainingAmt}" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg text-xs font-bold convertible-placeholder" required>
                                     </div>
                                     <div>
-                                        <label class="block text-[11px] font-bold text-gray-300 mb-0.5">${isBorrowed ? 'Payment Source Account' : 'Deposit Destination Account'}</label>
-                                        <select name="account_id" class="w-full p-2 bg-slate-950 border border-gray-600 text-white rounded-lg text-xs font-medium">
+                                        <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">${isBorrowed ? 'Payment Source Account' : 'Deposit Destination Account'}</label>
+                                        <select name="account_id" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg text-xs font-medium">
                                             <option value="">-- No Account Ledger Sync --</option>
                                             ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="block text-[11px] font-bold text-gray-300 mb-0.5">Date</label>
-                                        <input type="date" name="payment_date" value="${today}" class="w-full p-2 bg-slate-950 border border-gray-600 text-white rounded-lg text-xs font-medium" required>
+                                        <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">Date</label>
+                                        <input type="date" name="payment_date" value="${today}" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg text-xs font-medium" required>
                                     </div>
                                     <div class="flex gap-2 pt-1">
-                                        <button type="submit" class="flex-1 ${isBorrowed ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-bold py-1.5 rounded-lg text-xs transition active:scale-95">
+                                        <button type="submit" class="flex-1 ${isBorrowed ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-bold py-1.5 rounded-lg text-xs transition active:scale-95 shadow-2xs">
                                             Confirm ${isBorrowed ? 'Repayment' : 'Collection'}
                                         </button>
-                                        <button type="button" onclick="toggleDebtForm('${d.id}')" class="px-2.5 py-1.5 bg-gray-800 text-gray-300 font-semibold rounded-lg text-xs">
+                                        <button type="button" onclick="toggleDebtForm('${d.id}')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-semibold rounded-lg text-xs">
                                             Cancel
                                         </button>
                                     </div>
@@ -2340,10 +2340,10 @@ export function renderFinanceDashboard(data: any): string {
                         </div>
                     </div>`;
                 }).join('') : `
-                <div class="md:col-span-3 p-8 text-center bg-slate-950 rounded-xl border border-dashed border-gray-800 space-y-2">
+                <div class="md:col-span-3 p-8 text-center bg-gray-50 dark:bg-gray-950 rounded-xl border border-dashed border-gray-200 dark:border-gray-800 space-y-2">
                     <p class="text-3xl">💳</p>
-                    <h4 class="font-bold text-gray-200">No Loans or Debts Recorded</h4>
-                    <p class="text-xs text-gray-400">Track money you borrowed (Hustler Fund, Fuliza, Tala) or money you lent out with automatic danger zone countdowns!</p>
+                    <h4 class="font-bold text-gray-700 dark:text-gray-200">No Loans or Debts Recorded</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Track money you borrowed (Hustler Fund, Fuliza, Tala) or money you lent out with automatic danger zone countdowns!</p>
                 </div>`}
             </div>
         </div>
