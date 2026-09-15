@@ -154,4 +154,16 @@ console.assert(stint2.hours === 2.8, `Stint 2 hours should be ~2.8, got ${stint2
 console.assert(Math.round(stint2.hourlyYield) === 250, `Stint 2 yield should be ~250, got ${stint2.hourlyYield}`);
 console.log(`✅ Stint Yields: 11am-2pm (567 KES)=${stint1.displayYield}, 2:13pm-5pm (700 KES)=${stint2.displayYield}`);
 
+// Test 14: Master Vault Goal Sub-Splits (Disciplined Single Account)
+import { allocateGoalSubSplits } from './math';
+const goalSubSplits = allocateGoalSubSplits(1500, [
+  { id: 'g1', title: '55" Smart TV', split_percentage: 40 },
+  { id: 'g2', title: 'Gas Cooker', split_percentage: 30 },
+  { id: 'g3', title: 'Living Room Sofa', split_percentage: 30 },
+]);
+console.assert(goalSubSplits[0].allocated_amount === 600, `TV allocation should be 600, got ${goalSubSplits[0].allocated_amount}`);
+console.assert(goalSubSplits[1].allocated_amount === 450, `Cooker allocation should be 450, got ${goalSubSplits[1].allocated_amount}`);
+console.assert(goalSubSplits[2].allocated_amount === 450, `Sofa allocation should be 450, got ${goalSubSplits[2].allocated_amount}`);
+console.log(`✅ Goal Sub-Splits (1.5k into 1 Lock Vault): TV=${goalSubSplits[0].display_amount}, Cooker=${goalSubSplits[1].display_amount}, Sofa=${goalSubSplits[2].display_amount}`);
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');

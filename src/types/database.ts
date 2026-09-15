@@ -84,6 +84,8 @@ export interface Database {
           target_amount: number;
           current_amount: number;
           target_date: string | null;
+          split_percentage: number | null;
+          account_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -94,6 +96,8 @@ export interface Database {
           target_amount: number;
           current_amount?: number;
           target_date?: string | null;
+          split_percentage?: number | null;
+          account_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -104,6 +108,8 @@ export interface Database {
           target_amount?: number;
           current_amount?: number;
           target_date?: string | null;
+          split_percentage?: number | null;
+          account_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };

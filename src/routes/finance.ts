@@ -4,6 +4,7 @@ import {
   toDecimal,
   calculateMonthlyYield,
   allocateWaterfallSplit,
+  allocateGoalSubSplits,
   calculateBudgetPace,
   formatMoney,
   calculateEmergencyRunway,
@@ -297,14 +298,16 @@ financeRoutes.post('/targets/update', async (c) => {
 
 
 // ------------------------------------------------------------------------------
-// SAVINGS GOALS
+// SAVINGS GOALS (LINKED TO SINGLE MASTER VAULT WITH SUB-SPLIT %)
 // ------------------------------------------------------------------------------
 financeRoutes.post('/goals/create', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const title = String(body['title'] || '').trim();
   const rawTarget = parseFloat(String(body['target_amount'] || '0.0')) || 0.0;
+  const rawSplit = parseFloat(String(body['split_percentage'] || '0.0')) || 0.0;
   const targetDate = body['target_date'] ? String(body['target_date']) : null;
+  const accountId = body['account_id'] ? String(body['account_id']) : null;
   const addToSplit = body['add_to_split'] === '1' || body['add_to_split'] === 'on';
 
   const { data: goal, error } = await supabase.from('goals').insert({
@@ -313,6 +316,8 @@ financeRoutes.post('/goals/create', async (c) => {
     target_amount: rawTarget,
     current_amount: 0.00,
     target_date: targetDate,
+    split_percentage: rawSplit > 0 ? rawSplit : null,
+    account_id: accountId || null,
   }).select().single();
 
   if (error) {
@@ -333,6 +338,147 @@ financeRoutes.post('/goals/create', async (c) => {
   }
 
   return c.redirect('/?toast=Goal+created+successfully', 303);
+});
+
+financeRoutes.post('/goals/link-vault', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const vaultAccountId = String(body['vault_account_id'] || '').trim();
+
+  if (!vaultAccountId) {
+    return c.redirect('/?toast=Please+select+a+valid+holding+account', 303);
+  }
+
+  // 1. Get the account info
+  const { data: acc } = await supabase.from('accounts').select('*').eq('id', vaultAccountId).single();
+  const accName = acc ? acc.name : 'Master Vault';
+
+  // 2. Update allocation_rules where target_type is 'GOAL' or bucket contains 'Goal'
+  let ruleQuery = supabase.from('allocation_rules').update({ target_id: vaultAccountId }).eq('target_type', 'GOAL');
+  if (userId) ruleQuery = ruleQuery.eq('user_id', userId);
+  await ruleQuery;
+
+  // 3. Update all active goals with this master vault account_id
+  let goalQuery = supabase.from('goals').update({ account_id: vaultAccountId });
+  if (userId) {
+    goalQuery = goalQuery.eq('user_id', userId);
+  } else {
+    goalQuery = goalQuery.neq('id', '00000000-0000-0000-0000-000000000000');
+  }
+  await goalQuery;
+
+  return c.redirect(`/?toast=${encodeURIComponent(`Master Goal Vault linked to ${accName}!`)}`, 303);
+});
+
+financeRoutes.post('/goals/splits/update', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+
+  // Parse split inputs e.g. split_goal-1 = 40, split_goal-2 = 30
+  const updates: Array<{ id: string; pct: number }> = [];
+  for (const [key, val] of Object.entries(body)) {
+    if (key.startsWith('split_')) {
+      const goalId = key.replace('split_', '');
+      const pct = parseFloat(String(val || '0.0')) || 0.0;
+      updates.push({ id: goalId, pct: Math.max(0, Math.min(100, pct)) });
+    }
+  }
+
+  for (const u of updates) {
+    await supabase.from('goals').update({ split_percentage: u.pct }).eq('id', u.id);
+  }
+
+  return c.redirect('/?toast=Goal+sub-split+shares+saved+successfully!', 303);
+});
+
+financeRoutes.post('/goals/deposit-vault', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const vaultAccountId = String(body['vault_account_id'] || '').trim();
+  const sourceAccountId = String(body['source_account_id'] || '').trim();
+
+  if (rawAmt <= 0) {
+    return c.redirect('/?toast=Please+enter+a+valid+deposit+amount', 303);
+  }
+
+  // Get user accounts & active goals
+  const [accRes, goalRes] = await Promise.all([
+    userId ? supabase.from('accounts').select('*').eq('user_id', userId) : supabase.from('accounts').select('*'),
+    userId ? supabase.from('goals').select('*').eq('user_id', userId) : supabase.from('goals').select('*'),
+  ]);
+
+  const userAccounts = accRes.data || [];
+  const userGoals = goalRes.data || [];
+
+  if (userGoals.length === 0) {
+    return c.redirect('/?toast=No+active+goals+to+sub-allocate', 303);
+  }
+
+  // Find vault account
+  let vaultAcc = userAccounts.find(a => a.id === vaultAccountId);
+  if (!vaultAcc && userGoals.some(g => g.account_id)) {
+    const linkedId = userGoals.find(g => g.account_id)?.account_id;
+    vaultAcc = userAccounts.find(a => a.id === linkedId);
+  }
+  if (!vaultAcc) {
+    vaultAcc = userAccounts.find(a =>
+      a.account_type === 'SAVINGS' ||
+      a.name.toLowerCase().includes('lock') ||
+      a.name.toLowerCase().includes('sacco') ||
+      a.name.toLowerCase().includes('save')
+    ) || userAccounts[0];
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // If source account specified, deduct from source wallet
+  if (sourceAccountId && sourceAccountId !== vaultAcc?.id) {
+    const srcAcc = userAccounts.find(a => a.id === sourceAccountId);
+    if (srcAcc) {
+      const newSrcBal = toDecimal(srcAcc.balance).minus(rawAmt).toNumber();
+      await supabase.from('accounts').update({ balance: newSrcBal }).eq('id', sourceAccountId);
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: sourceAccountId,
+        transaction_type: 'EXPENSE',
+        category: 'Savings & Goals Funding',
+        amount: rawAmt,
+        description: `Transfer to ${vaultAcc ? vaultAcc.name : 'Goals Vault'} for Goal Sub-Splits`,
+        date: today,
+      });
+    }
+  }
+
+  // Credit Master Vault Account
+  if (vaultAcc) {
+    const newBal = toDecimal(vaultAcc.balance).plus(rawAmt).toNumber();
+    await supabase.from('accounts').update({ balance: newBal }).eq('id', vaultAcc.id);
+    await supabase.from('transactions').insert({
+      ...(userId ? { user_id: userId } : {}),
+      account_id: vaultAcc.id,
+      transaction_type: 'INCOME',
+      category: 'Goal Vault Deposit',
+      amount: rawAmt,
+      description: `Master Vault Deposit: Sub-split across ${userGoals.length} goals`,
+      date: today,
+    });
+  }
+
+  // Sub-allocate exact zero-cent portions across goals
+  const subResults = allocateGoalSubSplits(rawAmt, userGoals);
+  for (const sub of subResults) {
+    if (sub.allocated_amount > 0) {
+      const g = userGoals.find(item => item.id === sub.goal_id);
+      if (g) {
+        const newGoalAmt = toDecimal(g.current_amount).plus(sub.allocated_amount).toNumber();
+        await supabase.from('goals').update({ current_amount: newGoalAmt }).eq('id', sub.goal_id);
+      }
+    }
+  }
+
+  const vaultLabel = vaultAcc ? ` (${vaultAcc.name})` : '';
+  return c.redirect(`/?toast=${encodeURIComponent(`Ksh ${rawAmt.toLocaleString()} deposited into Vault${vaultLabel} & sub-allocated to ${userGoals.length} goals!`)}`, 303);
 });
 
 financeRoutes.post('/goals/fund/:id', async (c) => {
@@ -767,13 +913,51 @@ financeRoutes.post('/split/distribute', async (c) => {
         });
       }
     } else if (res.target_type === 'GOAL') {
-      let targetGoal = userGoals.find(g => g.id === res.target_id);
-      if (!targetGoal && userGoals.length > 0) {
-        targetGoal = userGoals[0]; // distribute to primary goal
+      // 1. Find the linked Master Holding Vault account for goals
+      let vaultAcc = userAccounts.find(a => a.id === res.target_id);
+      if (!vaultAcc) {
+        const goalWithAcc = userGoals.find(g => g.account_id);
+        if (goalWithAcc) {
+          vaultAcc = userAccounts.find(a => a.id === goalWithAcc.account_id);
+        }
       }
-      if (targetGoal) {
-        const newAmt = toDecimal(targetGoal.current_amount).plus(splitAmt).toNumber();
-        await supabase.from('goals').update({ current_amount: newAmt }).eq('id', targetGoal.id);
+      if (!vaultAcc) {
+        vaultAcc = userAccounts.find(a =>
+          a.account_type === 'SAVINGS' ||
+          a.name.toLowerCase().includes('lock') ||
+          a.name.toLowerCase().includes('sacco') ||
+          a.name.toLowerCase().includes('vault') ||
+          a.name.toLowerCase().includes('save')
+        ) || userAccounts.find(a => a.account_type === 'MMF' || a.account_type === 'BANK');
+      }
+
+      // 2. Deposit full split bucket amount into the single Master Holding Vault account
+      if (vaultAcc) {
+        const newBal = toDecimal(vaultAcc.balance).plus(splitAmt).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', vaultAcc.id);
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: vaultAcc.id,
+          transaction_type: 'INCOME',
+          category: 'Savings & Goals Vault',
+          amount: splitAmt,
+          description: `Auto-Split Goal Vault Deposit: Ksh ${splitAmt.toLocaleString()} (${res.percentage}% into ${vaultAcc.name})`,
+          date: today,
+        });
+      }
+
+      // 3. Sub-allocate exact zero-cent portions across active goals based on sub-split %
+      if (userGoals.length > 0) {
+        const subAllocations = allocateGoalSubSplits(splitAmt, userGoals);
+        for (const sub of subAllocations) {
+          if (sub.allocated_amount > 0) {
+            const currentGoal = userGoals.find(g => g.id === sub.goal_id);
+            if (currentGoal) {
+              const newGoalAmt = toDecimal(currentGoal.current_amount).plus(sub.allocated_amount).toNumber();
+              await supabase.from('goals').update({ current_amount: newGoalAmt }).eq('id', sub.goal_id);
+            }
+          }
+        }
       }
     } else if (res.target_type === 'CASH') {
       // Find cash or mobile wallet to record living cash transaction

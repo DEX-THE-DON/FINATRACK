@@ -126,6 +126,26 @@ export function renderFinanceDashboard(data: any): string {
   const totalGoalsSaved = (goals || []).reduce((sum: number, g: any) => sum + Number(g.current_amount || 0), 0);
   const overallGoalsPercent = totalGoalsTarget > 0 ? Math.min(100, Math.round((totalGoalsSaved / totalGoalsTarget) * 100)) : 0;
 
+  // Master Holding Vault Account for Savings Goals (Discipline & Sub-Splits)
+  const goalAllocationRule = (allocation_rules || []).find((r: any) => r.target_type === 'GOAL' || r.bucket_name?.toLowerCase().includes('goal'));
+  let masterVaultAccount = (accounts || []).find((a: any) => a.id === goalAllocationRule?.target_id);
+  if (!masterVaultAccount && (goals || []).some((g: any) => g.account_id)) {
+    const linkedId = (goals || []).find((g: any) => g.account_id)?.account_id;
+    masterVaultAccount = (accounts || []).find((a: any) => a.id === linkedId);
+  }
+  if (!masterVaultAccount) {
+    masterVaultAccount = (accounts || []).find((a: any) =>
+      a.account_type === 'SAVINGS' ||
+      a.name.toLowerCase().includes('lock') ||
+      a.name.toLowerCase().includes('sacco') ||
+      a.name.toLowerCase().includes('save')
+    ) || (accounts || []).find((a: any) => a.account_type === 'MMF') || accounts[0];
+  }
+
+  const masterVaultBalance = masterVaultAccount ? Number(masterVaultAccount.balance || 0) : 0;
+  const vaultReconciled = masterVaultBalance >= totalGoalsSaved;
+  const vaultBuffer = masterVaultBalance - totalGoalsSaved;
+
   const borrowedDebts = (debts || []).filter((d: any) => d.debt_type === 'I_OWE');
   const lentDebts = (debts || []).filter((d: any) => d.debt_type !== 'I_OWE');
   const totalBorrowedBalance = borrowedDebts.reduce((sum: number, d: any) => sum + (Number(d.remaining) || (Number(d.total_amount || 0) - Number(d.paid_amount || 0))), 0);
@@ -345,6 +365,85 @@ export function renderFinanceDashboard(data: any): string {
                 if (fundDiv) fundDiv.classList.add('hidden');
                 if (withdrawDiv) withdrawDiv.classList.toggle('hidden');
             }
+        }
+
+        function recalcGoalSubSplitsTotal() {
+            let total = 0;
+            document.querySelectorAll('.goal-split-input').forEach(inp => {
+                total += parseFloat(inp.value || '0') || 0;
+            });
+            total = Math.round(total * 10) / 10;
+            const badge = document.getElementById('goal-splits-total-badge');
+            const totalText = document.getElementById('goal-splits-total-val');
+            if (totalText) totalText.textContent = total + '%';
+            if (badge) {
+                if (Math.abs(total - 100) < 0.1) {
+                    badge.className = 'px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+                    badge.textContent = '✅ Exactly 100%';
+                } else {
+                    badge.className = 'px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+                    badge.textContent = total < 100 ? ('⚠️ ' + total + '% of 100% (' + (100 - total).toFixed(1) + '% remaining)') : ('⚠️ ' + total + '% (Exceeds 100%)');
+                }
+            }
+        }
+
+        function distributeGoalSplitsEvenly() {
+            const inputs = Array.from(document.querySelectorAll('.goal-split-input'));
+            if (inputs.length === 0) return;
+            const count = inputs.length;
+            const basePct = Math.floor((100 / count) * 10) / 10;
+            let sum = 0;
+            inputs.forEach((inp, idx) => {
+                if (idx === count - 1) {
+                    inp.value = (100 - sum).toFixed(1);
+                } else {
+                    inp.value = basePct.toFixed(1);
+                    sum += basePct;
+                }
+            });
+            recalcGoalSubSplitsTotal();
+        }
+
+        function distributeGoalSplitsProportional() {
+            const inputs = Array.from(document.querySelectorAll('.goal-split-input'));
+            if (inputs.length === 0) return;
+            const remainings = inputs.map(inp => Math.max(0, parseFloat(inp.getAttribute('data-remaining') || '0') || 0));
+            const totalRemaining = remainings.reduce((a, b) => a + b, 0);
+            if (totalRemaining <= 0) {
+                distributeGoalSplitsEvenly();
+                return;
+            }
+            let sum = 0;
+            inputs.forEach((inp, idx) => {
+                if (idx === inputs.length - 1) {
+                    inp.value = Math.max(0, 100 - sum).toFixed(1);
+                } else {
+                    const pct = Math.round(((remainings[idx] / totalRemaining) * 100) * 10) / 10;
+                    inp.value = pct.toFixed(1);
+                    sum += pct;
+                }
+            });
+            recalcGoalSubSplitsTotal();
+        }
+
+        function updateVaultDepositPreview() {
+            const amt = parseFloat(document.getElementById('vault-deposit-amt-input')?.value || '0') || 0;
+            const previewContainer = document.getElementById('vault-deposit-live-preview');
+            if (!previewContainer) return;
+            if (amt <= 0) {
+                previewContainer.classList.add('hidden');
+                return;
+            }
+            previewContainer.classList.remove('hidden');
+            const items = Array.from(document.querySelectorAll('.vault-deposit-item'));
+            items.forEach(item => {
+                const pct = parseFloat(item.getAttribute('data-split-pct') || '0') || 0;
+                const goalAmt = (amt * (pct / 100));
+                const kesSpan = item.querySelector('.vault-deposit-item-amt');
+                if (kesSpan) {
+                    kesSpan.textContent = 'Ksh ' + goalAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+            });
         }
 
         function updateSaccoProjection() {
@@ -1530,9 +1629,9 @@ export function renderFinanceDashboard(data: any): string {
 
         <!-- 🎯 Savings Goals & Asset Targets Card -->
         <div id="goals-card" class="bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 space-y-5">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl shadow-xs">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl shadow-xs shrink-0">
                         🎯
                     </div>
                     <div>
@@ -1540,24 +1639,239 @@ export function renderFinanceDashboard(data: any): string {
                             <span>Savings Goals & Purchase Targets</span>
                             <span class="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">${goals.length} Goals Active</span>
                         </h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Track your progress towards planned assets (Smart TV, Gas Cooker, Living Room Seats) and milestone purchases.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Manage all goals inside one disciplined Master Holding Vault with automated sub-split allocation shares.</p>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <div class="text-right hidden sm:block">
+                <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                    <div class="text-right hidden sm:block mr-2">
                         <p class="text-[10px] font-bold text-gray-400 uppercase">Total Saved</p>
                         <p class="text-sm font-black text-indigo-600 dark:text-indigo-400 convertible-amount" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)} <span class="text-xs font-semibold text-gray-400">/ <span class="convertible-amount" data-kes="${totalGoalsTarget}">${formatKes(totalGoalsTarget)}</span></span></p>
                     </div>
-                    <form action="/goals/reset-all" method="POST" onsubmit="return confirm('Reset all goal balances to Ksh 0.00?');" class="inline">
-                        <button type="submit" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-gray-700 dark:text-gray-300 hover:text-amber-700 dark:hover:text-amber-300 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95 border border-gray-200 dark:border-gray-700">
-                            <span>🔄 Reset to 0</span>
-                        </button>
-                    </form>
-                    <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                    <button type="button" onclick="document.getElementById('vault-deposit-container')?.classList.toggle('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                        <span>⚡ Vault Deposit & Split</span>
+                    </button>
+                    <button type="button" onclick="document.getElementById('goal-splits-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                        <span>⚙️ Goal Splits %</span>
+                    </button>
+                    <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
                         <span>➕ New Goal</span>
                     </button>
+                    <form action="/goals/reset-all" method="POST" onsubmit="return confirm('Reset all goal balances to Ksh 0.00?');" class="inline">
+                        <button type="submit" title="Reset all goal balances" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-gray-600 dark:text-gray-400 hover:text-amber-700 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95 border border-gray-200 dark:border-gray-700">
+                            <span>🔄</span>
+                        </button>
+                    </form>
                 </div>
+            </div>
+
+            <!-- 🔒 Master Holding Vault & Financial Discipline Banner -->
+            <div class="bg-gradient-to-r from-indigo-900/90 via-purple-900/80 to-slate-900 text-white p-4 rounded-2xl border border-indigo-700/60 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-11 h-11 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                        🔒
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-indigo-300">Master Holding Vault</span>
+                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${vaultReconciled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">
+                                ${vaultReconciled ? '✅ Fully Backed in Vault' : '⚠️ Vault Underfunded'}
+                            </span>
+                        </div>
+                        <h3 class="text-base font-black text-white">${masterVaultAccount ? masterVaultAccount.name : 'Lock Savings / Sacco Vault'}</h3>
+                        <p class="text-xs text-indigo-200">
+                            Physical Balance: <strong class="text-emerald-300 font-black convertible-amount" data-kes="${masterVaultBalance}">${formatKes(masterVaultBalance)}</strong>
+                            &bull; Allocated across ${goals.length} Goals: <strong class="text-indigo-200 font-bold convertible-amount" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)}</strong>
+                            ${vaultBuffer > 0 ? `&bull; Buffer: <strong class="text-emerald-300 convertible-amount" data-kes="${vaultBuffer}">+${formatKes(vaultBuffer)}</strong>` : ''}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 self-end md:self-center">
+                    <button type="button" onclick="document.getElementById('link-vault-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-indigo-800/80 hover:bg-indigo-700 border border-indigo-600/60 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                        <span>🔗 Change Vault Account</span>
+                    </button>
+                    <button type="button" onclick="document.getElementById('vault-deposit-container')?.classList.toggle('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 text-xs font-black rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                        <span>⚡ Deposit Funds</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Drawer 1: Link Master Holding Vault Account -->
+            <div id="link-vault-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-md space-y-3">
+                <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>🔒 Link Master Holding Vault Account</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('link-vault-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Choose the single physical or digital account (e.g. <em>Lock Savings, Sacco, or MMF</em>) where your total savings goals deposits will be physically parked. All goal targets are subdivided inside this account for discipline.</p>
+                <form action="/goals/link-vault" method="POST" class="flex flex-col sm:flex-row gap-3 items-end">
+                    <div class="flex-1 w-full">
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Select Vault Account</label>
+                        <select name="vault_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
+                            ${accounts.map((a: any) => `<option value="${a.id}" ${masterVaultAccount?.id === a.id ? 'selected' : ''}>${a.name} (${a.account_type}) - Balance: ${formatKes(a.balance)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition shadow-xs active:scale-95">
+                        Set Master Vault
+                    </button>
+                </form>
+            </div>
+
+            <!-- Drawer 2: ⚙️ Manage Goal Sub-Splits % -->
+            <div id="goal-splits-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-purple-200 dark:border-purple-900 shadow-md space-y-4">
+                <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>⚙️ Configure Goal Sub-Splits % Share</span>
+                        </h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Specify what percentage share of incoming Vault deposits goes to each active goal (e.g. 40% Smart TV, 30% Gas Cooker, 30% Sofa).</p>
+                    </div>
+                    <button type="button" onclick="document.getElementById('goal-splits-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-purple-50 dark:bg-purple-950/40 p-3 rounded-xl border border-purple-100 dark:border-purple-900/40">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Total Split Sum:</span>
+                        <span id="goal-splits-total-badge" class="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            ✅ 100% Total
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="distributeGoalSplitsEvenly()" class="px-2.5 py-1 bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-bold rounded-lg transition active:scale-95 shadow-2xs">
+                            ⚖️ Distribute Evenly
+                        </button>
+                        <button type="button" onclick="distributeGoalSplitsProportional()" class="px-2.5 py-1 bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-bold rounded-lg transition active:scale-95 shadow-2xs">
+                            📊 Proportional to Remaining
+                        </button>
+                    </div>
+                </div>
+
+                <form action="/goals/splits/update" method="POST" class="space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        ${goals.map((g: any, idx: number) => {
+                            const target = Number(g.target_amount) || 0;
+                            const current = Number(g.current_amount) || 0;
+                            const remaining = Math.max(0, target - current);
+                            const defaultPct = g.split_percentage !== null && g.split_percentage !== undefined ? Number(g.split_percentage) : (Math.floor((100 / Math.max(1, goals.length)) * 10) / 10);
+                            const icon = getGoalIcon(g.title);
+
+                            return `
+                            <div class="p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-lg">${icon}</span>
+                                    <div class="flex-1 truncate">
+                                        <h4 class="text-xs font-bold text-gray-900 dark:text-white truncate">${g.title}</h4>
+                                        <p class="text-[10px] text-gray-400 font-semibold">Remaining: ${formatKes(remaining)}</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Sub-Split Share (%)</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" min="0" max="100" name="split_${g.id}" value="${defaultPct}" data-remaining="${remaining}" oninput="recalcGoalSubSplitsTotal()" class="goal-split-input w-full p-2 pr-7 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded-lg text-xs font-bold" required>
+                                        <span class="absolute right-2.5 top-2 text-xs font-bold text-gray-400">%</span>
+                                    </div>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+
+                    <div class="flex justify-end pt-2">
+                        <button type="submit" class="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition shadow-xs active:scale-95">
+                            Save Goal Sub-Splits
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Drawer 3: ⚡ Direct Vault Deposit & Sub-Split -->
+            <div id="vault-deposit-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900 shadow-md space-y-4">
+                <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>⚡ Direct Master Vault Deposit & Sub-Split</span>
+                        </h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Deposit a lump sum into your Master Holding Vault (${masterVaultAccount ? masterVaultAccount.name : 'Lock Savings'}) and instantly sub-allocate it across your goals.</p>
+                    </div>
+                    <button type="button" onclick="document.getElementById('vault-deposit-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
+                </div>
+
+                <form action="/goals/deposit-vault" method="POST" class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Deposit Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                            <input type="number" id="vault-deposit-amt-input" step="any" inputmode="decimal" name="amount" placeholder="1500" data-placeholder-base="1500" oninput="updateVaultDepositPreview()" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Source Wallet (Deduct From)</label>
+                            <select name="source_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-medium">
+                                <option value="">-- No Deduction (Direct Cash / External) --</option>
+                                ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Master Holding Vault</label>
+                            <select name="vault_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold">
+                                ${accounts.map((a: any) => `<option value="${a.id}" ${masterVaultAccount?.id === a.id ? 'selected' : ''}>${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Live Goal Sub-Split Breakdown Preview -->
+                    <div id="vault-deposit-live-preview" class="hidden bg-emerald-50/70 dark:bg-emerald-950/40 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 space-y-2">
+                        <span class="text-xs font-black text-emerald-800 dark:text-emerald-300">Live Sub-Allocation Preview:</span>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            ${goals.map((g: any) => {
+                                const defaultPct = g.split_percentage !== null && g.split_percentage !== undefined ? Number(g.split_percentage) : (Math.floor((100 / Math.max(1, goals.length)) * 10) / 10);
+                                return `
+                                <div class="vault-deposit-item p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-100 dark:border-emerald-900/40 flex justify-between items-center text-xs" data-split-pct="${defaultPct}">
+                                    <span class="font-bold text-gray-800 dark:text-gray-200 truncate pr-2">${g.title} (${defaultPct}%)</span>
+                                    <span class="vault-deposit-item-amt font-black text-emerald-600 dark:text-emerald-400 shrink-0">Ksh 0.00</span>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end pt-1">
+                        <button type="submit" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs transition shadow-xs active:scale-95">
+                            Confirm Vault Deposit & Sub-Split
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Drawer 4: Create New Goal Collapsible Form -->
+            <div id="new-goal-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-md space-y-3">
+                <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>➕ Set a New Savings Target</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
+                </div>
+                <form action="/goals/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div class="sm:col-span-2 lg:col-span-1">
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Goal Title</label>
+                        <input type="text" name="title" placeholder="e.g. 55&quot; 4K Smart TV, Sofa Seat, Gas Cooker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Amount (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="target_amount" placeholder="45000" data-placeholder-base="45000" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Sub-Split Share % (Optional)</label>
+                        <input type="number" step="0.1" name="split_percentage" placeholder="30" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Deadline (Optional)</label>
+                        <input type="date" name="target_date" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold">
+                    </div>
+                    <div class="flex flex-col justify-end space-y-2">
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs active:scale-95">
+                            Create Goal Target
+                        </button>
+                    </div>
+                </form>
             </div>
 
             <!-- Total Goals Progress Bar -->
@@ -1574,39 +1888,6 @@ export function renderFinanceDashboard(data: any): string {
                 </div>
             </div>
 
-            <!-- Create New Goal Collapsible Form -->
-            <div id="new-goal-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-md space-y-3">
-                <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
-                    <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <span>➕ Set a New Savings Target</span>
-                    </h3>
-                    <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
-                </div>
-                <form action="/goals/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div class="sm:col-span-2 lg:col-span-1">
-                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Goal Title</label>
-                        <input type="text" name="title" placeholder="e.g. 55&quot; 4K Smart TV, Sofa Seat, Gas Cooker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="target_amount" placeholder="45000" data-placeholder-base="45000" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Deadline (Optional)</label>
-                        <input type="date" name="target_date" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold">
-                    </div>
-                    <div class="flex flex-col justify-end space-y-2">
-                        <label class="flex items-center space-x-2 text-xs text-gray-600 dark:text-gray-300">
-                            <input type="checkbox" name="add_to_split" value="1" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                            <span>Add 10% Auto-Split Rule</span>
-                        </label>
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl text-xs transition shadow-xs active:scale-95">
-                            Create Goal Target
-                        </button>
-                    </div>
-                </form>
-            </div>
-
             <!-- Goals Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 ${goals.length > 0 ? goals.map((g: any) => {
@@ -1615,6 +1896,8 @@ export function renderFinanceDashboard(data: any): string {
                     const percent = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
                     const remaining = Math.max(0, target - current);
                     const icon = getGoalIcon(g.title);
+                    const splitPct = g.split_percentage !== null && g.split_percentage !== undefined ? Number(g.split_percentage) : (Math.floor((100 / Math.max(1, goals.length)) * 10) / 10);
+                    const perThousand = Math.round(splitPct * 10);
 
                     let daysLeft = 30;
                     if (g.target_date) {
@@ -1636,7 +1919,10 @@ export function renderFinanceDashboard(data: any): string {
                                     </div>
                                     <div>
                                         <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug">${g.title}</h3>
-                                        ${g.target_date ? `<span class="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">📅 ${g.target_date}</span>` : '<span class="text-[10px] text-gray-400">Open Goal</span>'}
+                                        <div class="flex items-center gap-1.5 mt-0.5">
+                                            ${g.target_date ? `<span class="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">📅 ${g.target_date}</span>` : '<span class="text-[10px] text-gray-400">Open Goal</span>'}
+                                            <span class="text-[10px] font-black text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800/40">⚡ ${splitPct}% Split</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-1">
@@ -1664,15 +1950,16 @@ export function renderFinanceDashboard(data: any): string {
                                 </div>
                             </div>
 
-                            <!-- Sinking Fund Target Pace Badge -->
-                            <div class="bg-indigo-50/60 dark:bg-indigo-950/40 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900/40 text-[11px] flex justify-between items-center">
-                                <div>
-                                    <span class="text-gray-500 dark:text-gray-400">Save pace:</span>
-                                    <strong class="text-indigo-600 dark:text-indigo-400 font-bold convertible-amount" data-kes="${dailyNeeded}">${formatKes(dailyNeeded)}</strong><span class="text-gray-400">/d (<span class="convertible-amount" data-kes="${weeklyNeeded}">${formatKes(weeklyNeeded)}</span>/wk)</span>
+                            <!-- Sub-Split Share & Sinking Fund Target Pace Badge -->
+                            <div class="bg-indigo-50/60 dark:bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 text-[11px] space-y-1">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-500 dark:text-gray-400 font-semibold">Vault Share:</span>
+                                    <span class="font-extrabold text-purple-700 dark:text-purple-300">${splitPct}% (Ksh ${perThousand} / 1k)</span>
                                 </div>
-                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${percent >= 100 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'}">
-                                    ${percent >= 100 ? '🎉 Achieved!' : g.target_date ? `⏳ ${daysLeft}d left` : '🎯 Target Pace'}
-                                </span>
+                                <div class="flex justify-between items-center pt-0.5 border-t border-indigo-100/60 dark:border-indigo-900/40">
+                                    <span class="text-gray-500 dark:text-gray-400 font-semibold">Save pace:</span>
+                                    <span class="text-indigo-600 dark:text-indigo-400 font-bold"><span class="convertible-amount" data-kes="${dailyNeeded}">${formatKes(dailyNeeded)}</span>/d</span>
+                                </div>
                             </div>
                         </div>
 

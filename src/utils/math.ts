@@ -104,6 +104,88 @@ export function allocateWaterfallSplit(totalAmount: number | string | Decimal, r
 }
 
 // ------------------------------------------------------------------------------
+// MASTER VAULT GOAL SUB-SPLITS ALLOCATOR (DISCIPLINED SINGLE ACCOUNT)
+// ------------------------------------------------------------------------------
+export interface GoalSubSplitItem {
+  id: string;
+  title: string;
+  split_percentage?: number | null;
+  target_amount?: number | null;
+  current_amount?: number | null;
+}
+
+export interface GoalSubSplitResult {
+  goal_id: string;
+  title: string;
+  split_percentage: number;
+  allocated_amount: number;
+  display_amount: string;
+}
+
+export function allocateGoalSubSplits(
+  totalDeposit: number | string | Decimal,
+  goals: GoalSubSplitItem[]
+): GoalSubSplitResult[] {
+  const total = toDecimal(totalDeposit);
+  if (total.isZero() || goals.length === 0) {
+    return goals.map(g => ({
+      goal_id: g.id,
+      title: g.title,
+      split_percentage: Number(g.split_percentage || 0),
+      allocated_amount: 0,
+      display_amount: 'Ksh 0.00',
+    }));
+  }
+
+  const hasExplicitPcts = goals.some(g => Number(g.split_percentage || 0) > 0);
+  let percentages: number[] = [];
+
+  if (hasExplicitPcts) {
+    const totalExplicitPct = goals.reduce((sum, g) => sum + Number(g.split_percentage || 0), 0);
+    percentages = goals.map(g => {
+      const explicit = Number(g.split_percentage || 0);
+      return totalExplicitPct > 0 ? (explicit / totalExplicitPct) * 100 : (100 / goals.length);
+    });
+  } else {
+    const remainings = goals.map(g => Math.max(0, Number(g.target_amount || 0) - Number(g.current_amount || 0)));
+    const totalRemaining = remainings.reduce((sum, r) => sum + r, 0);
+    if (totalRemaining > 0) {
+      percentages = remainings.map(r => (r / totalRemaining) * 100);
+    } else {
+      percentages = goals.map(() => 100 / goals.length);
+    }
+  }
+
+  let accumulated = new Decimal(0);
+  const results: GoalSubSplitResult[] = [];
+
+  for (let i = 0; i < goals.length; i++) {
+    const g = goals[i];
+    const isLast = i === goals.length - 1;
+    const pct = percentages[i];
+    let allocated: Decimal;
+
+    if (isLast) {
+      allocated = Decimal.max(0, total.minus(accumulated));
+    } else {
+      allocated = total.times(toDecimal(pct).dividedBy(100)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      accumulated = accumulated.plus(allocated);
+    }
+
+    const allocNum = allocated.toNumber();
+    results.push({
+      goal_id: g.id,
+      title: g.title,
+      split_percentage: Math.round(pct * 10) / 10,
+      allocated_amount: allocNum,
+      display_amount: `Ksh ${allocNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    });
+  }
+
+  return results;
+}
+
+// ------------------------------------------------------------------------------
 // SHIFT TIME DURATION & HOURLY YIELD
 // ------------------------------------------------------------------------------
 export function parseTimeToMinutes(timeStr: string | null | undefined): number | null {

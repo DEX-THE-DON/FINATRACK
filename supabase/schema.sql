@@ -42,9 +42,11 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE TABLE IF NOT EXISTS goals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    account_id UUID REFERENCES accounts(id) ON DELETE SET NULL, -- Master Holding Vault account
     title TEXT NOT NULL,
     target_amount NUMERIC(12, 2) NOT NULL,
     current_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    split_percentage NUMERIC(5, 2) DEFAULT 0.00, -- Goal sub-split % share
     target_date DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
