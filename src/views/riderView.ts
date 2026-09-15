@@ -1116,10 +1116,10 @@ export function renderRiderDashboard(data: any): string {
                             <p class="text-[11px] text-gray-600 dark:text-gray-300">Went online 11am–2pm, took a break, then 2:13pm–5pm? Enter each session to see your peak earning hours.</p>
                         </div>
                         <div class="flex items-center gap-2">
-                            <button type="button" onclick="addStintRow()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-xs shrink-0">
+                            <button type="button" id="btn-add-stint-top" onclick="window.addStintRow(event); return false;" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs shrink-0 cursor-pointer">
                                 <span>➕ Add Stint</span>
                             </button>
-                            <button type="button" onclick="clearAllStints()" class="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Clear stints and use simple shift inputs">
+                            <button type="button" id="btn-reset-stints" onclick="window.clearAllStints(event); return false;" class="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 active:scale-95 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer" title="Clear stints and use simple shift inputs">
                                 <span>Reset</span>
                             </button>
                         </div>
@@ -1135,7 +1135,7 @@ export function renderRiderDashboard(data: any): string {
                         </div>
 
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-blue-200/60 dark:border-gray-800 text-xs">
-                            <button type="button" onclick="addStintRow()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95 text-xs">
+                            <button type="button" id="btn-add-stint-bottom" onclick="window.addStintRow(event); return false;" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold rounded-xl transition shadow-xs flex items-center gap-1 text-xs cursor-pointer">
                                 <span>➕ Add Another Session</span>
                             </button>
                             <div class="text-xs font-bold text-gray-700 dark:text-gray-300 bg-white/80 dark:bg-gray-900/80 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900">
@@ -1691,6 +1691,35 @@ export function renderRiderDashboard(data: any): string {
             <span class="text-[10px] tracking-tight">Account</span>
         </a>
     </nav>
+
+    <script>
+        (function() {
+            var topBtn = document.getElementById('btn-add-stint-top');
+            if (topBtn) {
+                topBtn.addEventListener('click', function(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    window.addStintRow();
+                });
+            }
+            var bottomBtn = document.getElementById('btn-add-stint-bottom');
+            if (bottomBtn) {
+                bottomBtn.addEventListener('click', function(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    window.addStintRow();
+                });
+            }
+            var resetBtn = document.getElementById('btn-reset-stints');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    window.clearAllStints();
+                });
+            }
+            if (typeof window.renderStintsList === 'function') {
+                window.renderStintsList(true);
+            }
+        })();
+    </script>
 </body>
 </html>`;
 }
