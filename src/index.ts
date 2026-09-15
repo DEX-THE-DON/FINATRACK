@@ -93,7 +93,7 @@ app.get('/manifest.webmanifest', (c) => c.redirect('/manifest.json', 301));
 
 app.get('/sw.js', (c) => {
   const swScript = `
-const CACHE_NAME = 'finatrack-v10';
+const CACHE_NAME = 'finatrack-v15';
 const STATIC_ASSETS = ['/manifest.json', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/favicon.ico'];
 
 self.addEventListener('install', (event) => {
@@ -121,7 +121,8 @@ self.addEventListener('fetch', (event) => {
 
   return c.body(swScript, 200, {
     'Content-Type': 'application/javascript; charset=utf-8',
-    'Service-Worker-Allowed': '/'
+    'Service-Worker-Allowed': '/',
+    'Cache-Control': 'no-cache, no-store, must-revalidate'
   });
 });
 
@@ -444,6 +445,7 @@ app.get('/', async (c) => {
     is_logged_in: isLoggedIn,
   });
 
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   return c.html(html);
 });
 
@@ -614,6 +616,7 @@ app.get('/rider', async (c) => {
     is_logged_in: isLoggedIn,
   });
 
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   return c.html(html);
 });
 
