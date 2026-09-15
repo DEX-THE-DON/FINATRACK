@@ -319,7 +319,8 @@ export function renderRiderDashboard(data: any): string {
             var rows = list.querySelectorAll('.stint-row');
             if (!start || typeof start !== 'string') {
                 if (rows.length > 0) {
-                    var lastEnd = rows[rows.length - 1].querySelector('.stint-end')?.value || '17:00';
+                    var lastEndInput = rows[rows.length - 1].querySelector('.stint-end');
+                    var lastEnd = (lastEndInput && lastEndInput.value) ? lastEndInput.value : '17:00';
                     var parts = lastEnd.split(':');
                     var startH = parseInt(parts[0], 10) || 17;
                     var startM = parseInt(parts[1], 10) || 0;
@@ -340,12 +341,12 @@ export function renderRiderDashboard(data: any): string {
             rowDiv.className = 'stint-row p-2.5 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-900/60 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs shadow-xs';
             rowDiv.innerHTML = '<div class="sm:col-span-1 font-extrabold text-blue-600 dark:text-blue-400 row-num">#' + newIdx + '</div>' +
                 '<div class="sm:col-span-4 flex items-center gap-1.5">' +
-                    '<input type="time" value="' + start + '" class="stint-start w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" oninput="recalcStintsSummary()">' +
+                    '<input type="time" value="' + start + '" class="stint-start w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold">' +
                     '<span class="text-gray-400 text-xs font-semibold">to</span>' +
-                    '<input type="time" value="' + end + '" class="stint-end w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" oninput="recalcStintsSummary()">' +
+                    '<input type="time" value="' + end + '" class="stint-end w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold">' +
                 '</div>' +
                 '<div class="sm:col-span-2">' +
-                    '<select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium" onchange="recalcStintsSummary()">' +
+                    '<select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium">' +
                         '<option value="Uber Eats"' + (platform === 'Uber Eats' ? ' selected' : '') + '>Uber Eats</option>' +
                         '<option value="Bolt Deliveries"' + (platform === 'Bolt Deliveries' ? ' selected' : '') + '>Bolt</option>' +
                         '<option value="Glovo / Jumia"' + (platform === 'Glovo / Jumia' ? ' selected' : '') + '>Glovo/Jumia</option>' +
@@ -354,14 +355,29 @@ export function renderRiderDashboard(data: any): string {
                     '</select>' +
                 '</div>' +
                 '<div class="sm:col-span-2">' +
-                    '<input type="number" step="any" inputmode="decimal" value="' + earned + '" placeholder="Earned Ksh" class="stint-earned w-full p-2 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400" oninput="recalcStintsSummary()">' +
+                    '<input type="number" step="any" inputmode="decimal" value="' + earned + '" placeholder="Earned Ksh" class="stint-earned w-full p-2 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400">' +
                 '</div>' +
                 '<div class="sm:col-span-3 flex items-center justify-between gap-1.5">' +
                     '<span class="stint-badge px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold text-[11px] whitespace-nowrap border border-blue-200 dark:border-blue-900">' +
                         '⚡ Ksh 0/hr (0.0h)' +
                     '</span>' +
-                    '<button type="button" onclick="this.closest(\'.stint-row\').remove(); recalcStintsSummary();" class="text-rose-500 hover:text-rose-700 font-bold p-1 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-md transition" title="Delete stint">✕</button>' +
+                    '<button type="button" class="btn-del-stint text-rose-500 hover:text-rose-700 font-bold p-1 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-md transition" title="Delete stint">✕</button>' +
                 '</div>';
+
+            var delBtn = rowDiv.querySelector('.btn-del-stint');
+            if (delBtn) {
+                delBtn.onclick = function() {
+                    rowDiv.remove();
+                    recalcStintsSummary();
+                };
+            }
+
+            var inputs = rowDiv.querySelectorAll('input, select');
+            inputs.forEach(function(inp) {
+                inp.oninput = recalcStintsSummary;
+                inp.onchange = recalcStintsSummary;
+            });
+
             list.appendChild(rowDiv);
             recalcStintsSummary();
         }
