@@ -246,12 +246,33 @@ export function renderRiderDashboard(data: any): string {
         function clearAllStints() {
             stintItems = [];
             renderStintsList(true);
+            const earnInput = document.querySelector('input[name="total_earned"]');
+            if (earnInput) earnInput.value = '';
             calcDuration();
         }
 
-        function addStintRow(start = '11:00', end = '14:00', earned = '', platform = 'Uber Eats') {
+        function addStintRow(start, end, earned, platform) {
+            if (!start || typeof start !== 'string') {
+                if (stintItems.length > 0) {
+                    const last = stintItems[stintItems.length - 1];
+                    const lastEnd = last.end_time || '14:00';
+                    const parts = lastEnd.split(':');
+                    const startH = parseInt(parts[0], 10) || 14;
+                    const startM = parseInt(parts[1], 10) || 0;
+                    const endH = (startH + 3) % 24;
+                    start = String(startH).padStart(2, '0') + ':' + String(startM).padStart(2, '0');
+                    end = String(endH).padStart(2, '0') + ':' + String(startM).padStart(2, '0');
+                } else {
+                    start = '11:00';
+                    end = '14:00';
+                }
+            }
+            if (!end || typeof end !== 'string') end = '17:00';
+            if (earned === undefined || typeof earned !== 'string' && typeof earned !== 'number') earned = '';
+            if (!platform) platform = 'Uber Eats';
+
             const id = 'stint_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-            stintItems.push({ id, start_time: start, end_time: end, earned: earned, platform: platform, trips: '' });
+            stintItems.push({ id, start_time: start, end_time: end, earned: String(earned), platform: platform, trips: '' });
             renderStintsList(true);
         }
 
@@ -278,8 +299,8 @@ export function renderRiderDashboard(data: any): string {
 
             if (rebuildDom && listEl) {
                 listEl.innerHTML = stintItems.map((s, idx) => {
-                    const sM = s.start_time ? (parseInt(s.start_time.split(':')[0]) * 60 + parseInt(s.start_time.split(':')[1])) : 0;
-                    const eM = s.end_time ? (parseInt(s.end_time.split(':')[0]) * 60 + parseInt(s.end_time.split(':')[1])) : 0;
+                    const sM = s.start_time ? (parseInt(s.start_time.split(':')[0], 10) * 60 + parseInt(s.start_time.split(':')[1], 10)) : 0;
+                    const eM = s.end_time ? (parseInt(s.end_time.split(':')[0], 10) * 60 + parseInt(s.end_time.split(':')[1], 10)) : 0;
                     let diff = eM - sM;
                     if (diff <= 0) diff += 24 * 60;
                     const hrs = (diff / 60);
@@ -289,9 +310,9 @@ export function renderRiderDashboard(data: any): string {
                     return '<div id="row-' + s.id + '" class="p-2.5 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-900/60 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs shadow-xs">' +
                         '<div class="sm:col-span-1 font-extrabold text-blue-600 dark:text-blue-400">#' + (idx + 1) + '</div>' +
                         '<div class="sm:col-span-4 flex items-center gap-1.5">' +
-                            '<input type="time" value="' + (s.start_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'start_time\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
+                            '<input type="time" value="' + (s.start_time || '') + '" oninput="onStintFieldChanged(\'' + s.id + '\', \'start_time\', this.value)" onchange="onStintFieldChanged(\'' + s.id + '\', \'start_time\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold">' +
                             '<span class="text-gray-400 text-xs font-semibold">to</span>' +
-                            '<input type="time" value="' + (s.end_time || '') + '" onchange="onStintFieldChanged(\'' + s.id + '\', \'end_time\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" required>' +
+                            '<input type="time" value="' + (s.end_time || '') + '" oninput="onStintFieldChanged(\'' + s.id + '\', \'end_time\', this.value)" onchange="onStintFieldChanged(\'' + s.id + '\', \'end_time\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold">' +
                         '</div>' +
                         '<div class="sm:col-span-2">' +
                             '<select onchange="onStintFieldChanged(\'' + s.id + '\', \'platform\', this.value)" class="w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium">' +
@@ -303,7 +324,7 @@ export function renderRiderDashboard(data: any): string {
                             '</select>' +
                         '</div>' +
                         '<div class="sm:col-span-2">' +
-                            '<input type="number" step="any" inputmode="decimal" value="' + (s.earned || '') + '" placeholder="Earned Ksh" oninput="onStintFieldChanged(\'' + s.id + '\', \'earned\', this.value)" class="w-full p-2 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400" required>' +
+                            '<input type="number" step="any" inputmode="decimal" value="' + (s.earned || '') + '" placeholder="Earned Ksh" oninput="onStintFieldChanged(\'' + s.id + '\', \'earned\', this.value)" class="w-full p-2 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400">' +
                         '</div>' +
                         '<div class="sm:col-span-3 flex items-center justify-between gap-1.5">' +
                             '<span id="badge-' + s.id + '" class="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold text-[11px] whitespace-nowrap border border-blue-200 dark:border-blue-900">' +
@@ -318,8 +339,8 @@ export function renderRiderDashboard(data: any): string {
             stintItems.forEach(s => {
                 const earn = parseFloat(s.earned) || 0;
                 totalEarned += earn;
-                const sM = s.start_time ? (parseInt(s.start_time.split(':')[0]) * 60 + parseInt(s.start_time.split(':')[1])) : 0;
-                const eM = s.end_time ? (parseInt(s.end_time.split(':')[0]) * 60 + parseInt(s.end_time.split(':')[1])) : 0;
+                const sM = s.start_time ? (parseInt(s.start_time.split(':')[0], 10) * 60 + parseInt(s.start_time.split(':')[1], 10)) : 0;
+                const eM = s.end_time ? (parseInt(s.end_time.split(':')[0], 10) * 60 + parseInt(s.end_time.split(':')[1], 10)) : 0;
                 let diff = eM - sM;
                 if (diff <= 0) diff += 24 * 60;
                 const hrs = diff / 60;
@@ -1095,7 +1116,7 @@ export function renderRiderDashboard(data: any): string {
                             <p class="text-[11px] text-gray-600 dark:text-gray-300">Went online 11am–2pm, took a break, then 2:13pm–5pm? Enter each session to see your peak earning hours.</p>
                         </div>
                         <div class="flex items-center gap-2">
-                            <button type="button" onclick="addStintRow('17:00', '21:00', '', 'Uber Eats')" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-xs shrink-0">
+                            <button type="button" onclick="addStintRow()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-xs shrink-0">
                                 <span>➕ Add Stint</span>
                             </button>
                             <button type="button" onclick="clearAllStints()" class="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Clear stints and use simple shift inputs">
