@@ -387,6 +387,23 @@ export function renderFinanceDashboard(data: any): string {
             }
         }
 
+        function saveGoalSplitsLocally(e) {
+            try {
+                const inputs = Array.from(document.querySelectorAll('.goal-split-input'));
+                const map = {};
+                inputs.forEach(inp => {
+                    const name = inp.getAttribute('name') || '';
+                    const id = name.replace('split_', '');
+                    if (id) {
+                        map[id] = parseFloat(inp.value || '0') || 0;
+                    }
+                });
+                document.cookie = "finatrack_goal_splits=" + encodeURIComponent(JSON.stringify(map)) + ";path=/;max-age=31536000;SameSite=Lax";
+            } catch (err) {
+                console.warn('Error saving goal splits locally:', err);
+            }
+        }
+
         function distributeGoalSplitsEvenly() {
             const inputs = Array.from(document.querySelectorAll('.goal-split-input'));
             if (inputs.length === 0) return;
@@ -395,13 +412,14 @@ export function renderFinanceDashboard(data: any): string {
             let sum = 0;
             inputs.forEach((inp, idx) => {
                 if (idx === count - 1) {
-                    inp.value = (100 - sum).toFixed(1);
+                    inp.value = Math.max(0, Math.round((100 - sum) * 10) / 10).toFixed(1);
                 } else {
                     inp.value = basePct.toFixed(1);
-                    sum += basePct;
+                    sum = Math.round((sum + basePct) * 10) / 10;
                 }
             });
             recalcGoalSubSplitsTotal();
+            saveGoalSplitsLocally();
         }
 
         function distributeGoalSplitsProportional() {
@@ -416,14 +434,15 @@ export function renderFinanceDashboard(data: any): string {
             let sum = 0;
             inputs.forEach((inp, idx) => {
                 if (idx === inputs.length - 1) {
-                    inp.value = Math.max(0, 100 - sum).toFixed(1);
+                    inp.value = Math.max(0, Math.round((100 - sum) * 10) / 10).toFixed(1);
                 } else {
                     const pct = Math.round(((remainings[idx] / totalRemaining) * 100) * 10) / 10;
                     inp.value = pct.toFixed(1);
-                    sum += pct;
+                    sum = Math.round((sum + pct) * 10) / 10;
                 }
             });
             recalcGoalSubSplitsTotal();
+            saveGoalSplitsLocally();
         }
 
         function updateVaultDepositPreview() {
@@ -1667,7 +1686,7 @@ export function renderFinanceDashboard(data: any): string {
                     <button type="button" onclick="document.getElementById('vault-deposit-container')?.classList.toggle('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
                         <span>⚡ Vault Deposit & Split</span>
                     </button>
-                    <button type="button" onclick="document.getElementById('goal-splits-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                    <button type="button" onclick="document.getElementById('goal-splits-container')?.classList.toggle('hidden'); recalcGoalSubSplitsTotal(); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden'); document.getElementById('new-goal-form-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
                         <span>⚙️ Goal Splits %</span>
                     </button>
                     <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
@@ -1764,7 +1783,7 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                 </div>
 
-                <form action="/goals/splits/update" method="POST" class="space-y-3">
+                <form action="/goals/splits/update" method="POST" onsubmit="saveGoalSplitsLocally(event)" class="space-y-3">
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         ${goals.map((g: any, idx: number) => {
                             const target = Number(g.target_amount) || 0;

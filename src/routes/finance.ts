@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from '../db/supabase';
 import {
   toDecimal,
@@ -15,6 +16,17 @@ import { renderFinancialStatement } from '../views/statementView';
 import { Decimal } from 'decimal.js';
 
 export const financeRoutes = new Hono<{ Bindings: AppEnv }>();
+
+export function getSavedGoalSplits(c: any): Record<string, number> {
+  try {
+    const raw = getCookie(c, 'finatrack_goal_splits');
+    if (raw) return JSON.parse(decodeURIComponent(raw));
+    const cookieHeader = c.req?.header('cookie') || '';
+    const match = cookieHeader.match(/finatrack_goal_splits=([^;]+)/);
+    if (match) return JSON.parse(decodeURIComponent(match[1]));
+  } catch (e) {}
+  return {};
+}
 
 const DEFAULT_USD_KES_RATE = 129.0;
 
@@ -376,17 +388,33 @@ financeRoutes.post('/goals/splits/update', async (c) => {
 
   // Parse split inputs e.g. split_goal-1 = 40, split_goal-2 = 30
   const updates: Array<{ id: string; pct: number }> = [];
+  const splitMap: Record<string, number> = {};
   for (const [key, val] of Object.entries(body)) {
     if (key.startsWith('split_')) {
       const goalId = key.replace('split_', '');
       const pct = parseFloat(String(val || '0.0')) || 0.0;
-      updates.push({ id: goalId, pct: Math.max(0, Math.min(100, pct)) });
+      const cleanPct = Math.max(0, Math.min(100, Math.round(pct * 10) / 10));
+      updates.push({ id: goalId, pct: cleanPct });
+      splitMap[goalId] = cleanPct;
     }
   }
 
   for (const u of updates) {
-    await supabase.from('goals').update({ split_percentage: u.pct }).eq('id', u.id);
+    try {
+      let q = supabase.from('goals').update({ split_percentage: u.pct }).eq('id', u.id);
+      if (userId) q = q.eq('user_id', userId);
+      await q;
+    } catch (e) {
+      console.warn('Failed to update goal split in DB:', e);
+    }
   }
+
+  // Set cookie finatrack_goal_splits so custom & proportional splits survive page reloads and work across guest & user sessions
+  setCookie(c, 'finatrack_goal_splits', encodeURIComponent(JSON.stringify(splitMap)), {
+    path: '/',
+    maxAge: 31536000,
+    sameSite: 'Lax',
+  });
 
   return c.redirect('/?toast=Goal+sub-split+shares+saved+successfully!', 303);
 });
@@ -409,11 +437,31 @@ financeRoutes.post('/goals/deposit-vault', async (c) => {
   ]);
 
   const userAccounts = accRes.data || [];
-  const userGoals = goalRes.data || [];
+  let userGoals = goalRes.data || [];
 
   if (userGoals.length === 0) {
-    return c.redirect('/?toast=No+active+goals+to+sub-allocate', 303);
+    userGoals = [
+      { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
+      { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
+      { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
+    ];
   }
+
+  const cookieSplits = getSavedGoalSplits(c);
+  userGoals = userGoals.map((g: any, idx: number) => {
+    let splitPct = g.split_percentage;
+    if (cookieSplits[g.id] !== undefined) {
+      splitPct = cookieSplits[g.id];
+    } else if (cookieSplits[g.title] !== undefined) {
+      splitPct = cookieSplits[g.title];
+    } else if (cookieSplits[`goal-${idx + 1}`] !== undefined) {
+      splitPct = cookieSplits[`goal-${idx + 1}`];
+    }
+    return {
+      ...g,
+      split_percentage: splitPct !== null && splitPct !== undefined ? Number(splitPct) : null
+    };
+  });
 
   // Find vault account
   let vaultAcc = userAccounts.find(a => a.id === vaultAccountId);
@@ -848,7 +896,31 @@ financeRoutes.post('/split/distribute', async (c) => {
     userId ? supabase.from('goals').select('*').eq('user_id', userId) : supabase.from('goals').select('*'),
   ]);
   const userAccounts = accRes.data || [];
-  const userGoals = goalRes.data || [];
+  let userGoals = goalRes.data || [];
+
+  if (userGoals.length === 0) {
+    userGoals = [
+      { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
+      { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
+      { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
+    ];
+  }
+
+  const cookieSplits = getSavedGoalSplits(c);
+  userGoals = userGoals.map((g: any, idx: number) => {
+    let splitPct = g.split_percentage;
+    if (cookieSplits[g.id] !== undefined) {
+      splitPct = cookieSplits[g.id];
+    } else if (cookieSplits[g.title] !== undefined) {
+      splitPct = cookieSplits[g.title];
+    } else if (cookieSplits[`goal-${idx + 1}`] !== undefined) {
+      splitPct = cookieSplits[`goal-${idx + 1}`];
+    }
+    return {
+      ...g,
+      split_percentage: splitPct !== null && splitPct !== undefined ? Number(splitPct) : null
+    };
+  });
 
   // If a source account was chosen, deduct the total amount from source wallet
   if (sourceAccountId) {

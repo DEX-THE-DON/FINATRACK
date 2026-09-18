@@ -206,6 +206,38 @@ app.get('/', async (c) => {
     debts = [];
   }
 
+  // Synchronize goal sub-splits from cookie (persists custom and proportional splits across guest mode & user changes)
+  let cookieSplits: Record<string, number> = {};
+  try {
+    const rawCookie = getCookie(c, 'finatrack_goal_splits') || '';
+    if (rawCookie) {
+      cookieSplits = JSON.parse(decodeURIComponent(rawCookie));
+    } else {
+      const cookieHeader = c.req?.header('cookie') || '';
+      const match = cookieHeader.match(/finatrack_goal_splits=([^;]+)/);
+      if (match) cookieSplits = JSON.parse(decodeURIComponent(match[1]));
+    }
+  } catch (e) {
+    cookieSplits = {};
+  }
+
+  if (goals && goals.length > 0) {
+    goals = goals.map((g: any, idx: number) => {
+      let splitPct = g.split_percentage;
+      if (cookieSplits[g.id] !== undefined) {
+        splitPct = cookieSplits[g.id];
+      } else if (cookieSplits[g.title] !== undefined) {
+        splitPct = cookieSplits[g.title];
+      } else if (cookieSplits[`goal-${idx + 1}`] !== undefined) {
+        splitPct = cookieSplits[`goal-${idx + 1}`];
+      }
+      return {
+        ...g,
+        split_percentage: splitPct !== null && splitPct !== undefined ? Number(splitPct) : null
+      };
+    });
+  }
+
   const DEFAULT_RULES = [
     { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
     { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
