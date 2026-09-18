@@ -457,23 +457,35 @@ export function renderRiderDashboard(data: any): string {
             const titleInput = document.getElementById('new-doc-title-input');
             const intervalSelect = document.getElementById('new-doc-interval-select');
             if (!titleInput) return;
-            if (typeVal === 'INSURANCE_COMP') {
-                titleInput.value = 'Comprehensive Motorbike Insurance';
+            if (typeVal === 'UBER_INSPECT') {
+                titleInput.value = 'Uber / Bolt Vehicle Inspection';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'INSURANCE_PSV') {
+                titleInput.value = 'Commercial PSV / Ride-Hail Insurance';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'SPEED_GOVERNOR') {
+                titleInput.value = 'NTSA Speed Governor & Limiter Certificate';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'PSV_BADGE') {
+                titleInput.value = 'NTSA PSV Driver Badge';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'INSPECTION') {
+                titleInput.value = 'NTSA Motor Vehicle Inspection Certificate';
+                if (intervalSelect) intervalSelect.value = '12';
+            } else if (typeVal === 'INSURANCE_COMP') {
+                titleInput.value = 'Comprehensive Vehicle Insurance';
                 if (intervalSelect) intervalSelect.value = '12';
             } else if (typeVal === 'INSURANCE_TP') {
-                titleInput.value = 'Third-Party Motorbike Insurance';
+                titleInput.value = 'Third-Party Vehicle Insurance';
                 if (intervalSelect) intervalSelect.value = '12';
             } else if (typeVal === 'DL') {
                 titleInput.value = 'NTSA Driving License (DL)';
                 if (intervalSelect) intervalSelect.value = '36';
             } else if (typeVal === 'PSV') {
-                titleInput.value = 'County PSV Boda Permit / Sticker';
-                if (intervalSelect) intervalSelect.value = '12';
-            } else if (typeVal === 'INSPECTION') {
-                titleInput.value = 'NTSA Inspection Certificate';
+                titleInput.value = 'County PSV Permit / Sticker';
                 if (intervalSelect) intervalSelect.value = '12';
             } else if (typeVal === 'LOGBOOK') {
-                titleInput.value = 'Motorbike Logbook';
+                titleInput.value = 'Vehicle Logbook';
                 if (intervalSelect) intervalSelect.value = '36';
             } else if (typeVal === 'CUSTOM') {
                 titleInput.value = '';
@@ -817,48 +829,50 @@ export function renderRiderDashboard(data: any): string {
                     </div>
                     <div>
                         <div class="flex items-center space-x-2">
-                            <h2 class="text-lg font-black text-gray-900 dark:text-white">${active_bike ? `Active Vehicle: ${active_bike.plate_number} (${active_bike.model_name || 'Fleet Bike'})` : 'No Vehicle Registered Yet'}</h2>
+                            <h2 class="text-lg font-black text-gray-900 dark:text-white">${active_bike ? `Active Vehicle: ${active_bike.plate_number} (${active_bike.model_name || 'Fleet Vehicle'})` : 'No Vehicle Registered Yet'}</h2>
                             ${active_bike ? `
-                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${activePowerType === 'ELECTRIC' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'}">
-                                ${activePowerType === 'ELECTRIC' ? '🔋 Electric EV (Battery Swap)' : '⛽ Petrol Engine (ICE)'}
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${activePowerType === 'ELECTRIC' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : (activePowerType === 'HYBRID' ? 'bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300' : (activePowerType === 'DIESEL' ? 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'))}">
+                                ${activePowerType === 'ELECTRIC' ? '⚡ Electric EV' : (activePowerType === 'HYBRID' ? '🔋 Hybrid Electric' : (activePowerType === 'DIESEL' ? '🛢️ Diesel Engine (ICE)' : '⛽ Petrol Engine (ICE)'))}
                             </span>` : `
                             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
                                 Quick Setup
                             </span>`}
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${active_bike ? `Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-kes="${active_bike?.daily_target || 2500}">Ksh ${(Number(active_bike?.daily_target) || 2500).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong> • Managed by ${active_bike?.owner_name || username}` : 'Register your motorbike or electric bike below to start tracking shifts & finance.'}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${active_bike ? `Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-kes="${active_bike?.daily_target || 3500}">Ksh ${(Number(active_bike?.daily_target) || 3500).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong> • Managed by ${active_bike?.owner_name || username}` : 'Register your car (Uber/Bolt), motorbike or electric EV below to start tracking shifts & finance.'}</p>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-2">
                     <button type="button" onclick="document.getElementById('add-bike-form-container').classList.toggle('hidden')" class="px-3.5 py-2 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
-                        <span>➕ Register Bike / EV</span>
+                        <span>➕ Register Vehicle (Car / Bike / EV)</span>
                     </button>
                 </div>
             </div>
 
-            <!-- Add Bike Collapsible Form -->
+            <!-- Add Vehicle Collapsible Form -->
             <div id="add-bike-form-container" class="${bikes.length === 0 ? '' : 'hidden'} p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-3">
-                <h3 class="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">Register New Motorbike or Electric Vehicle to Fleet</h3>
+                <h3 class="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">Register Car (Uber / Bolt / Taxi), Motorbike or Electric EV to Fleet</h3>
                 <form action="/bikes/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Plate Number</label>
-                        <input type="text" name="plate_number" placeholder="e.g. KMEV 123A" required class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold uppercase">
+                        <input type="text" name="plate_number" placeholder="e.g. KDA 123B / KMEV 456C" required class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold uppercase">
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Model / Make</label>
-                        <input type="text" name="model_name" placeholder="e.g. Spiro Commando / Boxer 150" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-semibold">
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Make / Model / Class</label>
+                        <input type="text" name="model_name" placeholder="e.g. Toyota Vitz / Demio / Alto / Boxer 150" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-semibold">
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Power System</label>
                         <select name="power_type" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                            <option value="PETROL">⛽ Petrol Engine (Bajaj, TVS, Honda)</option>
-                            <option value="ELECTRIC">🔋 Electric EV (Spiro, Roam, Ampersand)</option>
+                            <option value="PETROL">⛽ Petrol (Vitz, Demio, Alto, Boxer, TVS)</option>
+                            <option value="HYBRID">🔋 Hybrid (Aqua, Prius, Fielder, Note)</option>
+                            <option value="DIESEL">🛢️ Diesel Engine (Probox, Commercial Van)</option>
+                            <option value="ELECTRIC">⚡ Electric EV (Nissan Leaf, BYD, Spiro, Roam)</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Daily Target (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="daily_target" placeholder="2500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold convertible-placeholder">
+                        <input type="number" step="any" inputmode="decimal" name="daily_target" placeholder="3500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold convertible-placeholder">
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-xs">
@@ -875,11 +889,11 @@ export function renderRiderDashboard(data: any): string {
                     <div class="space-y-0.5">
                         <div class="flex items-center space-x-2">
                             <span class="font-black text-sm text-gray-900 dark:text-white font-mono">${b.plate_number}</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${b.power_type === 'ELECTRIC' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'}">
-                                ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}
+                            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${b.power_type === 'ELECTRIC' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : (b.power_type === 'HYBRID' ? 'bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300' : (b.power_type === 'DIESEL' ? 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'))}">
+                                ${b.power_type === 'ELECTRIC' ? '⚡ EV' : (b.power_type === 'HYBRID' ? '🔋 Hybrid' : (b.power_type === 'DIESEL' ? '🛢️ Diesel' : '⛽ Petrol'))}
                             </span>
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${b.model_name || 'Motorbike'} • Target: <strong class="convertible-amount font-bold text-gray-800 dark:text-gray-200" data-kes="${b.daily_target}">Ksh ${(Number(b.daily_target) || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${b.model_name || 'Vehicle'} • Target: <strong class="convertible-amount font-bold text-gray-800 dark:text-gray-200" data-kes="${b.daily_target}">Ksh ${(Number(b.daily_target) || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></p>
                     </div>
                     <div class="flex items-center space-x-1.5">
                         ${b.is_active ? `
@@ -899,7 +913,7 @@ export function renderRiderDashboard(data: any): string {
                     </div>
                 </div>`).join('') : `
                 <div class="col-span-full p-4 text-center rounded-2xl bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-300 dark:border-gray-700">
-                    <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">🛵 No vehicles in your fleet yet. Fill the registration form above to add your first motorbike or electric EV.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">🚗 No vehicles in your fleet yet. Fill the registration form above to add your first ride-hailing car, motorbike, or electric EV.</p>
                 </div>
                 `}
             </div>
@@ -1309,8 +1323,22 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🛵 Kilometers Covered (KM)</label>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🚗 / 🛵 Kilometers Covered (KM)</label>
                     <input type="number" step="any" inputmode="decimal" name="kilometers" placeholder="e.g. 85.5 km" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🚖 Main Platform / Channel</label>
+                    <select name="channel" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium">
+                        <option value="ALL">All Platforms (Blended)</option>
+                        <option value="UBER">🚗 Uber Car / Uber ChapChap</option>
+                        <option value="BOLT">🚗 Bolt Car / Boda</option>
+                        <option value="LITTLE">🚗 Little Cab</option>
+                        <option value="FARAS">🚗 Faras</option>
+                        <option value="INDRIVE">🚗 inDrive</option>
+                        <option value="BODA">🛵 Boda Passenger / Delivery</option>
+                        <option value="PRIVATE">💼 Private Clients / Offline Fares</option>
+                    </select>
                 </div>
 
                 <div>
@@ -1427,17 +1455,18 @@ export function renderRiderDashboard(data: any): string {
                         <div>
                             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Next Service Interval</label>
                             <select name="interval_weeks" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-semibold">
-                                <option value="3" selected>Every 3 Weeks (~1,500 km)</option>
-                                <option value="2">Every 2 Weeks (High Mileage)</option>
-                                <option value="4">Every 4 Weeks (Monthly)</option>
-                                <option value="6">Every 6 Weeks</option>
+                                <option value="3">Every 3 Weeks (~1,500 km - Boda / High Delivery)</option>
+                                <option value="4">Every 4 Weeks (~2,000 km - Monthly)</option>
+                                <option value="6" selected>Every 6 Weeks (~3,500 km - Ride-Hailing Car)</option>
+                                <option value="8">Every 8 Weeks (~5,000 km - Standard Car Service)</option>
+                                <option value="12">Every 12 Weeks (~7,500 km - Major Inspection)</option>
                             </select>
                         </div>
                     </div>
 
                     <div>
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Notes & Part Details</label>
-                        <input type="text" id="service_notes_input" name="notes" placeholder="e.g. Changed oil (20W-50) & brake pads. Spark plug was good so did not buy new one. Paid mechanic labor." value="Oil plus brakepads changed, spark plug inspected (in good condition), labor paid." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-medium">
+                        <input type="text" id="service_notes_input" name="notes" placeholder="e.g. Changed oil (5W-30 / 20W-50), oil filter & brake pads. Inspected suspension & tires." value="Engine oil plus brake pads changed, inspected and in good condition, labor paid." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-medium">
                     </div>
 
                     <div class="flex justify-end gap-2 pt-1">
@@ -1532,18 +1561,22 @@ export function renderRiderDashboard(data: any): string {
                     <div class="sm:col-span-2 lg:col-span-1">
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Category</label>
                         <select onchange="onDocTypePresetChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold cursor-pointer">
-                            <option value="INSURANCE_COMP">🛡️ Comprehensive Insurance</option>
-                            <option value="INSURANCE_TP">🛡️ Third-Party Insurance</option>
+                            <option value="UBER_INSPECT">🚗 Uber / Bolt Vehicle Inspection Report</option>
+                            <option value="INSURANCE_PSV">🛡️ Commercial PSV / Ride-Hail Insurance</option>
+                            <option value="SPEED_GOVERNOR">⏱️ NTSA Speed Governor & Limiter Certificate</option>
+                            <option value="PSV_BADGE">🪪 NTSA PSV Driver Badge / DL Endorsement</option>
+                            <option value="INSPECTION">🔍 NTSA Motor Vehicle Inspection Certificate</option>
+                            <option value="INSURANCE_COMP">🛡️ Comprehensive Vehicle Insurance</option>
+                            <option value="INSURANCE_TP">🛡️ Third-Party Vehicle Insurance</option>
                             <option value="DL">🪪 NTSA Driving License (DL)</option>
                             <option value="PSV">🎫 County PSV Sticker / Permit</option>
-                            <option value="INSPECTION">🔍 NTSA Inspection Certificate</option>
-                            <option value="LOGBOOK">📖 Motorbike Logbook</option>
+                            <option value="LOGBOOK">📖 Vehicle Logbook</option>
                             <option value="CUSTOM">📋 Custom Document Name...</option>
                         </select>
                     </div>
                     <div class="sm:col-span-2 lg:col-span-1">
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Title / Number</label>
-                        <input type="text" id="new-doc-title-input" name="title" value="Comprehensive Motorbike Insurance" placeholder="e.g. Motorbike Insurance, PSV Sticker" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold" required>
+                        <input type="text" id="new-doc-title-input" name="title" value="Uber / Bolt Vehicle Inspection" placeholder="e.g. Uber / Bolt Inspection, Commercial PSV Insurance" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold" required>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Expiry Date</label>

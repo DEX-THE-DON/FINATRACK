@@ -2575,8 +2575,8 @@ export function renderFinanceDashboard(data: any): string {
                             <option value="Fuel & Petrol">⛽ Fuel & Petrol</option>
                             <option value="EV Battery Swap & Charging">⚡ EV Battery Swap & Charging</option>
                             <option value="Utilities & Bills">💡 Utilities & Bills</option>
-                            <option value="Bike Maintenance & Repairs">🔧 Bike Maintenance & Repairs</option>
-                            <option value="Rider & Boda Deliveries">🛵 Rider & Boda Deliveries</option>
+                            <option value="Bike Maintenance & Repairs">🔧 Vehicle / Car Maintenance & Repairs</option>
+                            <option value="Rider & Boda Deliveries">🚗 / 🛵 Ride-Hailing (Uber/Bolt) & Deliveries</option>
                             <option value="M-Pesa Income">📲 M-Pesa Income</option>
                             <option value="MMF Interest">📈 MMF Yield / Interest</option>
                             <option value="Debt & Loan Repayments">💳 Debt & Loan Repayments</option>

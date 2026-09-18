@@ -186,13 +186,15 @@ riderRoutes.post('/rider/logs', async (c) => {
 
     // 1. Gross Earnings Income Transaction
     if (totalEarnedKes > 0) {
+      const channel = body['channel'] ? String(body['channel']).trim() : '';
+      const channelTag = (channel && channel !== 'ALL') ? ` • ${channel}` : '';
       txInserts.push({
         ...(userId ? { user_id: userId } : {}),
         account_id: targetAccId,
         transaction_type: 'INCOME',
         category: 'Rider & Boda Deliveries',
         amount: totalEarnedKes,
-        description: `Rider Shift Gross Revenue (${logDate} • ${shiftHours}h shift${parsedStints.length > 1 ? ` • ${parsedStints.length} stints` : ''})`,
+        description: `Fleet & Ride-Hail Gross Revenue${channelTag} (${logDate} • ${shiftHours}h shift${parsedStints.length > 1 ? ` • ${parsedStints.length} stints` : ''})`,
         rider_log_id: primaryLogId,
         date: logDate,
       });
@@ -316,7 +318,8 @@ riderRoutes.post('/bikes/create', async (c) => {
 
   const model = body['model_name'] ? String(body['model_name']).trim() : 'Boda Boda';
   const owner = body['owner_name'] ? String(body['owner_name']).trim() : (username || 'Dennis');
-  const powerType = (String(body['power_type'] || 'PETROL').toUpperCase() === 'ELECTRIC' ? 'ELECTRIC' : 'PETROL') as 'PETROL' | 'ELECTRIC';
+  const rawPower = String(body['power_type'] || 'PETROL').toUpperCase();
+  const powerType = (['ELECTRIC', 'HYBRID', 'DIESEL', 'PETROL'].includes(rawPower) ? rawPower : 'PETROL') as 'PETROL' | 'ELECTRIC' | 'HYBRID' | 'DIESEL';
   const targetKes = parseFloat(String(body['daily_target'] || '2500.0')) || 2500.0;
 
   // Deactivate existing bikes so the new bike becomes active
@@ -356,7 +359,7 @@ riderRoutes.post('/bikes/create', async (c) => {
     return c.redirect(`/rider?toast=${encodeURIComponent('Failed to register vehicle: ' + error.message)}`, 303);
   }
 
-  const typeLabel = powerType === 'ELECTRIC' ? 'Electric EV' : 'Motorbike';
+  const typeLabel = powerType === 'ELECTRIC' ? 'Electric EV' : (powerType === 'HYBRID' ? 'Hybrid Car' : (powerType === 'DIESEL' ? 'Diesel Vehicle' : (model.toLowerCase().includes('car') || model.toLowerCase().includes('vitz') || model.toLowerCase().includes('demio') || model.toLowerCase().includes('alto') ? 'Ride-Hailing Car' : 'Vehicle')));
   return c.redirect(`/rider?toast=${encodeURIComponent(`${typeLabel} [${plate}] registered to fleet!`)}`, 303);
 });
 
@@ -461,7 +464,7 @@ riderRoutes.post('/rider/maintenance/log', async (c) => {
       category: 'Vehicle Maintenance & Repairs',
       amount: finalTotalCost,
       date: serviceDate,
-      description: `Motorbike Service: ${serviceType} (${notes || 'Oil, Brake Pads & Labor'})`,
+      description: `Vehicle Service: ${serviceType} (${notes || 'Oil, Brake Pads & Labor'})`,
     });
   }
 

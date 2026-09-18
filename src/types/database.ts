@@ -232,7 +232,7 @@ export interface Database {
           plate_number: string;
           model_name: string | null;
           owner_name: string | null;
-          power_type: 'PETROL' | 'ELECTRIC';
+          power_type: 'PETROL' | 'ELECTRIC' | 'DIESEL' | 'HYBRID';
           daily_target: number;
           is_active: number;
           created_at: string;
@@ -243,7 +243,7 @@ export interface Database {
           plate_number: string;
           model_name?: string | null;
           owner_name?: string | null;
-          power_type?: 'PETROL' | 'ELECTRIC';
+          power_type?: 'PETROL' | 'ELECTRIC' | 'DIESEL' | 'HYBRID';
           daily_target?: number;
           is_active?: number;
           created_at?: string;
@@ -254,7 +254,7 @@ export interface Database {
           plate_number?: string;
           model_name?: string | null;
           owner_name?: string | null;
-          power_type?: 'PETROL' | 'ELECTRIC';
+          power_type?: 'PETROL' | 'ELECTRIC' | 'DIESEL' | 'HYBRID';
           daily_target?: number;
           is_active?: number;
           created_at?: string;
