@@ -1019,3 +1019,39 @@ export function calculateSaccoDividendProjection(
     totalAnnualYieldPct: rate.times(100).toNumber(),
   };
 }
+
+/**
+ * Robustly sorts a list of transactions so that the most recent transaction appears first:
+ * 1. Transaction Date (YYYY-MM-DD) descending
+ * 2. If same day: ISO timestamp / time or created_at descending (newest inserted first)
+ * 3. Tie-breaker: ID descending
+ */
+export function sortTransactionsLatestFirst<T extends { date?: string | null; created_at?: string | null; id?: string | number | null }>(txs: T[]): T[] {
+  return [...txs].sort((a, b) => {
+    const rawDateA = String(a.date || '');
+    const rawDateB = String(b.date || '');
+    const dayA = rawDateA.slice(0, 10);
+    const dayB = rawDateB.slice(0, 10);
+
+    if (dayA !== dayB) {
+      return dayB.localeCompare(dayA);
+    }
+
+    // If dates have full timestamps and differ
+    if (rawDateA.length > 10 && rawDateB.length > 10 && rawDateA !== rawDateB) {
+      const timeDiff = new Date(rawDateB).getTime() - new Date(rawDateA).getTime();
+      if (!isNaN(timeDiff) && timeDiff !== 0) return timeDiff;
+    }
+
+    // Same date: sort by created_at descending (latest inserted transaction first)
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (!isNaN(timeA) && !isNaN(timeB) && timeB !== timeA) {
+      return timeB - timeA;
+    }
+
+    // Deterministic tie-breaker: ID descending
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+}
+

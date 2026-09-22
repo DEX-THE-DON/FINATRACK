@@ -1,3 +1,5 @@
+import { sortTransactionsLatestFirst } from '../utils/math';
+
 export function renderFinancialStatement(data: any): string {
   const {
     username = 'Dennis',
@@ -139,7 +141,7 @@ export function renderFinancialStatement(data: any): string {
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200">
-                        ${transactions.length > 0 ? transactions.slice(0, 25).map((t: any) => `
+                        ${sortTransactionsLatestFirst(transactions).length > 0 ? sortTransactionsLatestFirst(transactions).slice(0, 50).map((t: any) => `
                         <tr>
                             <td class="py-2 px-4 font-medium text-slate-600">${t.date}</td>
                             <td class="py-2 px-4">

@@ -9,7 +9,8 @@ import {
   calculateBudgetPace,
   formatMoney,
   calculateEmergencyRunway,
-  calculateFinancialHealthScore
+  calculateFinancialHealthScore,
+  sortTransactionsLatestFirst
 } from '../utils/math';
 import { parseMultipleMpesaMessages } from '../utils/mpesa';
 import { renderFinancialStatement } from '../views/statementView';
@@ -1247,7 +1248,7 @@ financeRoutes.get('/finance/statement', async (c) => {
   const { supabase, userId, username } = await getRequestContext(c);
 
   let accQuery = supabase.from('accounts').select('*').order('created_at', { ascending: true });
-  let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false });
+  let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false }).order('created_at', { ascending: false });
   let debtQuery = supabase.from('debts').select('*').order('due_at', { ascending: true });
 
   if (userId) {
@@ -1258,7 +1259,7 @@ financeRoutes.get('/finance/statement', async (c) => {
 
   const [accRes, txRes, debtRes] = await Promise.all([accQuery, txQuery, debtQuery]);
   const accounts = accRes.data || [];
-  const transactions = txRes.data || [];
+  const transactions = sortTransactionsLatestFirst(txRes.data || []);
   const debts = debtRes.data || [];
 
   const totalBalance = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);

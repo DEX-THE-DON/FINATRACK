@@ -21,7 +21,8 @@ import {
   calculateEmergencyRunway,
   calculateEvRoiSavings,
   calculateFinancialHealthScore,
-  buildUnifiedTimeline
+  buildUnifiedTimeline,
+  sortTransactionsLatestFirst
 } from './utils/math';
 import { Decimal } from 'decimal.js';
 
@@ -146,7 +147,7 @@ app.get('/', async (c) => {
   if (userId) {
     const [accRes, txRes, goalRes, bgtRes, debtRes, billRes, ruleRes, logRes, compRes] = await Promise.all([
       supabase.from('accounts').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-      supabase.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(50),
+      supabase.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100),
       supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
       supabase.from('budgets').select('*').eq('user_id', userId),
       supabase.from('debts').select('*').eq('user_id', userId).order('due_at', { ascending: true }),
@@ -157,7 +158,7 @@ app.get('/', async (c) => {
     ]);
 
     accounts = accRes.data || [];
-    transactions = txRes.data || [];
+    transactions = sortTransactionsLatestFirst(txRes.data || []);
     goals = goalRes.data || [];
     budgets = bgtRes.data || [];
     debts = debtRes.data || [];

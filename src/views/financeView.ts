@@ -1,3 +1,5 @@
+import { sortTransactionsLatestFirst } from '../utils/math';
+
 export function renderFinanceDashboard(data: any): string {
   const {
     accounts = [],
@@ -2613,12 +2615,17 @@ export function renderFinanceDashboard(data: any): string {
 
             <!-- Recent Transactions Table -->
             <div class="pt-4 border-t dark:border-gray-800 space-y-2">
-                <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200">Recent Transactions (${transactions.length})</h3>
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200">Recent Transactions (${transactions.length})</h3>
+                    <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1">
+                        <span>⚡</span> Latest First
+                    </span>
+                </div>
                 <div class="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                     <table class="w-full text-left text-xs">
                         <thead class="bg-gray-50 dark:bg-gray-800/60 uppercase text-gray-400 text-[10px]">
                             <tr>
-                                <th class="py-3 px-3">Date</th>
+                                <th class="py-3 px-3">Date & Time</th>
                                 <th class="py-3 px-3">Type</th>
                                 <th class="py-3 px-3">Category & Details</th>
                                 <th class="py-3 px-3">Amount</th>
@@ -2626,36 +2633,54 @@ export function renderFinanceDashboard(data: any): string {
                             </tr>
                         </thead>
                         <tbody class="divide-y dark:divide-gray-800">
-                            ${transactions.length > 0 ? transactions.slice(0, 20).map((t: any) => {
-                                const acc = accounts.find((a: any) => a.id === t.account_id);
-                                return `
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
-                                <td class="py-2.5 px-3 font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">${t.date}</td>
-                                <td class="py-2.5 px-3 whitespace-nowrap">
-                                    <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${t.transaction_type === 'INCOME' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}">
-                                        ${t.transaction_type}
-                                    </span>
-                                </td>
-                                <td class="py-2.5 px-3">
-                                    <div class="flex flex-col">
-                                        <span class="font-bold text-gray-800 dark:text-gray-200">${t.category}</span>
-                                        ${t.description ? `<span class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">${t.description}</span>` : ''}
-                                        ${acc ? `<span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-semibold">• ${acc.name}</span>` : ''}
-                                    </div>
-                                </td>
-                                <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount whitespace-nowrap" data-kes="${t.amount}" data-prefix="${t.transaction_type === 'INCOME' ? '+' : '-'}">
-                                    ${t.transaction_type === 'INCOME' ? '+' : '-'}${formatKes(t.amount)}
-                                </td>
-                                <td class="py-2.5 px-3 text-center whitespace-nowrap">
-                                    <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
-                                        <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold text-xs p-1">✕</button>
-                                    </form>
-                                </td>
-                            </tr>`;
-                            }).join('') : `
-                            <tr>
-                                <td colspan="5" class="py-6 text-center text-gray-400">No transactions recorded yet. Use the form above or the M-Pesa SMS auto-parser!</td>
-                            </tr>`}
+                            ${(() => {
+                                const sortedTxs = sortTransactionsLatestFirst(transactions);
+                                if (sortedTxs.length === 0) {
+                                    return `
+                                    <tr>
+                                        <td colspan="5" class="py-6 text-center text-gray-400">No transactions recorded yet. Use the form above or the M-Pesa SMS auto-parser!</td>
+                                    </tr>`;
+                                }
+                                return sortedTxs.slice(0, 30).map((t: any) => {
+                                    const acc = accounts.find((a: any) => a.id === t.account_id);
+                                    let timeStr = '';
+                                    if (t.created_at && String(t.created_at).includes('T')) {
+                                        try {
+                                            const d = new Date(t.created_at);
+                                            if (!isNaN(d.getTime())) {
+                                                timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                            }
+                                        } catch {}
+                                    }
+                                    return `
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
+                                        <td class="py-2.5 px-3 whitespace-nowrap">
+                                            <div class="font-bold text-gray-800 dark:text-gray-200">${t.date}</div>
+                                            ${timeStr ? `<div class="text-[10px] text-gray-400 dark:text-gray-500 font-mono">${timeStr}</div>` : ''}
+                                        </td>
+                                        <td class="py-2.5 px-3 whitespace-nowrap">
+                                            <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${t.transaction_type === 'INCOME' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}">
+                                                ${t.transaction_type}
+                                            </span>
+                                        </td>
+                                        <td class="py-2.5 px-3">
+                                            <div class="flex flex-col">
+                                                <span class="font-bold text-gray-800 dark:text-gray-200">${t.category}</span>
+                                                ${t.description ? `<span class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">${t.description}</span>` : ''}
+                                                ${acc ? `<span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-semibold">• ${acc.name}</span>` : ''}
+                                            </div>
+                                        </td>
+                                        <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount whitespace-nowrap" data-kes="${t.amount}" data-prefix="${t.transaction_type === 'INCOME' ? '+' : '-'}">
+                                            ${t.transaction_type === 'INCOME' ? '+' : '-'}${formatKes(t.amount)}
+                                        </td>
+                                        <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                                            <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
+                                                <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold text-xs p-1">✕</button>
+                                            </form>
+                                        </td>
+                                    </tr>`;
+                                }).join('');
+                            })()}
                         </tbody>
                     </table>
                 </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'finatrack-v19';
+const CACHE_NAME = 'finatrack-v20';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/static/icons/icon-192.png',

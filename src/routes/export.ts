@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { AppEnv, getRequestContext } from '../db/supabase';
+import { sortTransactionsLatestFirst } from '../utils/math';
 
 export const exportRoutes = new Hono<{ Bindings: AppEnv }>();
 
 exportRoutes.get('/finance/export/csv', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
-  let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false });
+  let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false }).order('created_at', { ascending: false });
   let accQuery = supabase.from('accounts').select('id, name');
   if (userId) {
     txQuery = txQuery.eq('user_id', userId);
@@ -22,7 +23,9 @@ exportRoutes.get('/finance/export/csv', async (c) => {
 
   let csvContent = 'ID,Date,Account,Type,Category,Amount_KES,Amount_USD,Description\n';
 
-  for (const t of txs || []) {
+  const sortedTxs = sortTransactionsLatestFirst(txs || []);
+
+  for (const t of sortedTxs) {
     const amtKes = Number(t.amount || 0);
     const amtUsd = (amtKes / liveRate).toFixed(2);
     const accName = accMap.get(t.account_id || '') || 'Unknown';

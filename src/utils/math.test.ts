@@ -166,4 +166,21 @@ console.assert(goalSubSplits[1].allocated_amount === 450, `Cooker allocation sho
 console.assert(goalSubSplits[2].allocated_amount === 450, `Sofa allocation should be 450, got ${goalSubSplits[2].allocated_amount}`);
 console.log(`✅ Goal Sub-Splits (1.5k into 1 Lock Vault): TV=${goalSubSplits[0].display_amount}, Cooker=${goalSubSplits[1].display_amount}, Sofa=${goalSubSplits[2].display_amount}`);
 
+// Test 15: Sort Transactions Latest First (Date + Created_At)
+import { sortTransactionsLatestFirst } from './math';
+const rawTxs = [
+  { id: 'tx-1', date: '2026-09-20', created_at: '2026-09-20T08:00:00Z', amount: 500 },
+  { id: 'tx-2', date: '2026-09-22', created_at: '2026-09-22T08:00:00Z', amount: 1500 },
+  { id: 'tx-3', date: '2026-09-22', created_at: '2026-09-22T14:30:00Z', amount: 2000 }, // latest on Sept 22
+  { id: 'tx-4', date: '2026-09-21', created_at: '2026-09-22T15:00:00Z', amount: 300 }, // entered today for yesterday
+];
+
+const sorted = sortTransactionsLatestFirst(rawTxs);
+console.assert(sorted[0].id === 'tx-3', `First should be latest on Sept 22 (tx-3), got ${sorted[0].id}`);
+console.assert(sorted[1].id === 'tx-2', `Second should be morning Sept 22 (tx-2), got ${sorted[1].id}`);
+console.assert(sorted[2].id === 'tx-4', `Third should be Sept 21 (tx-4), got ${sorted[2].id}`);
+console.assert(sorted[3].id === 'tx-1', `Fourth should be Sept 20 (tx-1), got ${sorted[3].id}`);
+console.log('✅ Recent Transactions Sorting: 100% Correct Latest First (Date desc -> Created_At desc)');
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
+
