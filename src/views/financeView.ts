@@ -1,4 +1,4 @@
-import { sortTransactionsLatestFirst } from '../utils/math';
+import { sortTransactionsLatestFirst, calculateWeeklyScorecard, calculateTurnoverTax } from '../utils/math';
 
 export function renderFinanceDashboard(data: any): string {
   const {
@@ -82,6 +82,9 @@ export function renderFinanceDashboard(data: any): string {
 
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const scorecard = data.weekly_scorecard || calculateWeeklyScorecard(transactions);
+  const totTax = data.turnover_tax || calculateTurnoverTax(monthly_income);
 
   const getBadgeStyles = (badge: string) => {
     switch (badge) {
@@ -743,8 +746,27 @@ export function renderFinanceDashboard(data: any): string {
                     party = match[3].trim().replace(/\\.+$/, '');
                     type = 'EXPENSE';
                     cat = 'Cash Withdrawal';
+                } else if (itemText.includes('credited with') || itemText.includes('debited with') || itemText.includes('received from') || itemText.includes('sent to') || itemText.includes('MCo-op Cash')) {
+                    const isCredit = /credited|received/i.test(itemText);
+                    const amtMatch = itemText.match(/(?:KES|Ksh)\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+                    const refMatch = itemText.match(/Ref:?\s*([A-Za-z0-9]+)/i);
+                    if (amtMatch) {
+                        code = refMatch ? refMatch[1].toUpperCase() : 'BNK' + Math.random().toString(36).substring(2, 8).toUpperCase();
+                        amt = parseFloat(amtMatch[1].replace(/,/g, ''));
+                        type = isCredit ? 'INCOME' : 'EXPENSE';
+                        party = isCredit ? (itemText.match(/from\s+([^.\n\r]+)/i)?.[1] || 'Bank Inflow') : (itemText.match(/(?:paid to|sent to|to)\s+([^.\n\r]+)/i)?.[1] || 'Bank Outflow');
+                        party = party.trim().replace(/\.+$/, '');
+                        const pUpper = party.toUpperCase();
+                        if (type === 'INCOME') {
+                            cat = (pUpper.includes('BOLT') || pUpper.includes('UBER') || pUpper.includes('GLOVO')) ? 'Rider & Boda Deliveries' : 'Bank Deposit & Inflow';
+                        } else {
+                            if (pUpper.includes('RUBIS') || pUpper.includes('TOTAL') || pUpper.includes('SHELL') || pUpper.includes('PETROL')) cat = 'Fuel & Petrol';
+                            else if (pUpper.includes('KPLC') || pUpper.includes('WATER')) cat = 'Utilities & Bills';
+                            else cat = 'Living Expenses';
+                        }
+                    }
                 } else {
-                    const genericMatch = itemText.match(/([A-Z0-9]{8,12})\\s+.*?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)/i);
+                    const genericMatch = itemText.match(/([A-Z0-9]{8,12})\s+.*?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
                     if (genericMatch) {
                         code = genericMatch[1].toUpperCase();
                         amt = parseFloat(genericMatch[2].replace(/,/g, ''));
@@ -785,7 +807,7 @@ export function renderFinanceDashboard(data: any): string {
                 if (previewDiv) previewDiv.classList.remove('hidden');
                 if (importBtn) importBtn.removeAttribute('disabled');
             } else {
-                alert('Could not detect standard M-Pesa receipt formats. Please ensure message starts with code (e.g. QA12345678 Confirmed...)');
+                alert('Could not detect standard M-Pesa or Bank SMS formats. Please ensure message contains transaction code and amount (KES/Ksh).');
             }
         }
 
@@ -796,6 +818,10 @@ export function renderFinanceDashboard(data: any): string {
                 input.value = 'QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE 0712345678 on 12/9/26 at 11:30 AM. New M-PESA balance is Ksh5,400.00. Transaction cost, Ksh0.00.';
             } else if (type === 'ev') {
                 input.value = 'QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.';
+            } else if (type === 'bank') {
+                input.value = 'Dear Customer, your A/C *******1234 has been credited with KES 4,500.00 on 22/09/2026 10:30:15 from BOLT OPERATIONS Ref: BQD7654321. Available Bal: KES 18,200.00.\\n\\n' +
+                              'Confirmed. Ksh 5,000.00 received from UBER B.V on 22/09/2026 at 09:15 AM. Ref: KCB123456. New balance is Ksh 22,000.00.\\n\\n' +
+                              'Dear Customer, your A/C *******1234 has been debited with KES 1,500.00 on 22/09/2026 14:20:00 paid to RUBIS ENERGY Ref: EQ987654. Available Bal: KES 16,700.00.';
             } else {
                 input.value = 'QA11111111 Confirmed. Ksh2,400.00 received from BOLT DELIVERIES on 12/9/26 at 6:00 PM. New M-PESA balance is Ksh7,170.00.\\n' +
                               'QB22222222 Confirmed. Ksh630.00 paid to TOTAL ENERGIES. on 12/9/26 at 7:30 PM. New M-PESA balance is Ksh6,540.00.\\n' +
@@ -1264,6 +1290,108 @@ export function renderFinanceDashboard(data: any): string {
                 `}
             </div>
         </div>
+
+        <!-- 📈 Weekly Performance Scorecard & 🇰🇪 KRA Turnover Tax (TOT) Estimator -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <!-- 🗓️ Weekly Financial Performance Scorecard -->
+            <div id="weekly-scorecard-card" class="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-6 rounded-2xl border border-indigo-800/60 shadow-md space-y-4 text-white">
+                <div class="flex items-center justify-between border-b border-indigo-800/60 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-xl shadow-md shrink-0">
+                            🏆
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span>Weekly Performance Scorecard</span>
+                                <span class="text-[10px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 px-2 py-0.5 rounded-full font-bold">7-Day Trailing</span>
+                            </h2>
+                            <p class="text-xs text-indigo-200/80">Real cashflow momentum across all your active accounts</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div class="p-3 bg-slate-950/80 rounded-xl border border-indigo-950">
+                        <p class="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">⚡ 7-Day Inflow</p>
+                        <p class="text-lg font-black text-emerald-400 mt-1 convertible-amount" data-kes="${scorecard.totalInflow}">Ksh ${scorecard.totalInflow.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        <p class="text-[10px] text-gray-400">Total money received</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-950/80 rounded-xl border border-indigo-950">
+                        <p class="text-[10px] text-rose-300 font-bold uppercase tracking-wider">💸 7-Day Outflow</p>
+                        <p class="text-lg font-black text-rose-400 mt-1 convertible-amount" data-kes="${scorecard.totalOutflow}">Ksh ${scorecard.totalOutflow.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        <p class="text-[10px] text-gray-400">Expenses & upkeep</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-950/80 rounded-xl border border-indigo-950">
+                        <p class="text-[10px] text-cyan-300 font-bold uppercase tracking-wider">🛡️ Net Retained</p>
+                        <p class="text-lg font-black text-cyan-300 mt-1 convertible-amount" data-kes="${scorecard.netWeekly}">Ksh ${scorecard.netWeekly.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        <p class="text-[10px] text-gray-400">Net retained wealth</p>
+                    </div>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/60 rounded-xl border border-indigo-900/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                    <div>
+                        <span class="text-gray-300">⛽ Fuel & Expense Ratio:</span>
+                        <strong class="text-amber-400 ml-1 font-mono">${scorecard.fuelRatioPct}% of inflow</strong>
+                        <span class="text-[10px] text-gray-400 ml-1">(Ksh ${scorecard.fuelCost.toLocaleString()})</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-300">🌟 Top Day:</span>
+                        <strong class="text-emerald-300 ml-1 font-mono">${scorecard.bestDay.day} (Ksh ${scorecard.bestDay.amount.toLocaleString()})</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🇰🇪 KRA Turnover Tax (TOT) Estimator Card -->
+            <div id="turnover-tax-card" class="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b dark:border-gray-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-rose-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
+                            🇰🇪
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <span>KRA Turnover Tax (TOT) Estimator</span>
+                                <span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">3% Simplified</span>
+                            </h2>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Kenya Revenue Authority presumptive & turnover tax reserve calculator</p>
+                        </div>
+                    </div>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${totTax.isEligible ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}">
+                        ${totTax.isEligible ? '🟢 TOT Regime (1M–25M)' : 'ℹ️ Standard Regime'}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl border dark:border-gray-700">
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Monthly Turnover</p>
+                        <p class="text-base font-black text-gray-900 dark:text-white mt-1 convertible-amount" data-kes="${monthly_income}">Ksh ${Number(monthly_income).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        <p class="text-[9px] text-gray-400">Gross monthly inflow</p>
+                    </div>
+                    <div class="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/60">
+                        <p class="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase">3% TOT Reserve</p>
+                        <p class="text-base font-black text-amber-600 dark:text-amber-400 mt-1 convertible-amount" data-kes="${totTax.monthlyTaxKes}">Ksh ${totTax.monthlyTaxKes.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        <p class="text-[9px] text-amber-700 dark:text-amber-300">Set aside this month</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl border dark:border-gray-700">
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Quarterly Est.</p>
+                        <p class="text-base font-black text-purple-600 dark:text-purple-400 mt-1 convertible-amount" data-kes="${totTax.quarterlyTaxKes}">Ksh ${totTax.quarterlyTaxKes.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        <p class="text-[9px] text-gray-400">3-Month liability</p>
+                    </div>
+                </div>
+
+                <div class="p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 space-y-1">
+                    <p class="text-[11px] text-amber-900 dark:text-amber-200 font-semibold leading-relaxed">
+                        📌 ${totTax.advice}
+                    </p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">
+                        Filing Deadline: <strong>20th of every month</strong> via KRA iTax portal.
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <div id="targets-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/30 p-5 sm:p-6 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm space-y-6 text-gray-900 dark:text-white">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-emerald-100 dark:border-emerald-900/40 pb-4">
                 <div class="flex items-center space-x-3">
@@ -1595,16 +1723,19 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                     <div>
                         <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span>Smart M-Pesa Batch SMS Auto-Parser</span>
-                            <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Multi-SMS Regex</span>
+                            <span>Smart M-Pesa & Bank SMS Auto-Parser</span>
+                            <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">M-Pesa • Equity • KCB • Co-op</span>
                         </h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Paste single or multiple M-Pesa messages directly from your clipboard to extract transactions instantly!</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Paste single or multiple M-Pesa or Kenyan Bank SMS messages directly from your clipboard to extract transactions instantly!</p>
                     </div>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
                     <button type="button" onclick="pasteSampleMpesa('single')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-lg transition active:scale-95">
                         📋 Sample Received
+                    </button>
+                    <button type="button" onclick="pasteSampleMpesa('bank')" class="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg transition active:scale-95 border border-indigo-200 dark:border-indigo-800">
+                        🏦 Sample Bank SMS (Equity / KCB)
                     </button>
                     <button type="button" onclick="pasteSampleMpesa('ev')" class="px-2.5 py-1.5 bg-cyan-50 dark:bg-cyan-950/50 hover:bg-cyan-100 text-cyan-700 dark:text-cyan-300 text-xs font-semibold rounded-lg transition active:scale-95 border border-cyan-200 dark:border-cyan-800">
                         ⚡ Sample EV Swap (Spiro)
@@ -1618,9 +1749,9 @@ export function renderFinanceDashboard(data: any): string {
             <form action="/finance/mpesa/import" method="POST" class="space-y-4">
                 <div class="space-y-1.5">
                     <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">
-                        Paste M-Pesa SMS text (Single or Multiple messages):
+                        Paste M-Pesa or Bank SMS text (Single or Multiple messages):
                     </label>
-                    <textarea id="mpesa-batch-input" name="raw_sms" rows="3" placeholder="QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE...&#10;QB87654321 Confirmed. Ksh630.00 paid to TOTAL ENERGIES..." class="w-full p-3 font-mono text-xs bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500" required></textarea>
+                    <textarea id="mpesa-batch-input" name="raw_sms" rows="3" placeholder="QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE...&#10;Dear Customer, your A/C has been credited with KES 4,500.00 from BOLT...&#10;Confirmed. Ksh 5,000.00 received from UBER..." class="w-full p-3 font-mono text-xs bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500" required></textarea>
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-center justify-between gap-3">

@@ -37,6 +37,20 @@ export function renderRiderDashboard(data: any): string {
   const lastShiftTotalExp = lastShift ? (Number(lastShift.fuel_cost || 0) + Number(lastShift.food_spent || 0) + Number(lastShift.airtime_spent || 0) + Number(lastShift.misc_expenses || 0) + Number(lastShift.maintenance_cost || 0)) : 0;
   const lastShiftNet = lastShift ? (Number(lastShift.total_earned || 0) - lastShiftTotalExp) : 0;
 
+  // CPK (Cost Per Kilometer) across all shifts
+  const totalKmCovered = (rider_logs || []).reduce((acc: number, l: any) => acc + Number(l.kilometers || 0), 0);
+  const totalFuelExp = (rider_logs || []).reduce((acc: number, l: any) => acc + Number(l.fuel_cost || 0), 0);
+  const overallCpk = totalKmCovered > 0 ? (totalFuelExp / totalKmCovered).toFixed(2) : (activePowerType === 'ELECTRIC' ? '1.80' : '4.50');
+
+  // Remittance & Kodi calculations for today
+  const todayShifts = (rider_logs || []).filter((l: any) => l.date === today);
+  const todayNetEarned = todayShifts.reduce((acc: number, l: any) => {
+    const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
+    return acc + (Number(l.total_earned || 0) - exp);
+  }, 0);
+  const dailyTarget = Number(active_bike?.daily_target || 2500);
+  const dailyTargetMetPct = Math.min(100, Math.round((todayNetEarned / (dailyTarget || 1)) * 100));
+
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -415,6 +429,68 @@ export function renderRiderDashboard(data: any): string {
                     resEl.innerText = 'Ksh ' + parseFloat(yieldVal).toLocaleString(undefined, {minimumFractionDigits: 2}) + ' / hr (' + hrs.toFixed(1) + 'h)';
                 }
             }
+        }
+
+        function shareStintWhatsApp(date, startTime, endTime, hours, trips, gross, fuel, food, airtime, misc, net, powerType, plate) {
+            const hrs = parseFloat(hours) || 8;
+            const g = parseFloat(gross) || 0;
+            const f = parseFloat(fuel) || 0;
+            const fd = parseFloat(food) || 0;
+            const air = parseFloat(airtime) || 0;
+            const m = parseFloat(misc) || 0;
+            const n = parseFloat(net) || 0;
+            const yieldVal = hrs > 0 ? (g / hrs).toFixed(2) : '0.00';
+            const upkeep = fd + air + m;
+            const savedMmf = (n * 0.20).toFixed(2);
+            
+            const text = "🏁 *Finatrack Daily Shift Performance*\\n" +
+                         "📅 *Date:* " + date + "\\n" +
+                         "🚗 *Vehicle:* " + (plate || 'Fleet Vehicle') + " (" + (powerType || 'PETROL') + ")\\n" +
+                         "⏱️ *Working Hours:* " + (startTime || '11:00') + " - " + (endTime || '22:00') + " (" + hrs + "h) | *Trips:* " + (trips || 0) + "\\n" +
+                         "💰 *Gross Inflow:* Ksh " + g.toLocaleString() + "\\n" +
+                         "⛽ *Fuel / Energy:* Ksh " + f.toLocaleString() + "\\n" +
+                         "🍲 *Upkeep & Lunch:* Ksh " + upkeep.toLocaleString() + "\\n" +
+                         "🛡️ *Net Profit:* Ksh " + n.toLocaleString() + " (*Yield:* Ksh " + yieldVal + "/hr)\\n" +
+                         "💧 *Waterfall Saved:* Ksh " + savedMmf + " to Ziidi MMF\\n" +
+                         "----------------------------\\n" +
+                         "_Logged via Finatrack Fleet_ 🇰🇪";
+
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).catch(() => {});
+                }
+            } catch(e) {}
+            
+            const waUrl = "https://api.whatsapp.com/send?text=" + encodeURIComponent(text);
+            window.open(waUrl, '_blank');
+        }
+
+        function calcOdometerServiceStatus() {
+            const cur = parseFloat(document.getElementById('current_odometer_input')?.value) || 0;
+            const last = parseFloat(document.getElementById('last_service_odo_input')?.value) || 0;
+            const interval = parseFloat(document.getElementById('service_interval_km_select')?.value) || 3000;
+            const nextOdo = last + interval;
+            const remaining = nextOdo - cur;
+            const nextEl = document.getElementById('next_service_odo_display');
+            const badgeEl = document.getElementById('odo_service_badge');
+            if (nextEl) nextEl.innerText = nextOdo.toLocaleString() + ' km';
+            if (badgeEl) {
+                if (remaining <= 0) {
+                    badgeEl.className = 'px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 animate-pulse';
+                    badgeEl.innerText = '🚨 Overdue by ' + Math.abs(remaining).toLocaleString() + ' km!';
+                } else if (remaining <= 500) {
+                    badgeEl.className = 'px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300';
+                    badgeEl.innerText = '⚠️ Service Soon (' + remaining.toLocaleString() + ' km left)';
+                } else {
+                    badgeEl.className = 'px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300';
+                    badgeEl.innerText = '✅ Good (' + remaining.toLocaleString() + ' km left)';
+                }
+            }
+            try {
+                localStorage.setItem('finatrack_current_odo', cur);
+                localStorage.setItem('finatrack_last_service_odo', last);
+                localStorage.setItem('finatrack_interval_km', interval);
+            } catch(e) {}
         }
 
         function showTimeTab(tabId, btn) {
@@ -975,6 +1051,11 @@ export function renderRiderDashboard(data: any): string {
                     <p class="text-xs text-blue-200 mt-0.5">Analyze which shift hours, days of the week, and peak windows generate your highest hourly rates.</p>
                 </div>
                 <div class="flex items-center space-x-2">
+                    ${lastShift ? `
+                    <button type="button" onclick="shareStintWhatsApp('${lastShift.date}', '${lastShift.start_time || '11:00'}', '${lastShift.end_time || '22:00'}', ${lastShift.shift_hours || 8}, ${lastShift.trips_completed || 0}, ${lastShift.total_earned || 0}, ${lastShift.fuel_cost || 0}, ${lastShift.food_spent || 0}, ${lastShift.airtime_spent || 0}, ${lastShift.misc_expenses || 0}, ${lastShiftNet}, '${lastShift.power_type || activePowerType}', '${active_bike ? active_bike.plate_number : ''}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 border border-emerald-400 rounded-xl text-xs font-bold text-white transition flex items-center space-x-1.5 shadow-sm active:scale-95" title="Share last shift to WhatsApp">
+                        <span>📲 Share to WhatsApp</span>
+                    </button>
+                    ` : ''}
                     <a href="/rider/export/csv" class="px-3 py-1.5 bg-blue-800/70 hover:bg-blue-700 border border-blue-600 rounded-xl text-xs font-bold transition flex items-center space-x-1">
                         <span>📥 Export Shift CSV</span>
                     </a>
@@ -1357,7 +1438,135 @@ export function renderRiderDashboard(data: any): string {
             </form>
         </div>
 
-        <!-- 🛠️ Motorbike Maintenance & Service Log System -->
+        <!-- 🤝 Owner Remittance & Daily Lease Tracker (Kodi / Hire-Purchase) Card -->
+        <div id="remittance-card" class="bg-gradient-to-br from-indigo-950/40 via-slate-900 to-slate-950 rounded-3xl p-6 shadow-sm border border-indigo-800/50 space-y-5 text-white">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-800/60 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-xl shadow-md">
+                        🤝
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold flex items-center gap-2">
+                            <span>Owner Remittance & Daily Lease Tracker (Kodi)</span>
+                            <span class="text-[10px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 px-2 py-0.5 rounded-full font-bold">Fleet Partnership</span>
+                        </h2>
+                        <p class="text-xs text-indigo-200/80">Track daily owner lease targets (Ksh 500/day bike, Ksh 1,500/day car) and hire-purchase progress.</p>
+                    </div>
+                </div>
+
+                <button type="button" onclick="document.getElementById('new-financing-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5">
+                    <span>➕ Configure Lease / Kodi</span>
+                </button>
+            </div>
+
+            <!-- Configure Lease Form (Collapsible) -->
+            <div id="new-financing-form-container" class="hidden p-4 bg-slate-950/80 rounded-2xl border border-indigo-800/60 space-y-3">
+                <form action="/rider/financing/create" method="POST" class="space-y-3 text-xs">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Owner / Provider Name</label>
+                            <input type="text" name="provider_name" placeholder="e.g. Mzee Mwangi (Owner) or Watu Credit" value="Owner Remittance" class="w-full p-2 bg-slate-900 border border-indigo-800 rounded-xl font-bold text-white" required>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Daily Target / Kodi (<span class="curr-symbol-label">Ksh</span>)</label>
+                            <input type="number" step="any" inputmode="decimal" name="daily_amount" placeholder="e.g. 500 (boda) or 1500 (car)" value="500" class="w-full p-2 bg-slate-900 border border-indigo-800 rounded-xl font-black text-emerald-400" required>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Total Lease / Hire-Purchase (<span class="curr-symbol-label">Ksh</span>)</label>
+                            <input type="number" step="any" inputmode="decimal" name="total_cost" placeholder="e.g. 180000" value="180000" class="w-full p-2 bg-slate-900 border border-indigo-800 rounded-xl font-bold text-white">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Vehicle</label>
+                            <select name="bike_id" class="w-full p-2 bg-slate-900 border border-indigo-800 rounded-xl font-semibold text-white">
+                                ${bikes.map((b: any) => `<option value="${b.id}">${b.plate_number} (${b.model_name || 'Vehicle'})</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Notes / Terms</label>
+                            <input type="text" name="notes" placeholder="e.g. Due every evening by 9pm via M-Pesa" value="Daily kodi due by 9pm to vehicle owner" class="w-full p-2 bg-slate-900 border border-indigo-800 rounded-xl font-medium text-white">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-1">
+                        <button type="button" onclick="document.getElementById('new-financing-form-container')?.classList.add('hidden')" class="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg">Cancel</button>
+                        <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 font-bold rounded-lg text-white">Save Lease Target</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Active Lease / Kodi Displays -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Daily Kodi Status Card -->
+                <div class="p-4 bg-slate-950/70 border border-indigo-900/60 rounded-2xl space-y-3">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-indigo-300">Today's Remittance Status</span>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${todayNetEarned >= dailyTarget ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}">
+                            ${todayNetEarned >= dailyTarget ? '✅ Target Met' : '⏳ In Progress'}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-baseline">
+                        <div>
+                            <p class="text-[10px] text-gray-400 uppercase">Today's Net Take-Home</p>
+                            <p class="text-2xl font-black text-cyan-400">Ksh ${todayNetEarned.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-gray-400 uppercase">Target Kodi</p>
+                            <p class="text-sm font-bold text-gray-300">Ksh ${dailyTarget.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-indigo-950">
+                        <div class="h-full rounded-full transition-all duration-300 ${todayNetEarned >= dailyTarget ? 'bg-emerald-500' : 'bg-cyan-500'}" style="width: ${dailyTargetMetPct}%"></div>
+                    </div>
+                    <p class="text-[11px] text-gray-400">
+                        ${todayNetEarned >= dailyTarget ? '🎉 You have covered your daily owner lease and generated profit!' : `Ksh ${(Math.max(0, dailyTarget - todayNetEarned)).toLocaleString(undefined, {minimumFractionDigits: 2})} remaining to clear owner remittance.`}
+                    </p>
+                </div>
+
+                <!-- Hire-Purchase / Financing Cards List -->
+                ${bike_financings.length > 0 ? bike_financings.map((f: any) => {
+                    const tot = Number(f.total_cost || 1);
+                    const pd = Number(f.paid_amount || 0);
+                    const pct = Math.min(100, Math.round((pd / tot) * 100));
+                    const rem = Math.max(0, tot - pd);
+                    return `
+                    <div class="p-4 bg-slate-950/70 border border-indigo-900/60 rounded-2xl space-y-3 flex flex-col justify-between">
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h4 class="font-bold text-sm text-white">${f.provider_name}</h4>
+                                    <span class="text-[10px] text-indigo-300">Target: Ksh ${Number(f.daily_amount || 500).toLocaleString()}/day</span>
+                                </div>
+                                <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${pct >= 100 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-indigo-500/20 text-indigo-300'}">
+                                    ${pct}% Paid
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-xs pt-1">
+                                <span class="text-gray-400">Paid: <strong class="text-emerald-400 font-mono">Ksh ${pd.toLocaleString()}</strong></span>
+                                <span class="text-gray-400">Rem: <strong class="text-amber-400 font-mono">Ksh ${rem.toLocaleString()}</strong></span>
+                            </div>
+                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" style="width: ${pct}%"></div>
+                            </div>
+                        </div>
+
+                        <form action="/rider/financing/pay/${f.id}" method="POST" class="flex gap-2 pt-2 border-t border-indigo-950">
+                            <input type="number" step="any" name="amount" value="${f.daily_amount || 500}" class="w-24 p-1 bg-slate-900 border border-indigo-800 rounded-lg text-xs font-bold text-white text-center">
+                            <button type="submit" class="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition active:scale-95 shadow-xs">
+                                💳 Log Kodi Remittance
+                            </button>
+                        </form>
+                    </div>`;
+                }).join('') : `
+                <div class="p-4 bg-slate-950/40 border border-dashed border-indigo-900/60 rounded-2xl flex flex-col items-center justify-center text-center space-y-1">
+                    <p class="text-xl">🤝</p>
+                    <p class="text-xs font-bold text-indigo-200">No Hire-Purchase / Long-term Lease Configured</p>
+                    <p class="text-[11px] text-gray-400">Click "➕ Configure Lease / Kodi" above if you are on a daily lease or hire-purchase agreement.</p>
+                </div>`}
+            </div>
+        </div>
+
+        <!-- 🛠️ Vehicle Maintenance & Service Log System -->
         <div id="maint-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-5">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b dark:border-gray-800 pb-3">
                 <div class="flex items-center space-x-3">
@@ -1366,10 +1575,10 @@ export function renderRiderDashboard(data: any): string {
                     </div>
                     <div>
                         <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span>Motorbike Maintenance & Service Tracker</span>
+                            <span>Vehicle Maintenance & Fleet Health (Car & Boda)</span>
                             <span class="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Fleet Health</span>
                         </h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Record oil changes, brake pads, spark plugs, mechanic labor, and prevent costly breakdowns.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Record oil changes, brake pads, spark plugs, mechanic labor, and track cost per kilometer (CPK).</p>
                     </div>
                 </div>
 
@@ -1377,6 +1586,47 @@ export function renderRiderDashboard(data: any): string {
                     <button type="button" onclick="toggleMaintDrawer()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5">
                         <span>➕ Log Service / Repair</span>
                     </button>
+                </div>
+            </div>
+
+            <!-- 🚗 Odometer, CPK & Service Interval Tracker Box -->
+            <div class="p-4 bg-slate-900 text-white rounded-2xl border border-indigo-900/60 space-y-3">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xl">🚗</span>
+                        <div>
+                            <h3 class="font-bold text-sm text-indigo-200">Odometer, Service Countdown & Real CPK</h3>
+                            <p class="text-[11px] text-gray-400">Track oil change intervals and cost per kilometer for cars & bikes</p>
+                        </div>
+                    </div>
+                    <span id="odo_service_badge" class="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300">
+                        ✅ In Good Standing
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
+                        <label class="block text-[10px] text-gray-400 mb-0.5">Current Odometer (km)</label>
+                        <input type="number" id="current_odometer_input" value="12450" oninput="calcOdometerServiceStatus()" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-emerald-400 text-sm">
+                    </div>
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
+                        <label class="block text-[10px] text-gray-400 mb-0.5">Last Service Odometer (km)</label>
+                        <input type="number" id="last_service_odo_input" value="10000" oninput="calcOdometerServiceStatus()" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-white text-sm">
+                    </div>
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
+                        <label class="block text-[10px] text-gray-400 mb-0.5">Service Interval</label>
+                        <select id="service_interval_km_select" onchange="calcOdometerServiceStatus()" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-bold text-white text-xs">
+                            <option value="2500">2,500 km (Boda / Heavy Delivery)</option>
+                            <option value="3000" selected>3,000 km (Motorbike Standard)</option>
+                            <option value="5000">5,000 km (Uber / Bolt Petrol Car)</option>
+                            <option value="10000">10,000 km (Synthetic Oil / Major Service)</option>
+                        </select>
+                    </div>
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
+                        <p class="text-[10px] text-indigo-300 font-bold uppercase">⛽ Real CPK</p>
+                        <p class="text-base font-black text-cyan-400 mt-1">Ksh ${overallCpk} <span class="text-[10px] text-gray-400 font-normal">/ km</span></p>
+                        <p class="text-[9px] text-gray-400">Next due at: <strong id="next_service_odo_display" class="text-indigo-200">13,000 km</strong></p>
+                    </div>
                 </div>
             </div>
 
@@ -1772,9 +2022,14 @@ export function renderRiderDashboard(data: any): string {
                             </td>
                             <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400 convertible-amount" data-kes="${netShiftRemittance}">Ksh ${netShiftRemittance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td class="p-4 text-center">
-                                <form action="/rider/logs/delete/${l.id}" method="POST" onsubmit="return confirm('Delete shift log?');">
-                                    <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold">Delete</button>
-                                </form>
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <button type="button" onclick="shareStintWhatsApp('${l.date}', '${l.start_time || '11:00'}', '${l.end_time || '22:00'}', ${l.shift_hours || 8}, ${l.trips_completed || 0}, ${l.total_earned || 0}, ${l.fuel_cost || 0}, ${l.food_spent || 0}, ${l.airtime_spent || 0}, ${l.misc_expenses || 0}, ${netShiftRemittance}, '${l.power_type || 'PETROL'}', '${active_bike ? active_bike.plate_number : ''}')" class="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold transition active:scale-95 shadow-2xs" title="Share Stint to WhatsApp">
+                                        <span>📲</span>
+                                    </button>
+                                    <form action="/rider/logs/delete/${l.id}" method="POST" onsubmit="return confirm('Delete shift log?');">
+                                        <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold p-1 text-xs">Delete</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>`;
                         }).join('') : `

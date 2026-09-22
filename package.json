@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc --noEmit",
     "start": "tsx src/server.ts",
-    "test": "tsx src/utils/math.test.ts && tsx src/utils/mpesa.test.ts",
+    "test": "tsx src/utils/math.test.ts && tsx src/utils/mpesa.test.ts && tsx src/utils/bankSms.test.ts",
     "pages:dev": "wrangler pages dev static",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android",

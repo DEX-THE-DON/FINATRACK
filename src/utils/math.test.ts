@@ -182,5 +182,48 @@ console.assert(sorted[2].id === 'tx-4', `Third should be Sept 21 (tx-4), got ${s
 console.assert(sorted[3].id === 'tx-1', `Fourth should be Sept 20 (tx-1), got ${sorted[3].id}`);
 console.log('✅ Recent Transactions Sorting: 100% Correct Latest First (Date desc -> Created_At desc)');
 
+// Test 16: CPK (Cost Per Kilometer)
+import { calculateCostPerKm, calculateServiceDueStatus, calculateWeeklyScorecard, calculateTurnoverTax } from './math';
+const cpk1 = calculateCostPerKm(600, 150);
+console.assert(cpk1 === 4.0, `CPK should be 4.0, got ${cpk1}`);
+const cpk2 = calculateCostPerKm(350, 80);
+console.assert(cpk2 === 4.38, `CPK should be 4.38, got ${cpk2}`);
+console.log(`✅ CPK (Cost Per Km): 600 KES / 150 km = Ksh ${cpk1}/km, 350 KES / 80 km = Ksh ${cpk2}/km`);
+
+// Test 17: Vehicle Maintenance / Oil Service Countdown
+const svcGood = calculateServiceDueStatus(12200, 10000, 3000); // 13000 due, 800 km remaining -> Good
+console.assert(!svcGood.isOverdue && !svcGood.isDueSoon, 'Should be in good standing');
+console.assert(svcGood.remainingKm === 800, `Remaining should be 800, got ${svcGood.remainingKm}`);
+
+const svcSoon = calculateServiceDueStatus(12750, 10000, 3000); // 250 km remaining -> Due Soon
+console.assert(svcSoon.isDueSoon && !svcSoon.isOverdue, 'Should be due soon');
+
+const svcOverdue = calculateServiceDueStatus(13150, 10000, 3000); // 150 km past due -> Overdue
+console.assert(svcOverdue.isOverdue, 'Should be overdue');
+console.log(`✅ Service Due Status: Good=${svcGood.remainingKm}km, Soon=${svcSoon.remainingKm}km, Overdue=${svcOverdue.remainingKm}km`);
+
+// Test 18: Weekly Scorecard
+const mockWeeklyTxs = [
+  { id: 'w1', date: '2026-09-22', amount: 3500, transaction_type: 'INCOME', category: 'Deliveries' },
+  { id: 'w2', date: '2026-09-22', amount: 800, transaction_type: 'EXPENSE', category: 'Fuel & Petrol' },
+  { id: 'w3', date: '2026-09-21', amount: 4200, transaction_type: 'INCOME', category: 'Deliveries' },
+  { id: 'w4', date: '2026-09-21', amount: 900, transaction_type: 'EXPENSE', category: 'Fuel & Petrol' },
+  { id: 'w5', date: '2026-09-10', amount: 5000, transaction_type: 'INCOME', category: 'Older Out-of-window' },
+];
+const scorecard = calculateWeeklyScorecard(mockWeeklyTxs, '2026-09-22');
+console.assert(scorecard.totalInflow === 7700, `Total inflow should be 7700, got ${scorecard.totalInflow}`);
+console.assert(scorecard.totalOutflow === 1700, `Total outflow should be 1700, got ${scorecard.totalOutflow}`);
+console.assert(scorecard.fuelCost === 1700, `Fuel cost should be 1700, got ${scorecard.fuelCost}`);
+console.assert(scorecard.bestDay.day === '2026-09-21', `Best day should be 2026-09-21, got ${scorecard.bestDay.day}`);
+console.log(`✅ Weekly Scorecard: Inflow=Ksh ${scorecard.totalInflow}, Outflow=Ksh ${scorecard.totalOutflow}, BestDay=${scorecard.bestDay.day} (Ksh ${scorecard.bestDay.amount})`);
+
+// Test 19: KRA Turnover Tax (TOT)
+const tot = calculateTurnoverTax(150000); // 150k/mo -> 1.8M/yr (eligible for 3% TOT)
+console.assert(tot.isEligible === true, '150k/mo should be eligible for 3% TOT');
+console.assert(tot.monthlyTaxKes === 4500, `Monthly TOT should be 4500, got ${tot.monthlyTaxKes}`);
+console.assert(tot.quarterlyTaxKes === 13500, `Quarterly TOT should be 13500, got ${tot.quarterlyTaxKes}`);
+console.log(`✅ KRA 3% TOT: Monthly gross Ksh 150k -> Monthly Tax=Ksh ${tot.monthlyTaxKes}, Quarterly=Ksh ${tot.quarterlyTaxKes}`);
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
+
 

@@ -598,3 +598,95 @@ riderRoutes.post('/rider/compliance/delete/:id', async (c) => {
   return c.redirect('/rider?toast=Compliance+record+deleted', 303);
 });
 
+// ------------------------------------------------------------------------------
+// OWNER REMITTANCE & VEHICLE LEASE / HIRE-PURCHASE FINANCING CRUD
+// ------------------------------------------------------------------------------
+riderRoutes.post('/rider/financing/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const bikeId = body['bike_id'] ? String(body['bike_id']) : null;
+  const provider = String(body['provider_name'] || 'Vehicle Owner / Lease Provider').trim();
+  const dailyAmount = parseFloat(String(body['daily_amount'] || '500.0')) || 500.0;
+  const totalCost = parseFloat(String(body['total_cost'] || '180000.0')) || 180000.0;
+  const paidAmount = parseFloat(String(body['paid_amount'] || '0.0')) || 0.0;
+  const frequency = String(body['frequency'] || 'DAILY').toUpperCase();
+  const startDate = String(body['start_date'] || new Date().toISOString().slice(0, 10));
+  const notes = body['notes'] ? String(body['notes']).trim() : null;
+
+  const { error } = await supabase.from('bike_financings').insert({
+    ...(userId ? { user_id: userId } : {}),
+    bike_id: bikeId,
+    provider_name: provider,
+    daily_amount: dailyAmount,
+    total_cost: totalCost,
+    paid_amount: paidAmount,
+    start_date: startDate,
+    frequency: frequency,
+    status: paidAmount >= totalCost && totalCost > 0 ? 'COMPLETED' : 'ACTIVE',
+    notes,
+  });
+
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to add lease/financing: ' + error.message)}`, 303);
+  }
+  return c.redirect('/rider?toast=Owner+remittance+and+lease+tracker+configured', 303);
+});
+
+riderRoutes.post('/rider/financing/pay/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const body = await c.req.parseBody();
+  const payAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const payDate = String(body['payment_date'] || new Date().toISOString().slice(0, 10));
+  const accountId = body['account_id'] ? String(body['account_id']).trim() : null;
+
+  if (payAmt <= 0) {
+    return c.redirect('/rider?toast=Please+enter+a+valid+payment+amount', 303);
+  }
+
+  const { data: fin } = await supabase.from('bike_financings').select('*').eq('id', id).single();
+  if (fin) {
+    const curPaid = toDecimal(fin.paid_amount || 0);
+    const newPaid = curPaid.plus(payAmt).toNumber();
+    const isCompleted = newPaid >= Number(fin.total_cost || 0) && Number(fin.total_cost || 0) > 0;
+
+    await supabase.from('bike_financings').update({
+      paid_amount: newPaid,
+      status: isCompleted ? 'COMPLETED' : 'ACTIVE',
+    }).eq('id', id);
+
+    // If account linked, deduct balance
+    if (accountId) {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const newBal = toDecimal(acc.balance).minus(payAmt).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+      }
+    }
+
+    // Insert transaction
+    await supabase.from('transactions').insert({
+      ...(userId ? { user_id: userId } : {}),
+      account_id: accountId || null,
+      transaction_type: 'EXPENSE',
+      category: 'Vehicle Lease & Remittance',
+      amount: payAmt,
+      date: payDate,
+      description: `Owner Remittance / Kodi: ${fin.provider_name} (Ksh ${payAmt})`,
+    });
+  }
+
+  return c.redirect('/rider?toast=Remittance+payment+recorded+successfully!', 303);
+});
+
+riderRoutes.post('/rider/financing/delete/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const { error } = await supabase.from('bike_financings').delete().eq('id', id);
+  if (error) {
+    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to delete financing: ' + error.message)}`, 303);
+  }
+  return c.redirect('/rider?toast=Lease+record+deleted', 303);
+});
+
+

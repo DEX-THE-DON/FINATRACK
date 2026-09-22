@@ -1055,3 +1055,172 @@ export function sortTransactionsLatestFirst<T extends { date?: string | null; cr
   });
 }
 
+/**
+ * Calculates real-world Cost Per Kilometer (CPK) in KES/km
+ */
+export function calculateCostPerKm(fuelCost: number, kilometers: number): number {
+  if (!kilometers || kilometers <= 0) return 0;
+  return toDecimal(fuelCost).dividedBy(toDecimal(kilometers)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+}
+
+/**
+ * Computes vehicle maintenance / oil service countdown by odometer readings
+ */
+export function calculateServiceDueStatus(currentOdo: number, lastServiceOdo: number, intervalKm: number = 3000): {
+  nextServiceOdo: number;
+  remainingKm: number;
+  isOverdue: boolean;
+  isDueSoon: boolean;
+  statusLabel: string;
+  percentElapsed: number;
+} {
+  const cur = Math.max(0, currentOdo || 0);
+  const last = Math.max(0, lastServiceOdo || 0);
+  const interval = Math.max(1, intervalKm || 3000);
+  const nextServiceOdo = last + interval;
+  const remainingKm = nextServiceOdo - cur;
+  const elapsed = cur - last;
+  const percentElapsed = Math.min(100, Math.max(0, Math.round((elapsed / interval) * 100)));
+
+  if (remainingKm <= 0) {
+    return {
+      nextServiceOdo,
+      remainingKm,
+      isOverdue: true,
+      isDueSoon: false,
+      statusLabel: `🚨 Service Overdue by ${Math.abs(remainingKm).toLocaleString()} km!`,
+      percentElapsed: 100,
+    };
+  }
+
+  if (remainingKm <= 500) {
+    return {
+      nextServiceOdo,
+      remainingKm,
+      isOverdue: false,
+      isDueSoon: true,
+      statusLabel: `⚠️ Service Due Soon (${remainingKm.toLocaleString()} km remaining)`,
+      percentElapsed,
+    };
+  }
+
+  return {
+    nextServiceOdo,
+    remainingKm,
+    isOverdue: false,
+    isDueSoon: false,
+    statusLabel: `✅ Good Condition (${remainingKm.toLocaleString()} km remaining)`,
+    percentElapsed,
+  };
+}
+
+/**
+ * Computes 7-day Weekly Financial Performance Scorecard
+ */
+export function calculateWeeklyScorecard(transactions: any[], referenceDate?: string): {
+  totalInflow: number;
+  totalOutflow: number;
+  netWeekly: number;
+  fuelCost: number;
+  fuelRatioPct: number;
+  bestDay: { day: string; amount: number };
+  daysActive: number;
+} {
+  const refTime = referenceDate ? new Date(referenceDate).getTime() : Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+  let inflow = new Decimal(0);
+  let outflow = new Decimal(0);
+  let fuel = new Decimal(0);
+  const dayTotals: Record<string, Decimal> = {};
+
+  for (const t of transactions || []) {
+    const dStr = String(t.date || '').slice(0, 10);
+    if (!dStr) continue;
+    const tTime = new Date(dStr).getTime();
+    if (isNaN(tTime)) continue;
+
+    // Filter within the last 7 calendar days
+    if (tTime <= refTime && tTime >= refTime - sevenDaysMs) {
+      const amt = toDecimal(t.amount || 0);
+      const isIncome = t.transaction_type === 'INCOME';
+      const cat = String(t.category || '').toLowerCase();
+
+      if (isIncome) {
+        inflow = inflow.plus(amt);
+        dayTotals[dStr] = (dayTotals[dStr] || new Decimal(0)).plus(amt);
+      } else {
+        outflow = outflow.plus(amt);
+        if (cat.includes('fuel') || cat.includes('petrol') || cat.includes('energy') || cat.includes('swap')) {
+          fuel = fuel.plus(amt);
+        }
+      }
+    }
+  }
+
+  let bestDay = { day: 'None', amount: 0 };
+  let bestDayAmt = new Decimal(0);
+  const activeDays = Object.keys(dayTotals).length;
+
+  for (const [day, amt] of Object.entries(dayTotals)) {
+    if (amt.greaterThan(bestDayAmt)) {
+      bestDayAmt = amt;
+      bestDay = { day, amount: amt.toDecimalPlaces(2).toNumber() };
+    }
+  }
+
+  const fuelRatioPct = inflow.greaterThan(0)
+    ? fuel.dividedBy(inflow).times(100).toDecimalPlaces(1).toNumber()
+    : 0;
+
+  return {
+    totalInflow: inflow.toDecimalPlaces(2).toNumber(),
+    totalOutflow: outflow.toDecimalPlaces(2).toNumber(),
+    netWeekly: inflow.minus(outflow).toDecimalPlaces(2).toNumber(),
+    fuelCost: fuel.toDecimalPlaces(2).toNumber(),
+    fuelRatioPct,
+    bestDay,
+    daysActive: activeDays,
+  };
+}
+
+/**
+ * Estimates KRA Turnover Tax (TOT) for Kenyan MSMEs and Gig Economy operators
+ * Rate: 3% of gross turnover for businesses between Ksh 1,000,000 and Ksh 25,000,000 annually
+ */
+export function calculateTurnoverTax(monthlyGrossTurnover: number): {
+  ratePct: number;
+  monthlyTaxKes: number;
+  quarterlyTaxKes: number;
+  annualGrossProjected: number;
+  isEligible: boolean;
+  advice: string;
+} {
+  const gross = Math.max(0, Number(monthlyGrossTurnover || 0));
+  const annualGross = toDecimal(gross).times(12).toNumber();
+  const ratePct = 3.0;
+  const monthlyTaxKes = toDecimal(gross).times(0.03).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+  const quarterlyTaxKes = toDecimal(monthlyTaxKes).times(3).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+
+  const isEligible = annualGross >= 1000000 && annualGross <= 25000000;
+
+  let advice = '';
+  if (isEligible) {
+    advice = 'Your turnover falls within the KRA 3% Turnover Tax regime (Ksh 1M–25M/yr). File & pay via KRA iTax by the 20th of the following month.';
+  } else if (annualGross < 1000000) {
+    advice = 'Annualized turnover is below Ksh 1,000,000 (standard threshold). Presumptive or individual income tax rates may apply.';
+  } else {
+    advice = 'Annualized turnover exceeds Ksh 25,000,000. Subject to standard corporate income tax (30%) and VAT registration.';
+  }
+
+  return {
+    ratePct,
+    monthlyTaxKes,
+    quarterlyTaxKes,
+    annualGrossProjected: annualGross,
+    isEligible,
+    advice,
+  };
+}
+
+

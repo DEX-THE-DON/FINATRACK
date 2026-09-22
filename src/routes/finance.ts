@@ -13,6 +13,7 @@ import {
   sortTransactionsLatestFirst
 } from '../utils/math';
 import { parseMultipleMpesaMessages } from '../utils/mpesa';
+import { parseMultipleBankMessages } from '../utils/bankSms';
 import { renderFinancialStatement } from '../views/statementView';
 import { Decimal } from 'decimal.js';
 
@@ -1183,12 +1184,15 @@ financeRoutes.post('/system/reset-data', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// M-PESA BATCH SMS PARSING & IMPORT
+// M-PESA & BANK BATCH SMS PARSING & IMPORT
 // ------------------------------------------------------------------------------
 financeRoutes.post('/finance/mpesa/parse', async (c) => {
   const body = await c.req.parseBody();
   const rawText = String(body['raw_sms'] || '');
-  const parsed = parseMultipleMpesaMessages(rawText);
+  let parsed: any[] = parseMultipleMpesaMessages(rawText);
+  if (parsed.length === 0) {
+    parsed = parseMultipleBankMessages(rawText);
+  }
   return c.json({ success: true, count: parsed.length, transactions: parsed });
 });
 
@@ -1202,9 +1206,15 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
     return c.redirect('/?toast=Please+select+an+account+to+import+into', 303);
   }
 
-  const parsedList = parseMultipleMpesaMessages(rawText);
+  let parsedList: any[] = parseMultipleMpesaMessages(rawText);
+  let isBank = false;
   if (parsedList.length === 0) {
-    return c.redirect('/?toast=No+valid+M-Pesa+messages+found+in+the+pasted+text', 303);
+    parsedList = parseMultipleBankMessages(rawText);
+    if (parsedList.length > 0) isBank = true;
+  }
+
+  if (parsedList.length === 0) {
+    return c.redirect('/?toast=No+valid+M-Pesa+or+Bank+SMS+found+in+the+pasted+text', 303);
   }
 
   const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
@@ -1238,7 +1248,8 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
     await supabase.from('accounts').update({ balance: currentBalance.toNumber() }).eq('id', accountId);
   }
 
-  return c.redirect(`/?toast=Successfully+imported+${importedCount}+M-Pesa+transactions!`, 303);
+  const sourceName = isBank ? 'Bank' : 'M-Pesa';
+  return c.redirect(`/?toast=Successfully+imported+${importedCount}+${sourceName}+transactions!`, 303);
 });
 
 // ------------------------------------------------------------------------------
