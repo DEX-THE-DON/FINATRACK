@@ -133,6 +133,7 @@ function parseEquityMessage(text: string): ParsedBankTx | null {
  * Parses a KCB Bank SMS
  */
 function parseKcbMessage(text: string): ParsedBankTx | null {
+  if (text.toLowerCase().includes('m-pesa') || text.toLowerCase().includes('safaricom')) return null;
   if (!text.toLowerCase().includes('confirmed') && !text.toLowerCase().includes('kcb')) return null;
 
   const isCredit = /received from/i.test(text) || /credited/i.test(text);
@@ -279,3 +280,4 @@ export function parseMultipleBankMessages(rawText: string): ParsedBankTx[] {
 
   return results;
 }
+

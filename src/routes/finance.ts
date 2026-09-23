@@ -1186,13 +1186,49 @@ financeRoutes.post('/system/reset-data', async (c) => {
 // ------------------------------------------------------------------------------
 // M-PESA & BANK BATCH SMS PARSING & IMPORT
 // ------------------------------------------------------------------------------
+// Helper to accurately extract all M-Pesa and Kenyan Bank SMS transactions
+function extractAllSmsTransactions(rawText: string): any[] {
+  if (!rawText || !rawText.trim()) return [];
+
+  // Split into chunks by double newline or common SMS boundary markers
+  const chunks = rawText.split(/\n\s*\n+|(?=Dear Customer)|(?=MCo-op Cash:)/i).map(s => s.trim()).filter(Boolean);
+  const results: any[] = [];
+  const seen = new Set<string>();
+
+  for (const chunk of chunks) {
+    const isExplicitBank = /Dear Customer|credited with|debited with|Ref:\s*(?:BQD|EQ|KCB|COOP|[A-Za-z0-9]+)|MCo-op/i.test(chunk) && !/New M-PESA/i.test(chunk);
+    if (isExplicitBank) {
+      const bRes = parseMultipleBankMessages(chunk);
+      for (const b of bRes) {
+        if (!seen.has(b.code)) {
+          seen.add(b.code);
+          results.push(b);
+        }
+      }
+    } else {
+      const mRes = parseMultipleMpesaMessages(chunk);
+      for (const m of mRes) {
+        if (!seen.has(m.code)) {
+          seen.add(m.code);
+          results.push(m);
+        }
+      }
+    }
+  }
+
+  // Fallback for contiguous unchunked text
+  if (results.length === 0) {
+    const isExplicitBank = /Dear Customer|credited with|debited with|MCo-op/i.test(rawText) && !/New M-PESA/i.test(rawText);
+    return isExplicitBank ? parseMultipleBankMessages(rawText) : parseMultipleMpesaMessages(rawText);
+  }
+
+  return results;
+}
+
 financeRoutes.post('/finance/mpesa/parse', async (c) => {
   const body = await c.req.parseBody();
   const rawText = String(body['raw_sms'] || '');
-  let parsed: any[] = parseMultipleMpesaMessages(rawText);
-  if (parsed.length === 0) {
-    parsed = parseMultipleBankMessages(rawText);
-  }
+  const parsed = extractAllSmsTransactions(rawText);
   return c.json({ success: true, count: parsed.length, transactions: parsed });
 });
 
@@ -1201,16 +1237,23 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
   const body = await c.req.parseBody();
   const accountId = String(body['account_id'] || '');
   const rawText = String(body['raw_sms'] || '');
+  const reviewedJson = String(body['reviewed_transactions'] || '');
 
   if (!accountId) {
     return c.redirect('/?toast=Please+select+an+account+to+import+into', 303);
   }
 
-  let parsedList: any[] = parseMultipleMpesaMessages(rawText);
-  let isBank = false;
+  let parsedList: any[] = [];
+  if (reviewedJson && reviewedJson.trim()) {
+    try {
+      parsedList = JSON.parse(reviewedJson);
+    } catch {
+      parsedList = [];
+    }
+  }
+
   if (parsedList.length === 0) {
-    parsedList = parseMultipleBankMessages(rawText);
-    if (parsedList.length > 0) isBank = true;
+    parsedList = extractAllSmsTransactions(rawText);
   }
 
   if (parsedList.length === 0) {
@@ -1222,20 +1265,26 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
 
   let importedCount = 0;
   for (const t of parsedList) {
-    const amountKes = t.amount_kes;
+    const amountKes = Number(t.amount_kes || t.amount || 0);
+    if (!amountKes || amountKes <= 0) continue;
+
+    const category = t.category || t.suggested_category || 'Living Expenses';
+    const description = t.description || `SMS import #${t.code || ''}`;
+    const date = t.date || new Date().toISOString().slice(0, 10);
+    const txType = (t.type === 'INCOME') ? 'INCOME' : 'EXPENSE';
     
     const { error: txError } = await supabase.from('transactions').insert({
       ...(userId ? { user_id: userId } : {}),
       account_id: accountId,
       amount: amountKes,
-      transaction_type: t.type,
-      category: t.suggested_category,
-      description: t.description,
-      date: t.date,
+      transaction_type: txType,
+      category: category,
+      description: description,
+      date: date,
     });
 
     if (!txError) {
-      if (t.type === 'INCOME') {
+      if (txType === 'INCOME') {
         currentBalance = currentBalance.plus(amountKes);
       } else {
         currentBalance = currentBalance.minus(amountKes);
@@ -1248,8 +1297,7 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
     await supabase.from('accounts').update({ balance: currentBalance.toNumber() }).eq('id', accountId);
   }
 
-  const sourceName = isBank ? 'Bank' : 'M-Pesa';
-  return c.redirect(`/?toast=Successfully+imported+${importedCount}+${sourceName}+transactions!`, 303);
+  return c.redirect(`/?toast=Successfully+imported+${importedCount}+SMS+transactions+into+ledger!`, 303);
 });
 
 // ------------------------------------------------------------------------------

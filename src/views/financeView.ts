@@ -670,164 +670,231 @@ export function renderFinanceDashboard(data: any): string {
             }
         }
 
-        function parseMpesaClient() {
-            const input = document.getElementById('mpesa-batch-input');
-            const raw = input ? input.value : '';
+        let _mpesaParsedList = [];
+
+        async function parseMpesaClient() {
+            const input = document.getElementById("mpesa-batch-input");
+            const raw = input ? input.value : "";
             if (!raw.trim()) {
-                alert('Please paste at least one M-Pesa SMS message.');
+                alert("Please paste at least one M-Pesa or Kenyan Bank SMS message.");
                 return;
             }
 
-            let text = raw
-                .replace(/\u00A0/g, ' ')
-                .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\uFEFF]/g, ' ')
-                .trim();
-            // Normalize common Safaricom punctuation quirks (e.g. "PM.New M-PESA" -> "PM. New M-PESA")
-            text = text.replace(/([0-9]|AM|PM|am|pm)\.New\s+M-PESA/gi, '$1. New M-PESA');
+            const previewDiv = document.getElementById("mpesa-preview-area");
+            const tableBody = document.getElementById("mpesa-preview-tbody");
+            const countBadge = document.getElementById("mpesa-parsed-count");
+            const importBtn = document.getElementById("mpesa-import-submit-btn");
 
-            const results = [];
-            const receivedRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:You have received\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+received from\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
-            const sentRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+sent to\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
-            const paidRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+paid to\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
-            const withdrawRegex = /([A-Z0-9]{8,12})\\s+(?:Confirmed\\.?\\s+)?(?:Ksh|KES)\\.?\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s+withdrawn from\\s+([\\s\\S]+?)(?=(?:\\s+on\\s+\\d|\\s+at\\s+\\d|\\.?\\s*New M-PESA|\\.$|$))/i;
-            const dtRegex = /on\\s+(\\d{1,2}[\\/\\-]\\d{1,2}[\\/\\-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})(?:\\s+at\\s+(\\d{1,2}:\\d{2}(?:\\s*(?:AM|PM|am|pm))?))?/i;
-            const splitRegex = /(?:^|\\n|\\b)([A-Z0-9]{8,12})\\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn)[\\s\\S]*?(?=(?:(?:\\n|\\b)[A-Z0-9]{8,12}\\s+(?:Confirmed|Ksh|KES|You have received|You have|paid to|sent to|withdrawn))|$)/gi;
+            if (previewDiv) previewDiv.classList.remove("hidden");
+            if (countBadge) countBadge.innerHTML = "<span class=\"text-emerald-600 dark:text-emerald-400 font-bold animate-pulse\">⏳ Analyzing & extracting SMS...</span>";
 
-            let chunks = [];
-            let rMatch;
-            while ((rMatch = splitRegex.exec(text)) !== null) {
-                if (rMatch[0].trim().length >= 15) {
-                    chunks.push(rMatch[0].trim());
-                }
-            }
+            try {
+                const formData = new FormData();
+                formData.append("raw_sms", raw);
 
-            if (chunks.length <= 1) {
-                const lineChunks = text.split(/\\n+/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length >= 15 && /[A-Z0-9]{8,12}/.test(l); });
-                if (lineChunks.length > chunks.length) {
-                    chunks = lineChunks;
-                }
-            }
+                const response = await fetch("/finance/mpesa/parse", {
+                    method: "POST",
+                    body: formData
+                });
 
-            if (chunks.length === 0 && text.length >= 15) {
-                chunks.push(text);
-            }
-
-            chunks.forEach(function(c) {
-                const itemText = c.trim();
-                if (itemText.length < 15) return;
-                let code = '', amt = 0, party = '', type = 'EXPENSE', cat = 'Living Expenses';
-                let match = itemText.match(receivedRegex);
-                if (match) {
-                    code = match[1].toUpperCase();
-                    amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\\.+$/, '');
-                    type = 'INCOME';
-                    cat = (party.toUpperCase().includes('BOLT') || party.toUpperCase().includes('UBER') || party.toUpperCase().includes('GLOVO')) ? 'Rider & Boda Deliveries' : 'M-Pesa Income';
-                } else if ((match = itemText.match(sentRegex))) {
-                    code = match[1].toUpperCase();
-                    amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\\.+$/, '');
-                    type = 'EXPENSE';
-                    cat = 'Living Expenses';
-                } else if ((match = itemText.match(paidRegex))) {
-                    code = match[1].toUpperCase();
-                    amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\\.+$/, '');
-                    type = 'EXPENSE';
-                    const p = party.toUpperCase().replace(/\\./g, '');
-                    if (p.includes('SPIRO') || p.includes('ROAM') || p.includes('AMPERSAND') || p.includes('KIRI') || p.includes('ARC RIDE') || p.includes('BASIGO') || p.includes('BATTERY') || p.includes('SWAP')) cat = 'EV Battery Swap & Charging';
-                    else if (p.includes('TOTAL') || p.includes('SHELL') || p.includes('RUBIS') || p.includes('PETROL') || p.includes('OLA') || p.includes('HASS') || p.includes('OIL')) cat = 'Fuel & Petrol';
-                    else if (p.includes('KPLC') || p.includes('WATER') || p.includes('SAFARICOM') || p.includes('ZUKU')) cat = 'Utilities & Bills';
-                    else if (p.includes('NAIVAS') || p.includes('QUICKMART') || p.includes('CARREFOUR') || p.includes('HOTEL') || p.includes('FOOD')) cat = 'Food & Groceries';
-                    else cat = 'Living Expenses';
-                } else if ((match = itemText.match(withdrawRegex))) {
-                    code = match[1].toUpperCase();
-                    amt = parseFloat(match[2].replace(/,/g, ''));
-                    party = match[3].trim().replace(/\\.+$/, '');
-                    type = 'EXPENSE';
-                    cat = 'Cash Withdrawal';
-                } else if (itemText.includes('credited with') || itemText.includes('debited with') || itemText.includes('received from') || itemText.includes('sent to') || itemText.includes('MCo-op Cash')) {
-                    const isCredit = /credited|received/i.test(itemText);
-                    const amtMatch = itemText.match(/(?:KES|Ksh)\s*([0-9,]+(?:\.[0-9]{2})?)/i);
-                    const refMatch = itemText.match(/Ref:?\s*([A-Za-z0-9]+)/i);
-                    if (amtMatch) {
-                        code = refMatch ? refMatch[1].toUpperCase() : 'BNK' + Math.random().toString(36).substring(2, 8).toUpperCase();
-                        amt = parseFloat(amtMatch[1].replace(/,/g, ''));
-                        type = isCredit ? 'INCOME' : 'EXPENSE';
-                        party = isCredit ? (itemText.match(/from\s+([^.\n\r]+)/i)?.[1] || 'Bank Inflow') : (itemText.match(/(?:paid to|sent to|to)\s+([^.\n\r]+)/i)?.[1] || 'Bank Outflow');
-                        party = party.trim().replace(/\.+$/, '');
-                        const pUpper = party.toUpperCase();
-                        if (type === 'INCOME') {
-                            cat = (pUpper.includes('BOLT') || pUpper.includes('UBER') || pUpper.includes('GLOVO')) ? 'Rider & Boda Deliveries' : 'Bank Deposit & Inflow';
-                        } else {
-                            if (pUpper.includes('RUBIS') || pUpper.includes('TOTAL') || pUpper.includes('SHELL') || pUpper.includes('PETROL')) cat = 'Fuel & Petrol';
-                            else if (pUpper.includes('KPLC') || pUpper.includes('WATER')) cat = 'Utilities & Bills';
-                            else cat = 'Living Expenses';
-                        }
-                    }
-                } else {
-                    const genericMatch = itemText.match(/([A-Z0-9]{8,12})\s+.*?(?:Ksh|KES)\.?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
-                    if (genericMatch) {
-                        code = genericMatch[1].toUpperCase();
-                        amt = parseFloat(genericMatch[2].replace(/,/g, ''));
-                        type = itemText.toLowerCase().includes('received') ? 'INCOME' : 'EXPENSE';
-                        party = 'M-Pesa Transaction';
-                        cat = type === 'INCOME' ? 'M-Pesa Income' : 'Living Expenses';
-                    }
+                if (!response.ok) {
+                    throw new Error("Server returned status " + response.status);
                 }
 
-                if (code && amt > 0) {
-                    const dtM = itemText.match(dtRegex);
-                    const rawDt = dtM ? dtM[1] : 'Today';
-                    const rawTm = dtM && dtM[2] ? dtM[2].trim() : '';
-                    results.push({ code: code, type: type, amt: amt, party: party, rawDt: rawDt, rawTm: rawTm, cat: cat });
+                const data = await response.json();
+                if (!data.success || !data.transactions || data.transactions.length === 0) {
+                    _mpesaParsedList = [];
+                    if (countBadge) countBadge.innerText = "0 SMS Extracted";
+                    if (tableBody) tableBody.innerHTML = "<tr><td colspan=\"8\" class=\"py-4 text-center text-xs text-rose-500 font-bold\">No standard M-Pesa or Bank SMS formats detected. Please ensure text contains transaction code and amount (KES/Ksh).</td></tr>";
+                    if (importBtn) importBtn.setAttribute("disabled", "true");
+                    return;
                 }
-            });
 
-            const previewDiv = document.getElementById('mpesa-preview-area');
-            const tableBody = document.getElementById('mpesa-preview-tbody');
-            const countBadge = document.getElementById('mpesa-parsed-count');
-            const importBtn = document.getElementById('mpesa-import-submit-btn');
+                _mpesaParsedList = data.transactions.map(function(tx, idx) {
+                    return {
+                        id: idx,
+                        selected: true,
+                        code: tx.code || ("TX" + idx),
+                        type: tx.type || "EXPENSE",
+                        amount: Number(tx.amount_kes || tx.amount || 0),
+                        party: tx.party || tx.counterparty || "Counterparty",
+                        date: tx.date || new Date().toISOString().slice(0, 10),
+                        time: tx.time || "",
+                        category: tx.suggested_category || "Living Expenses",
+                        description: tx.description || ("SMS #" + (tx.code || idx))
+                    };
+                });
 
-            if (results.length > 0) {
-                if (countBadge) countBadge.innerText = results.length + ' SMS Extracted';
-                if (tableBody) {
-                    tableBody.innerHTML = results.map(function(r) {
-                        const typeClass = r.type === 'INCOME' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300';
-                        return '<tr class="border-b border-gray-100 dark:border-gray-800 text-xs">' +
-                            '<td class="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">#' + r.code + '</td>' +
-                            '<td class="py-2.5 px-3">' + r.rawDt + ' ' + r.rawTm + '</td>' +
-                            '<td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded-full font-bold ' + typeClass + '">' + r.type + '</span></td>' +
-                            '<td class="py-2.5 px-3 font-medium">' + r.party + '</td>' +
-                            '<td class="py-2.5 px-3 font-bold text-gray-900 dark:text-white">Ksh ' + r.amt.toLocaleString(undefined, {minimumFractionDigits: 2}) + '</td>' +
-                            '<td class="py-2.5 px-3"><span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-md font-semibold">' + r.cat + '</span></td>' +
-                        '</tr>';
-                    }).join('');
-                }
-                if (previewDiv) previewDiv.classList.remove('hidden');
-                if (importBtn) importBtn.removeAttribute('disabled');
-            } else {
-                alert('Could not detect standard M-Pesa or Bank SMS formats. Please ensure message contains transaction code and amount (KES/Ksh).');
+                renderMpesaReviewTable();
+            } catch (err) {
+                console.error("Error parsing SMS:", err);
+                if (countBadge) countBadge.innerText = "Extraction failed";
+                if (tableBody) tableBody.innerHTML = "<tr><td colspan=\"8\" class=\"py-4 text-center text-xs text-rose-500 font-bold\">Error communicating with SMS parser. Please check connection and try again.</td></tr>";
             }
         }
 
-        function pasteSampleMpesa(type) {
-            const input = document.getElementById('mpesa-batch-input');
-            if (!input) return;
-            if (type === 'single') {
-                input.value = 'QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE 0712345678 on 12/9/26 at 11:30 AM. New M-PESA balance is Ksh5,400.00. Transaction cost, Ksh0.00.';
-            } else if (type === 'ev') {
-                input.value = 'QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.';
-            } else if (type === 'bank') {
-                input.value = 'Dear Customer, your A/C *******1234 has been credited with KES 4,500.00 on 22/09/2026 10:30:15 from BOLT OPERATIONS Ref: BQD7654321. Available Bal: KES 18,200.00.\\n\\n' +
-                              'Confirmed. Ksh 5,000.00 received from UBER B.V on 22/09/2026 at 09:15 AM. Ref: KCB123456. New balance is Ksh 22,000.00.\\n\\n' +
-                              'Dear Customer, your A/C *******1234 has been debited with KES 1,500.00 on 22/09/2026 14:20:00 paid to RUBIS ENERGY Ref: EQ987654. Available Bal: KES 16,700.00.';
-            } else {
-                input.value = 'QA11111111 Confirmed. Ksh2,400.00 received from BOLT DELIVERIES on 12/9/26 at 6:00 PM. New M-PESA balance is Ksh7,170.00.\\n' +
-                              'QB22222222 Confirmed. Ksh630.00 paid to TOTAL ENERGIES. on 12/9/26 at 7:30 PM. New M-PESA balance is Ksh6,540.00.\\n' +
-                              'QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.\\n' +
-                              'QC33333333 Confirmed. Ksh450.00 paid to KPLC PREPAID on 12/9/26 at 8:15 PM. New M-PESA balance is Ksh6,090.00.';
+        function renderMpesaReviewTable() {
+            const tableBody = document.getElementById("mpesa-preview-tbody");
+            const countBadge = document.getElementById("mpesa-parsed-count");
+            const importBtn = document.getElementById("mpesa-import-submit-btn");
+            const reviewedInput = document.getElementById("mpesa-reviewed-json");
+
+            if (!tableBody) return;
+
+            const categories = [
+                "Rider & Boda Deliveries",
+                "Fuel & Petrol",
+                "EV Battery Swap & Charging",
+                "Vehicle Maintenance",
+                "Utilities & Bills",
+                "Food & Groceries",
+                "Living Expenses",
+                "Airtime & Internet",
+                "Bank Deposit & Inflow",
+                "Salary & Income",
+                "M-Pesa Income",
+                "Other"
+            ];
+
+            const selectedItems = _mpesaParsedList.filter(function(t) { return t.selected; });
+            let totalIn = 0;
+            let totalOut = 0;
+            selectedItems.forEach(function(t) {
+                if (t.type === "INCOME") totalIn += t.amount;
+                else totalOut += t.amount;
+            });
+
+            if (countBadge) {
+                let badgeHtml = "<span class=\"font-extrabold text-emerald-600 dark:text-emerald-400\">" + selectedItems.length + " of " + _mpesaParsedList.length + " SMS Selected</span>";
+                if (totalIn > 0 || totalOut > 0) {
+                    badgeHtml += "<span class=\"ml-2 font-medium text-gray-500 dark:text-gray-400\">(";
+                    if (totalIn > 0) badgeHtml += "<span class=\"text-emerald-600 font-bold\">+Ksh " + totalIn.toLocaleString(undefined, {minimumFractionDigits: 2}) + "</span> ";
+                    if (totalOut > 0) badgeHtml += "<span class=\"text-rose-600 font-bold\">-Ksh " + totalOut.toLocaleString(undefined, {minimumFractionDigits: 2}) + "</span>";
+                    badgeHtml += ")</span>";
+                }
+                countBadge.innerHTML = badgeHtml;
             }
+
+            if (_mpesaParsedList.length === 0) {
+                tableBody.innerHTML = "<tr><td colspan=\"8\" class=\"py-4 text-center text-xs text-gray-400\">No transactions to display.</td></tr>";
+                if (importBtn) importBtn.setAttribute("disabled", "true");
+                if (reviewedInput) reviewedInput.value = "";
+                return;
+            }
+
+            if (importBtn) {
+                importBtn.removeAttribute("disabled");
+                importBtn.innerHTML = "<span>📥 1-Tap Import (" + selectedItems.length + ") to Ledger</span>";
+            }
+
+            if (reviewedInput) {
+                reviewedInput.value = JSON.stringify(selectedItems.map(function(t) {
+                    return {
+                        code: t.code,
+                        type: t.type,
+                        amount_kes: t.amount,
+                        suggested_category: t.category,
+                        category: t.category,
+                        party: t.party,
+                        description: t.description,
+                        date: t.date,
+                        time: t.time
+                    };
+                }));
+            }
+
+            tableBody.innerHTML = _mpesaParsedList.map(function(r, idx) {
+                const typeClass = r.type === "INCOME" 
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" 
+                    : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300";
+                
+                const catOptions = categories.map(function(c) {
+                    return "<option value=\"" + c + "\" " + (c === r.category ? "selected" : "") + ">" + c + "</option>";
+                }).join("");
+
+                const rowClass = r.selected ? "" : "opacity-40 line-through";
+
+                return "<tr class=\"border-b border-gray-100 dark:border-gray-800 text-xs transition " + rowClass + "\">" +
+                    "<td class=\"py-2.5 px-3 text-center\">" +
+                        "<input type=\"checkbox\" onchange=\"toggleMpesaItem(" + idx + ", this.checked)\" " + (r.selected ? "checked" : "") + " class=\"rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer\">" +
+                    "</td>" +
+                    "<td class=\"py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap\">#" + r.code + "</td>" +
+                    "<td class=\"py-2.5 px-3 whitespace-nowrap text-gray-600 dark:text-gray-300\">" + r.date + (r.time ? " " + r.time : "") + "</td>" +
+                    "<td class=\"py-2.5 px-3 whitespace-nowrap\"><span class=\"px-2 py-0.5 rounded-full font-bold text-[10px] " + typeClass + "\">" + r.type + "</span></td>" +
+                    "<td class=\"py-2.5 px-3 font-medium max-w-[150px] truncate\" title=\"" + r.party + "\">" + r.party + "</td>" +
+                    "<td class=\"py-2.5 px-3 font-bold text-gray-900 dark:text-white whitespace-nowrap\">Ksh " + r.amount.toLocaleString(undefined, {minimumFractionDigits: 2}) + "</td>" +
+                    "<td class=\"py-2.5 px-3\">" +
+                        "<select onchange=\"updateMpesaCategory(" + idx + ", this.value)\" class=\"text-xs p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white\">" +
+                            catOptions +
+                        "</select>" +
+                    "</td>" +
+                    "<td class=\"py-2.5 px-2 text-center\">" +
+                        "<button type=\"button\" onclick=\"removeMpesaItem(" + idx + ")\" class=\"text-gray-400 hover:text-rose-500 font-bold transition px-1\" title=\"Remove transaction\">✕</button>" +
+                    "</td>" +
+                "</tr>";
+            }).join("");
+        }
+
+        function toggleMpesaItem(idx, checked) {
+            if (_mpesaParsedList[idx]) {
+                _mpesaParsedList[idx].selected = checked;
+                renderMpesaReviewTable();
+            }
+        }
+
+        function updateMpesaCategory(idx, cat) {
+            if (_mpesaParsedList[idx]) {
+                _mpesaParsedList[idx].category = cat;
+                const reviewedInput = document.getElementById("mpesa-reviewed-json");
+                if (reviewedInput) {
+                    const selectedItems = _mpesaParsedList.filter(function(t) { return t.selected; });
+                    reviewedInput.value = JSON.stringify(selectedItems.map(function(t) {
+                        return {
+                            code: t.code,
+                            type: t.type,
+                            amount_kes: t.amount,
+                            suggested_category: t.category,
+                            category: t.category,
+                            party: t.party,
+                            description: t.description,
+                            date: t.date,
+                            time: t.time
+                        };
+                    }));
+                }
+            }
+        }
+
+        function removeMpesaItem(idx) {
+            _mpesaParsedList.splice(idx, 1);
+            renderMpesaReviewTable();
+        }
+
+        function toggleAllMpesaReview(checked) {
+            _mpesaParsedList.forEach(function(t) { t.selected = checked; });
+            renderMpesaReviewTable();
+        }
+
+        function pasteSampleMpesa(type) {
+            const input = document.getElementById("mpesa-batch-input");
+            if (!input) return;
+            const samples = {
+                single: "QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE 0712345678 on 12/9/26 at 11:30 AM. New M-PESA balance is Ksh5,400.00. Transaction cost, Ksh0.00.",
+                ev: "QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.",
+                bank: [
+                    "Dear Customer, your A/C *******1234 has been credited with KES 4,500.00 on 22/09/2026 10:30:15 from BOLT OPERATIONS Ref: BQD7654321. Available Bal: KES 18,200.00.",
+                    "Confirmed. Ksh 5,000.00 received from UBER B.V on 22/09/2026 at 09:15 AM. Ref: KCB123456. New balance is Ksh 22,000.00.",
+                    "Dear Customer, your A/C *******1234 has been debited with KES 1,500.00 on 22/09/2026 14:20:00 paid to RUBIS ENERGY Ref: EQ987654. Available Bal: KES 16,700.00."
+                ].join("\n\n"),
+                batch: [
+                    "QA11111111 Confirmed. Ksh2,400.00 received from BOLT DELIVERIES on 12/9/26 at 6:00 PM. New M-PESA balance is Ksh7,170.00.",
+                    "QB22222222 Confirmed. Ksh630.00 paid to TOTAL ENERGIES. on 12/9/26 at 7:30 PM. New M-PESA balance is Ksh6,540.00.",
+                    "QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.",
+                    "QC33333333 Confirmed. Ksh450.00 paid to KPLC PREPAID on 12/9/26 at 8:15 PM. New M-PESA balance is Ksh6,090.00."
+                ].join("\n")
+            };
+
+            input.value = samples[type] || samples.single;
             parseMpesaClient();
         }
     </script>
@@ -1746,7 +1813,8 @@ export function renderFinanceDashboard(data: any): string {
                 </div>
             </div>
 
-            <form action="/finance/mpesa/import" method="POST" class="space-y-4">
+            <form action="/finance/mpesa/import" method="POST" id="mpesa-import-form" class="space-y-4">
+                <input type="hidden" id="mpesa-reviewed-json" name="reviewed_transactions" value="">
                 <div class="space-y-1.5">
                     <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">
                         Paste M-Pesa or Bank SMS text (Single or Multiple messages):
@@ -1756,13 +1824,13 @@ export function renderFinanceDashboard(data: any): string {
 
                 <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
                     <button type="button" onclick="parseMpesaClient()" class="w-full sm:w-auto px-4 py-2 bg-gray-900 dark:bg-gray-800 hover:bg-black dark:hover:bg-gray-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs">
-                        <span>🔍 Extract & Preview Transactions</span>
+                        <span>🔍 Extract & Review Transactions</span>
                     </button>
 
                     <div class="flex items-center gap-2 w-full sm:w-auto">
                         <select name="account_id" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
                             <option value="">-- Select Target Account --</option>
-                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
+                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join("")}
                         </select>
                         <button type="submit" id="mpesa-import-submit-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap">
                             <span>📥 1-Tap Import to Ledger</span>
@@ -1772,20 +1840,24 @@ export function renderFinanceDashboard(data: any): string {
 
                 <!-- Preview Area -->
                 <div id="mpesa-preview-area" class="hidden space-y-2 pt-2 border-t dark:border-gray-800">
-                    <div class="flex justify-between items-center">
+                    <div class="flex flex-wrap justify-between items-center gap-2">
                         <span id="mpesa-parsed-count" class="text-xs font-bold text-emerald-600 dark:text-emerald-400">0 SMS Extracted</span>
-                        <span class="text-[11px] text-gray-400">Review before importing</span>
+                        <span class="text-[11px] text-gray-400">Review, adjust category or uncheck items before importing</span>
                     </div>
                     <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
                         <table class="w-full text-left">
                             <thead class="bg-gray-50 dark:bg-gray-800/60 text-[11px] text-gray-500 uppercase">
                                 <tr>
+                                    <th class="py-2 px-3 text-center w-8">
+                                        <input type="checkbox" id="mpesa-select-all" checked onchange="toggleAllMpesaReview(this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer" title="Select / Unselect All">
+                                    </th>
                                     <th class="py-2 px-3">Receipt</th>
                                     <th class="py-2 px-3">Date/Time</th>
                                     <th class="py-2 px-3">Type</th>
                                     <th class="py-2 px-3">Party</th>
                                     <th class="py-2 px-3">Amount</th>
                                     <th class="py-2 px-3">Category</th>
+                                    <th class="py-2 px-2 text-center w-8"></th>
                                 </tr>
                             </thead>
                             <tbody id="mpesa-preview-tbody" class="divide-y dark:divide-gray-800 bg-white dark:bg-gray-900"></tbody>
