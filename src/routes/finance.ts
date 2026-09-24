@@ -10,7 +10,8 @@ import {
   formatMoney,
   calculateEmergencyRunway,
   calculateFinancialHealthScore,
-  sortTransactionsLatestFirst
+  sortTransactionsLatestFirst,
+  isTransferTransaction
 } from '../utils/math';
 import { parseMultipleMpesaMessages } from '../utils/mpesa';
 import { parseMultipleBankMessages } from '../utils/bankSms';
@@ -153,7 +154,7 @@ financeRoutes.post('/transfers/create', async (c) => {
         {
           ...(userId ? { user_id: userId } : {}),
           account_id: fromId,
-          transaction_type: 'EXPENSE',
+          transaction_type: 'TRANSFER',
           category: 'Transfer',
           amount: amtKes,
           description: `Transfer to ${toAcc.name}`,
@@ -162,7 +163,7 @@ financeRoutes.post('/transfers/create', async (c) => {
         {
           ...(userId ? { user_id: userId } : {}),
           account_id: toId,
-          transaction_type: 'INCOME',
+          transaction_type: 'TRANSFER',
           category: 'Transfer',
           amount: amtKes,
           description: `Transfer from ${fromAcc.name}`,
@@ -542,8 +543,8 @@ financeRoutes.post('/goals/deposit-vault', async (c) => {
       await supabase.from('transactions').insert({
         ...(userId ? { user_id: userId } : {}),
         account_id: sourceAccountId,
-        transaction_type: 'EXPENSE',
-        category: 'Savings & Goals Funding',
+        transaction_type: 'TRANSFER',
+        category: 'Goals Vault Transfer',
         amount: rawAmt,
         description: `Transfer to ${vaultAcc ? vaultAcc.name : 'Goals Vault'} for Goal Sub-Splits`,
         date: today,
@@ -558,8 +559,8 @@ financeRoutes.post('/goals/deposit-vault', async (c) => {
     await supabase.from('transactions').insert({
       ...(userId ? { user_id: userId } : {}),
       account_id: vaultAcc.id,
-      transaction_type: 'INCOME',
-      category: 'Goal Vault Deposit',
+      transaction_type: 'TRANSFER',
+      category: 'Goals Vault Transfer',
       amount: rawAmt,
       description: `Master Vault Deposit: Sub-split across ${userGoals.length} goals`,
       date: today,
@@ -603,8 +604,8 @@ financeRoutes.post('/goals/fund/:id', async (c) => {
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
           account_id: accountId,
-          transaction_type: 'EXPENSE',
-          category: 'Savings & Goals',
+          transaction_type: 'TRANSFER',
+          category: 'Goal Funding Transfer',
           amount: rawAmt,
           date: new Date().toISOString().slice(0, 10),
           description: `Funded Goal: ${goal.title}`,
@@ -638,8 +639,8 @@ financeRoutes.post('/goals/withdraw/:id', async (c) => {
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
           account_id: accountId,
-          transaction_type: 'INCOME',
-          category: 'Savings & Goals',
+          transaction_type: 'TRANSFER',
+          category: 'Goal Withdrawal Transfer',
           amount: actualWithdraw,
           date: new Date().toISOString().slice(0, 10),
           description: `Withdrawal from Goal: ${goal.title}`,
@@ -1028,8 +1029,8 @@ financeRoutes.post('/split/distribute', async (c) => {
       await supabase.from('transactions').insert({
         ...(userId ? { user_id: userId } : {}),
         account_id: sourceAccountId,
-        transaction_type: 'EXPENSE',
-        category: 'Waterfall Split Source',
+        transaction_type: 'TRANSFER',
+        category: 'Waterfall Split',
         amount: rawAmt,
         description: `Waterfall Auto-Split: Distributed Ksh ${rawAmt.toLocaleString()}`,
         date: new Date().toISOString().slice(0, 10),
@@ -1074,8 +1075,8 @@ financeRoutes.post('/split/distribute', async (c) => {
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
           account_id: targetAcc.id,
-          transaction_type: 'INCOME',
-          category: 'Auto-Split Deposit',
+          transaction_type: 'TRANSFER',
+          category: 'Waterfall Split',
           amount: splitAmt,
           description: `Auto-Split Allocation: ${res.bucket_name} (${res.percentage}%)`,
           date: today,
@@ -1107,8 +1108,8 @@ financeRoutes.post('/split/distribute', async (c) => {
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
           account_id: vaultAcc.id,
-          transaction_type: 'INCOME',
-          category: 'Savings & Goals Vault',
+          transaction_type: 'TRANSFER',
+          category: 'Waterfall Split',
           amount: splitAmt,
           description: `Auto-Split Goal Vault Deposit: Ksh ${splitAmt.toLocaleString()} (${res.percentage}% into ${vaultAcc.name})`,
           date: today,
@@ -1421,8 +1422,8 @@ financeRoutes.get('/finance/statement', async (c) => {
   const now = new Date();
   const currentMonthStr = now.toISOString().slice(0, 7);
   const monthlyTxs = transactions.filter((t: any) => t.date && t.date.startsWith(currentMonthStr));
-  const monthlyIncome = monthlyTxs.filter((t: any) => t.transaction_type === 'INCOME').reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
-  const monthlyExpenses = monthlyTxs.filter((t: any) => t.transaction_type === 'EXPENSE').reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
+  const monthlyIncome = monthlyTxs.filter((t: any) => !isTransferTransaction(t) && t.transaction_type === 'INCOME').reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
+  const monthlyExpenses = monthlyTxs.filter((t: any) => !isTransferTransaction(t) && t.transaction_type === 'EXPENSE').reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
   const netSavings = monthlyIncome - monthlyExpenses;
 
   const totalDebt = debts.filter((d: any) => d.status !== 'PAID').reduce((sum: number, d: any) => sum + (Number(d.total_amount || 0) - Number(d.paid_amount || 0)), 0);

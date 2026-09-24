@@ -224,6 +224,18 @@ console.assert(tot.monthlyTaxKes === 4500, `Monthly TOT should be 4500, got ${to
 console.assert(tot.quarterlyTaxKes === 13500, `Quarterly TOT should be 13500, got ${tot.quarterlyTaxKes}`);
 console.log(`✅ KRA 3% TOT: Monthly gross Ksh 150k -> Monthly Tax=Ksh ${tot.monthlyTaxKes}, Quarterly=Ksh ${tot.quarterlyTaxKes}`);
 
+// Test 20: Internal Transfer Detection (Preventing transfers from inflating operating expenses)
+import { isTransferTransaction } from './math';
+console.assert(isTransferTransaction({ transaction_type: 'TRANSFER', category: 'Transfer' }) === true, 'TRANSFER type should be transfer');
+console.assert(isTransferTransaction({ transaction_type: 'EXPENSE', category: 'Transfer', description: 'Transfer to Britam' }) === true, 'Transfer category should be transfer');
+console.assert(isTransferTransaction({ transaction_type: 'EXPENSE', category: 'Waterfall Split Source' }) === true, 'Waterfall split source should be transfer');
+console.assert(isTransferTransaction({ transaction_type: 'INCOME', category: 'Auto-Split Deposit' }) === true, 'Auto-split deposit should be transfer');
+console.assert(isTransferTransaction({ transaction_type: 'EXPENSE', category: 'Goals Vault Transfer' }) === true, 'Goals vault transfer should be transfer');
+console.assert(isTransferTransaction({ transaction_type: 'EXPENSE', category: 'Living Expenses' }) === false, 'Living Expenses should NOT be transfer');
+console.assert(isTransferTransaction({ transaction_type: 'EXPENSE', category: 'Fuel & Petrol' }) === false, 'Fuel & Petrol should NOT be transfer');
+console.assert(isTransferTransaction({ transaction_type: 'INCOME', category: 'Rider & Boda Deliveries' }) === false, 'Deliveries should NOT be transfer');
+console.log('✅ Internal Transfer Detection: Accurately isolates internal transfers from operating expenses & income');
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
 
 

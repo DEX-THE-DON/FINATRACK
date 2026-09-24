@@ -1135,6 +1135,7 @@ export function calculateWeeklyScorecard(transactions: any[], referenceDate?: st
   const dayTotals: Record<string, Decimal> = {};
 
   for (const t of transactions || []) {
+    if (isTransferTransaction(t)) continue;
     const dStr = String(t.date || '').slice(0, 10);
     if (!dStr) continue;
     const tTime = new Date(dStr).getTime();
@@ -1221,6 +1222,28 @@ export function calculateTurnoverTax(monthlyGrossTurnover: number): {
     isEligible,
     advice,
   };
+}
+
+/**
+ * Detects whether a transaction is an internal account transfer, vault deposit,
+ * or waterfall allocation rather than external operational income or real expense.
+ */
+export function isTransferTransaction(t: any): boolean {
+  if (!t) return false;
+  const type = String(t.transaction_type || '').toUpperCase().trim();
+  if (type === 'TRANSFER') return true;
+
+  const cat = String(t.category || '').toLowerCase().trim();
+  const desc = String(t.description || '').toLowerCase().trim();
+
+  // Categories representing internal transfers
+  if (cat === 'transfer' || cat.startsWith('transfer:') || cat === 'internal transfer') return true;
+  if (cat.includes('waterfall split') || cat.includes('auto-split deposit') || cat.includes('goal vault deposit') || cat.includes('savings & goals funding') || cat.includes('goals vault') || cat.includes('goal funding transfer') || cat.includes('goal withdrawal transfer')) return true;
+
+  // Descriptions representing internal transfers
+  if (desc.startsWith('transfer to ') || desc.startsWith('transfer from ') || desc.includes('transfer to goals vault') || desc.startsWith('waterfall auto-split: distributed') || desc.startsWith('master vault deposit:')) return true;
+
+  return false;
 }
 
 

@@ -145,14 +145,14 @@ export function renderFinancialStatement(data: any): string {
                         <tr>
                             <td class="py-2 px-4 font-medium text-slate-600">${t.date}</td>
                             <td class="py-2 px-4">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${t.transaction_type === 'INCOME' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${t.transaction_type === 'TRANSFER' ? 'bg-blue-100 text-blue-800' : (t.transaction_type === 'INCOME' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800')}">
                                     ${t.transaction_type}
                                 </span>
                             </td>
                             <td class="py-2 px-4 font-medium text-slate-700">${t.category}</td>
                             <td class="py-2 px-4 text-slate-600 truncate max-w-xs">${t.description || '—'}</td>
-                            <td class="py-2 px-4 text-right font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-700' : 'text-rose-700'}">
-                                ${t.transaction_type === 'INCOME' ? '+' : '-'}${formatKes(t.amount)}
+                            <td class="py-2 px-4 text-right font-bold ${t.transaction_type === 'TRANSFER' ? 'text-blue-700' : (t.transaction_type === 'INCOME' ? 'text-emerald-700' : 'text-rose-700')}">
+                                ${t.transaction_type === 'TRANSFER' ? '⇄ ' : (t.transaction_type === 'INCOME' ? '+' : '-')}${formatKes(t.amount)}
                             </td>
                         </tr>`).join('') : `
                         <tr>

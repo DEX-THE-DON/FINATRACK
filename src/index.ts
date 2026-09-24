@@ -22,7 +22,8 @@ import {
   calculateEvRoiSavings,
   calculateFinancialHealthScore,
   buildUnifiedTimeline,
-  sortTransactionsLatestFirst
+  sortTransactionsLatestFirst,
+  isTransferTransaction
 } from './utils/math';
 import { Decimal } from 'decimal.js';
 
@@ -355,6 +356,8 @@ app.get('/', async (c) => {
   let yearlyExpenses = 0;
 
   for (const t of txs) {
+    if (isTransferTransaction(t)) continue;
+
     const tDate = t.date || '';
     const amt = Number(t.amount || 0);
     const isInc = t.transaction_type === 'INCOME';
@@ -396,7 +399,7 @@ app.get('/', async (c) => {
 
   const categoryBudgets = defaultCategories.map(cat => {
     const spent = txs
-      .filter((t) => t.transaction_type === 'EXPENSE' && (
+      .filter((t) => !isTransferTransaction(t) && t.transaction_type === 'EXPENSE' && (
         (t.category || '').toLowerCase() === cat.name.toLowerCase() ||
         (cat.name.includes('Fuel') && ((t.category || '').toLowerCase().includes('fuel') || (t.category || '').toLowerCase().includes('petrol') || (t.category || '').toLowerCase().includes('battery') || (t.category || '').toLowerCase().includes('ev swap')))
       ) && (t.date || '').startsWith(currentMonth))
@@ -487,7 +490,7 @@ app.get('/', async (c) => {
   // Monthly Expense Category Breakdown for Chart
   const categoryTotals: Record<string, number> = {};
   for (const t of txs) {
-    if (t.transaction_type === 'EXPENSE' && t.date && t.date.startsWith(currentMonth)) {
+    if (!isTransferTransaction(t) && t.transaction_type === 'EXPENSE' && t.date && t.date.startsWith(currentMonth)) {
       const cat = t.category || 'Living Expenses';
       categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(t.amount || 0);
     }

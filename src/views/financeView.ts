@@ -1,4 +1,4 @@
-import { sortTransactionsLatestFirst, calculateWeeklyScorecard, calculateTurnoverTax } from '../utils/math';
+import { sortTransactionsLatestFirst, calculateWeeklyScorecard, calculateTurnoverTax, isTransferTransaction } from '../utils/math';
 
 export function renderFinanceDashboard(data: any): string {
   const {
@@ -2937,15 +2937,18 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
 
                     <!-- Type Filter Tabs -->
-                    <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 p-1 rounded-xl text-xs font-semibold self-start sm:self-auto">
+                    <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 p-1 rounded-xl text-xs font-semibold self-start sm:self-auto flex-wrap">
                         <button type="button" onclick="setTxFilter('ALL')" id="tx-filter-btn-ALL" class="tx-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition">
                             All (${transactions.length})
                         </button>
                         <button type="button" onclick="setTxFilter('INCOME')" id="tx-filter-btn-INCOME" class="tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
-                            Income (${transactions.filter((t: any) => t.transaction_type === 'INCOME').length})
+                            Income (${transactions.filter((t: any) => !isTransferTransaction(t) && t.transaction_type === 'INCOME').length})
                         </button>
                         <button type="button" onclick="setTxFilter('EXPENSE')" id="tx-filter-btn-EXPENSE" class="tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
-                            Expense (${transactions.filter((t: any) => t.transaction_type !== 'INCOME').length})
+                            Expense (${transactions.filter((t: any) => !isTransferTransaction(t) && t.transaction_type !== 'INCOME').length})
+                        </button>
+                        <button type="button" onclick="setTxFilter('TRANSFER')" id="tx-filter-btn-TRANSFER" class="tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+                            Transfers (${transactions.filter((t: any) => isTransferTransaction(t)).length})
                         </button>
                     </div>
                 </div>
@@ -2966,7 +2969,9 @@ export function renderFinanceDashboard(data: any): string {
                     <!-- Mobile Feed (Phone View: compact cards, fits screen width, max 5 shown by default) -->
                     <div id="tx-mobile-container" class="block sm:hidden space-y-2 max-h-[420px] overflow-y-auto pr-1">
                         ${sortedTxs.map((t: any, idx: number) => {
-                            const isIncome = t.transaction_type === 'INCOME';
+                            const isTransfer = isTransferTransaction(t);
+                            const isIncome = !isTransfer && t.transaction_type === 'INCOME';
+                            const itemFilterType = isTransfer ? 'TRANSFER' : (isIncome ? 'INCOME' : 'EXPENSE');
                             const acc = accounts.find((a: any) => a.id === t.account_id);
                             let timeStr = '';
                             if (t.created_at && String(t.created_at).includes('T')) {
@@ -2979,10 +2984,10 @@ export function renderFinanceDashboard(data: any): string {
                             }
                             const isHidden = idx >= initialLimit;
                             return `
-                            <div class="tx-item tx-mobile-item p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100/70 dark:hover:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${t.transaction_type}">
+                            <div class="tx-item tx-mobile-item p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100/70 dark:hover:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${itemFilterType}">
                                 <div class="flex items-center gap-2.5 min-w-0">
-                                    <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm font-black ${isIncome ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-300'}">
-                                        ${isIncome ? '↓' : '↑'}
+                                    <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm font-black ${isTransfer ? 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300' : (isIncome ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-300')}">
+                                        ${isTransfer ? '⇄' : (isIncome ? '↓' : '↑')}
                                     </div>
                                     <div class="min-w-0">
                                         <div class="flex items-center gap-1.5 flex-wrap">
@@ -2997,10 +3002,10 @@ export function renderFinanceDashboard(data: any): string {
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0">
                                     <div class="text-right">
-                                        <div class="font-extrabold text-xs ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount" data-kes="${t.amount}" data-prefix="${isIncome ? '+' : '-'}">
-                                            ${isIncome ? '+' : '-'}${formatKes(t.amount)}
+                                        <div class="font-extrabold text-xs ${isTransfer ? 'text-blue-600 dark:text-blue-400' : (isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')} convertible-amount" data-kes="${t.amount}" data-prefix="${isTransfer ? '⇄ ' : (isIncome ? '+' : '-')}">
+                                            ${isTransfer ? '⇄ ' : (isIncome ? '+' : '-')}${formatKes(t.amount)}
                                         </div>
-                                        <span class="text-[9px] font-bold uppercase tracking-wider ${isIncome ? 'text-emerald-500' : 'text-rose-500'}">${t.transaction_type}</span>
+                                        <span class="text-[9px] font-bold uppercase tracking-wider ${isTransfer ? 'text-blue-500' : (isIncome ? 'text-emerald-500' : 'text-rose-500')}">${isTransfer ? 'TRANSFER' : t.transaction_type}</span>
                                     </div>
                                     <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
                                         <button type="submit" class="text-gray-300 dark:text-gray-600 hover:text-rose-600 dark:hover:text-rose-400 font-bold text-xs p-1 transition" title="Delete">✕</button>
@@ -3024,6 +3029,9 @@ export function renderFinanceDashboard(data: any): string {
                             </thead>
                             <tbody class="divide-y dark:divide-gray-800">
                                 ${sortedTxs.map((t: any, idx: number) => {
+                                    const isTransfer = isTransferTransaction(t);
+                                    const isIncome = !isTransfer && t.transaction_type === 'INCOME';
+                                    const itemFilterType = isTransfer ? 'TRANSFER' : (isIncome ? 'INCOME' : 'EXPENSE');
                                     const acc = accounts.find((a: any) => a.id === t.account_id);
                                     let timeStr = '';
                                     if (t.created_at && String(t.created_at).includes('T')) {
@@ -3034,17 +3042,16 @@ export function renderFinanceDashboard(data: any): string {
                                             }
                                         } catch {}
                                     }
-                                    const isIncome = t.transaction_type === 'INCOME';
                                     const isHidden = idx >= initialLimit;
                                     return `
-                                    <tr class="tx-item tx-desktop-item hover:bg-gray-50 dark:hover:bg-gray-800/40 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${t.transaction_type}">
+                                    <tr class="tx-item tx-desktop-item hover:bg-gray-50 dark:hover:bg-gray-800/40 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${itemFilterType}">
                                         <td class="py-2.5 px-3 whitespace-nowrap">
                                             <div class="font-bold text-gray-800 dark:text-gray-200">${t.date}</div>
                                             ${timeStr ? `<div class="text-[10px] text-gray-400 dark:text-gray-500 font-mono">${timeStr}</div>` : ''}
                                         </td>
                                         <td class="py-2.5 px-3 whitespace-nowrap">
-                                            <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${isIncome ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}">
-                                                ${t.transaction_type}
+                                            <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${isTransfer ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : (isIncome ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300')}">
+                                                ${isTransfer ? 'TRANSFER' : t.transaction_type}
                                             </span>
                                         </td>
                                         <td class="py-2.5 px-3">
@@ -3054,8 +3061,8 @@ export function renderFinanceDashboard(data: any): string {
                                                 ${acc ? `<span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-semibold">• ${acc.name}</span>` : ''}
                                             </div>
                                         </td>
-                                        <td class="py-2.5 px-3 font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount whitespace-nowrap" data-kes="${t.amount}" data-prefix="${isIncome ? '+' : '-'}">
-                                            ${isIncome ? '+' : '-'}${formatKes(t.amount)}
+                                        <td class="py-2.5 px-3 font-bold ${isTransfer ? 'text-blue-600 dark:text-blue-400' : (isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')} convertible-amount whitespace-nowrap" data-kes="${t.amount}" data-prefix="${isTransfer ? '⇄ ' : (isIncome ? '+' : '-')}">
+                                            ${isTransfer ? '⇄ ' : (isIncome ? '+' : '-')}${formatKes(t.amount)}
                                         </td>
                                         <td class="py-2.5 px-3 text-center whitespace-nowrap">
                                             <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
