@@ -450,37 +450,49 @@ export function renderFinanceDashboard(data: any): string {
             saveGoalSplitsLocally();
         }
 
-        var txCurrentLimit = 5;
+        var txCurrentPage = 1;
+        var txPageSize = 5;
         var txCurrentFilter = 'ALL';
-        var txInitialLimit = 5;
 
         function setTxFilter(type) {
             txCurrentFilter = type;
+            txCurrentPage = 1;
             document.querySelectorAll('.tx-filter-btn').forEach(function(b) {
-                b.className = 'tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition';
+                b.className = 'tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer';
             });
             var activeBtn = document.getElementById('tx-filter-btn-' + type);
             if (activeBtn) {
-                activeBtn.className = 'tx-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition';
+                activeBtn.className = 'tx-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition cursor-pointer';
             }
             applyTxDisplay();
         }
 
-        function showMoreTxs() {
-            txCurrentLimit += 5;
-            applyTxDisplay();
-        }
-
-        function showAllTxs() {
-            txCurrentLimit = 999999;
-            applyTxDisplay();
-        }
-
-        function showLessTxs() {
-            txCurrentLimit = txInitialLimit;
+        function txGoToPage(p) {
+            txCurrentPage = p;
             applyTxDisplay();
             var card = document.getElementById('tx-card');
             if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function txPrevPage() {
+            if (txCurrentPage > 1) {
+                txGoToPage(txCurrentPage - 1);
+            }
+        }
+
+        function txNextPage() {
+            var mobileItems = document.querySelectorAll('.tx-mobile-item');
+            var matchingTotal = 0;
+            mobileItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-tx-type');
+                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                    matchingTotal++;
+                }
+            });
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / txPageSize));
+            if (txCurrentPage < totalPages) {
+                txGoToPage(txCurrentPage + 1);
+            }
         }
 
         function applyTxDisplay() {
@@ -495,11 +507,22 @@ export function renderFinanceDashboard(data: any): string {
                 }
             });
 
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / txPageSize));
+            if (txCurrentPage > totalPages) {
+                txCurrentPage = totalPages;
+            }
+            if (txCurrentPage < 1) {
+                txCurrentPage = 1;
+            }
+
+            var startIdx = (txCurrentPage - 1) * txPageSize;
+            var endIdx = startIdx + txPageSize;
+
             var mIdx = 0;
             mobileItems.forEach(function(el) {
                 var itemType = el.getAttribute('data-tx-type');
                 if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
-                    if (mIdx < txCurrentLimit) {
+                    if (mIdx >= startIdx && mIdx < endIdx) {
                         el.classList.remove('hidden');
                     } else {
                         el.classList.add('hidden');
@@ -514,7 +537,7 @@ export function renderFinanceDashboard(data: any): string {
             desktopItems.forEach(function(el) {
                 var itemType = el.getAttribute('data-tx-type');
                 if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
-                    if (dIdx < txCurrentLimit) {
+                    if (dIdx >= startIdx && dIdx < endIdx) {
                         el.classList.remove('hidden');
                     } else {
                         el.classList.add('hidden');
@@ -525,33 +548,58 @@ export function renderFinanceDashboard(data: any): string {
                 }
             });
 
-            var visibleNow = Math.min(txCurrentLimit, matchingTotal);
-            var countEl = document.getElementById('tx-visible-count');
-            if (countEl) countEl.innerText = String(visibleNow);
+            var startDisplay = matchingTotal === 0 ? 0 : startIdx + 1;
+            var endDisplay = Math.min(endIdx, matchingTotal);
+
+            var rangeEl = document.getElementById('tx-visible-range');
+            if (rangeEl) rangeEl.innerText = startDisplay + '–' + endDisplay;
 
             var totalEl = document.getElementById('tx-total-filtered-count');
             if (totalEl) totalEl.innerText = String(matchingTotal);
 
-            var showMoreBtn = document.getElementById('tx-show-more-btn');
-            var showAllBtn = document.getElementById('tx-show-all-btn');
-            var showLessBtn = document.getElementById('tx-show-less-btn');
+            var pageInfoEl = document.getElementById('tx-page-info');
+            if (pageInfoEl) pageInfoEl.innerText = 'Page ' + txCurrentPage + ' of ' + totalPages;
 
-            if (matchingTotal <= txInitialLimit) {
-                if (showMoreBtn) showMoreBtn.classList.add('hidden');
-                if (showAllBtn) showAllBtn.classList.add('hidden');
-                if (showLessBtn) showLessBtn.classList.add('hidden');
-            } else if (txCurrentLimit >= matchingTotal) {
-                if (showMoreBtn) showMoreBtn.classList.add('hidden');
-                if (showAllBtn) showAllBtn.classList.add('hidden');
-                if (showLessBtn) showLessBtn.classList.remove('hidden');
-            } else {
-                if (showMoreBtn) showMoreBtn.classList.remove('hidden');
-                if (showAllBtn) showAllBtn.classList.remove('hidden');
-                if (txCurrentLimit > txInitialLimit) {
-                    if (showLessBtn) showLessBtn.classList.remove('hidden');
+            var prevBtn = document.getElementById('tx-prev-btn');
+            if (prevBtn) {
+                if (txCurrentPage <= 1) {
+                    prevBtn.disabled = true;
+                    prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
                 } else {
-                    if (showLessBtn) showLessBtn.classList.add('hidden');
+                    prevBtn.disabled = false;
+                    prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
                 }
+            }
+
+            var nextBtn = document.getElementById('tx-next-btn');
+            if (nextBtn) {
+                if (txCurrentPage >= totalPages) {
+                    nextBtn.disabled = true;
+                    nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var paginationContainer = document.getElementById('tx-pagination-controls');
+            if (paginationContainer) {
+                if (matchingTotal <= txPageSize) {
+                    paginationContainer.classList.add('hidden');
+                } else {
+                    paginationContainer.classList.remove('hidden');
+                }
+            }
+
+            var pagesContainer = document.getElementById('tx-pagination-pages');
+            if (pagesContainer) {
+                var html = '';
+                for (var p = 1; p <= totalPages; p++) {
+                    var isActive = p === txCurrentPage;
+                    html += '<button type="button" onclick="txGoToPage(' + p + ')" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ' +
+                        (isActive ? 'bg-emerald-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700') + '">' + p + '</button>';
+                }
+                pagesContainer.innerHTML = html;
             }
         }
 
@@ -3075,25 +3123,29 @@ export function renderFinanceDashboard(data: any): string {
                         </table>
                     </div>
 
-                    <!-- Pagination / Show More Controls -->
-                    ${totalTxs > initialLimit ? `
-                    <div class="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800/60 text-xs">
-                        <span class="text-gray-500 dark:text-gray-400 text-xs text-center sm:text-left">
-                            Showing <span id="tx-visible-count" class="font-bold text-gray-800 dark:text-gray-200">${Math.min(initialLimit, totalTxs)}</span> of <span id="tx-total-filtered-count" class="font-bold text-gray-800 dark:text-gray-200">${totalTxs}</span> transactions
-                        </span>
-                        <div class="flex items-center gap-2">
-                            <button type="button" id="tx-show-more-btn" onclick="showMoreTxs()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl transition flex items-center gap-1 active:scale-95">
-                                <span>Show More (+5)</span>
+                    <!-- Pagination Controls (5 per page) -->
+                    <div id="tx-pagination-controls" class="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-800/60 text-xs ${totalTxs <= initialLimit ? 'hidden' : ''}">
+                        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-xs text-center sm:text-left">
+                            <span>Showing <span id="tx-visible-range" class="font-bold text-gray-800 dark:text-gray-200">${totalTxs === 0 ? '0' : `1–${Math.min(initialLimit, totalTxs)}`}</span> of <span id="tx-total-filtered-count" class="font-bold text-gray-800 dark:text-gray-200">${totalTxs}</span></span>
+                            <span class="text-gray-300 dark:text-gray-600">•</span>
+                            <span id="tx-page-info" class="font-semibold text-emerald-600 dark:text-emerald-400">Page 1 of ${Math.max(1, Math.ceil(totalTxs / initialLimit))}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap justify-center">
+                            <button type="button" id="tx-prev-btn" onclick="txPrevPage()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl transition flex items-center gap-1 active:scale-95 cursor-pointer opacity-40 cursor-not-allowed" disabled>
+                                <span>‹ Prev</span>
                             </button>
-                            <button type="button" id="tx-show-all-btn" onclick="showAllTxs()" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-bold rounded-xl transition flex items-center gap-1 active:scale-95">
-                                <span>View All (${totalTxs})</span>
-                            </button>
-                            <button type="button" id="tx-show-less-btn" onclick="showLessTxs()" class="hidden px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl transition flex items-center gap-1 active:scale-95">
-                                <span>Show Less ▴</span>
+                            <div id="tx-pagination-pages" class="flex items-center gap-1 flex-wrap">
+                                ${Array.from({ length: Math.ceil(totalTxs / initialLimit) }).map((_, i) => {
+                                    const pageNum = i + 1;
+                                    const isActive = pageNum === 1;
+                                    return `<button type="button" onclick="txGoToPage(${pageNum})" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ${isActive ? 'bg-emerald-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}">${pageNum}</button>`;
+                                }).join('')}
+                            </div>
+                            <button type="button" id="tx-next-btn" onclick="txNextPage()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl transition flex items-center gap-1 active:scale-95 cursor-pointer ${totalTxs <= initialLimit ? 'opacity-40 cursor-not-allowed' : ''}" ${totalTxs <= initialLimit ? 'disabled' : ''}>
+                                <span>Next ›</span>
                             </button>
                         </div>
                     </div>
-                    ` : ''}
                     `;
                 })()}
             </div>

@@ -361,11 +361,16 @@ export function renderRiderDashboard(data: any): string {
                 '</div>' +
                 '<div class="sm:col-span-2">' +
                     '<select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium">' +
+                        '<option value="Uber Car / Ride"' + (platform === 'Uber Car / Ride' ? ' selected' : '') + '>Uber Car / Ride</option>' +
+                        '<option value="Bolt Car / Ride"' + (platform === 'Bolt Car / Ride' ? ' selected' : '') + '>Bolt Car / Ride</option>' +
+                        '<option value="Little Cab"' + (platform === 'Little Cab' ? ' selected' : '') + '>Little Cab</option>' +
+                        '<option value="Faras"' + (platform === 'Faras' ? ' selected' : '') + '>Faras</option>' +
+                        '<option value="inDrive"' + (platform === 'inDrive' ? ' selected' : '') + '>inDrive</option>' +
                         '<option value="Uber Eats"' + (platform === 'Uber Eats' ? ' selected' : '') + '>Uber Eats</option>' +
                         '<option value="Bolt Deliveries"' + (platform === 'Bolt Deliveries' ? ' selected' : '') + '>Bolt</option>' +
                         '<option value="Glovo / Jumia"' + (platform === 'Glovo / Jumia' ? ' selected' : '') + '>Glovo/Jumia</option>' +
-                        '<option value="Boda Trips"' + (platform === 'Boda Trips' ? ' selected' : '') + '>Boda Passenger</option>' +
-                        '<option value="Direct Delivery"' + (platform === 'Direct Delivery' ? ' selected' : '') + '>Direct Client</option>' +
+                        '<option value="Boda Passenger"' + (platform === 'Boda Passenger' ? ' selected' : '') + '>Boda Passenger</option>' +
+                        '<option value="Direct Client"' + (platform === 'Direct Client' ? ' selected' : '') + '>Direct Client</option>' +
                     '</select>' +
                 '</div>' +
                 '<div class="sm:col-span-2">' +
@@ -405,8 +410,162 @@ export function renderRiderDashboard(data: any): string {
             calcDuration();
         }
 
+        var shiftCurrentPage = 1;
+        var shiftPageSize = 5;
+        var shiftCurrentFilter = 'ALL';
+
+        function setShiftFilter(type) {
+            shiftCurrentFilter = type;
+            shiftCurrentPage = 1;
+            document.querySelectorAll('.shift-filter-btn').forEach(function(b) {
+                b.className = 'shift-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer';
+            });
+            var activeBtn = document.getElementById('shift-filter-btn-' + type);
+            if (activeBtn) {
+                activeBtn.className = 'shift-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition cursor-pointer';
+            }
+            applyShiftDisplay();
+        }
+
+        function shiftGoToPage(p) {
+            shiftCurrentPage = p;
+            applyShiftDisplay();
+            var card = document.getElementById('shift-history-card');
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function shiftPrevPage() {
+            if (shiftCurrentPage > 1) {
+                shiftGoToPage(shiftCurrentPage - 1);
+            }
+        }
+
+        function shiftNextPage() {
+            var mobileItems = document.querySelectorAll('.shift-mobile-item');
+            var matchingTotal = 0;
+            mobileItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-power-type') || 'PETROL';
+                if (shiftCurrentFilter === 'ALL' || itemType === shiftCurrentFilter) {
+                    matchingTotal++;
+                }
+            });
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / shiftPageSize));
+            if (shiftCurrentPage < totalPages) {
+                shiftGoToPage(shiftCurrentPage + 1);
+            }
+        }
+
+        function applyShiftDisplay() {
+            var mobileItems = document.querySelectorAll('.shift-mobile-item');
+            var desktopItems = document.querySelectorAll('.shift-desktop-item');
+            var matchingTotal = 0;
+
+            mobileItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-power-type') || 'PETROL';
+                if (shiftCurrentFilter === 'ALL' || itemType === shiftCurrentFilter) {
+                    matchingTotal++;
+                }
+            });
+
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / shiftPageSize));
+            if (shiftCurrentPage > totalPages) {
+                shiftCurrentPage = totalPages;
+            }
+            if (shiftCurrentPage < 1) {
+                shiftCurrentPage = 1;
+            }
+
+            var startIdx = (shiftCurrentPage - 1) * shiftPageSize;
+            var endIdx = startIdx + shiftPageSize;
+
+            var mIdx = 0;
+            mobileItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-power-type') || 'PETROL';
+                if (shiftCurrentFilter === 'ALL' || itemType === shiftCurrentFilter) {
+                    if (mIdx >= startIdx && mIdx < endIdx) {
+                        el.classList.remove('hidden');
+                    } else {
+                        el.classList.add('hidden');
+                    }
+                    mIdx++;
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+
+            var dIdx = 0;
+            desktopItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-power-type') || 'PETROL';
+                if (shiftCurrentFilter === 'ALL' || itemType === shiftCurrentFilter) {
+                    if (dIdx >= startIdx && dIdx < endIdx) {
+                        el.classList.remove('hidden');
+                    } else {
+                        el.classList.add('hidden');
+                    }
+                    dIdx++;
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+
+            var startDisplay = matchingTotal === 0 ? 0 : startIdx + 1;
+            var endDisplay = Math.min(endIdx, matchingTotal);
+
+            var rangeEl = document.getElementById('shift-visible-range');
+            if (rangeEl) rangeEl.innerText = startDisplay + '–' + endDisplay;
+
+            var totalEl = document.getElementById('shift-total-filtered-count');
+            if (totalEl) totalEl.innerText = String(matchingTotal);
+
+            var pageInfoEl = document.getElementById('shift-page-info');
+            if (pageInfoEl) pageInfoEl.innerText = 'Page ' + shiftCurrentPage + ' of ' + totalPages;
+
+            var prevBtn = document.getElementById('shift-prev-btn');
+            if (prevBtn) {
+                if (shiftCurrentPage <= 1) {
+                    prevBtn.disabled = true;
+                    prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    prevBtn.disabled = false;
+                    prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var nextBtn = document.getElementById('shift-next-btn');
+            if (nextBtn) {
+                if (shiftCurrentPage >= totalPages) {
+                    nextBtn.disabled = true;
+                    nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var paginationContainer = document.getElementById('shift-pagination-controls');
+            if (paginationContainer) {
+                if (matchingTotal <= shiftPageSize) {
+                    paginationContainer.classList.add('hidden');
+                } else {
+                    paginationContainer.classList.remove('hidden');
+                }
+            }
+
+            var pagesContainer = document.getElementById('shift-pagination-pages');
+            if (pagesContainer) {
+                var html = '';
+                for (var p = 1; p <= totalPages; p++) {
+                    var isActive = p === shiftCurrentPage;
+                    html += '<button type="button" onclick="shiftGoToPage(' + p + ')" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ' +
+                        (isActive ? 'bg-blue-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700') + '">' + p + '</button>';
+                }
+                pagesContainer.innerHTML = html;
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             recalcStintsSummary();
+            applyShiftDisplay();
         });
 
         function calcSimStintYield() {
@@ -1276,11 +1435,16 @@ export function renderRiderDashboard(data: any): string {
                                 </div>
                                 <div class="sm:col-span-2">
                                     <select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium" onchange="recalcStintsSummary()">
+                                        <option value="Uber Car / Ride">Uber Car / Ride</option>
+                                        <option value="Bolt Car / Ride">Bolt Car / Ride</option>
+                                        <option value="Little Cab">Little Cab</option>
+                                        <option value="Faras">Faras</option>
+                                        <option value="inDrive">inDrive</option>
                                         <option value="Uber Eats" selected>Uber Eats</option>
                                         <option value="Bolt Deliveries">Bolt</option>
                                         <option value="Glovo / Jumia">Glovo/Jumia</option>
-                                        <option value="Boda Trips">Boda Passenger</option>
-                                        <option value="Direct Delivery">Direct Client</option>
+                                        <option value="Boda Passenger">Boda Passenger</option>
+                                        <option value="Direct Client">Direct Client</option>
                                     </select>
                                 </div>
                                 <div class="sm:col-span-2">
@@ -1304,11 +1468,16 @@ export function renderRiderDashboard(data: any): string {
                                 </div>
                                 <div class="sm:col-span-2">
                                     <select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium" onchange="recalcStintsSummary()">
+                                        <option value="Uber Car / Ride">Uber Car / Ride</option>
+                                        <option value="Bolt Car / Ride" selected>Bolt Car / Ride</option>
+                                        <option value="Little Cab">Little Cab</option>
+                                        <option value="Faras">Faras</option>
+                                        <option value="inDrive">inDrive</option>
                                         <option value="Uber Eats">Uber Eats</option>
-                                        <option value="Bolt Deliveries" selected>Bolt</option>
+                                        <option value="Bolt Deliveries">Bolt</option>
                                         <option value="Glovo / Jumia">Glovo/Jumia</option>
-                                        <option value="Boda Trips">Boda Passenger</option>
-                                        <option value="Direct Delivery">Direct Client</option>
+                                        <option value="Boda Passenger">Boda Passenger</option>
+                                        <option value="Direct Client">Direct Client</option>
                                     </select>
                                 </div>
                                 <div class="sm:col-span-2">
@@ -1968,77 +2137,193 @@ export function renderRiderDashboard(data: any): string {
             </div>
         </div>
 
-        <!-- Shift History Log Table -->
-        <div class="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-            <div class="p-6 border-b dark:border-gray-800 flex justify-between items-center">
-                <h3 class="font-bold text-gray-900 dark:text-white text-base">Shift History & Working Hour Yields</h3>
-                <span class="text-xs text-gray-500">${rider_logs.length} Shifts Recorded</span>
+        <!-- Shift History Log Table & Mobile Feed with 5-Row Pagination -->
+        <div id="shift-history-card" class="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden space-y-2">
+            <div class="p-5 sm:p-6 border-b dark:border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-gray-900 dark:text-white text-base">Shift History & Working Hour Yields</h3>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                        ${rider_logs.length} Shifts
+                    </span>
+                </div>
+
+                <!-- Power System Filter Pills -->
+                <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 p-1 rounded-xl text-xs font-semibold self-start sm:self-auto flex-wrap">
+                    <button type="button" onclick="setShiftFilter('ALL')" id="shift-filter-btn-ALL" class="shift-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition cursor-pointer">
+                        All (${rider_logs.length})
+                    </button>
+                    <button type="button" onclick="setShiftFilter('ELECTRIC')" id="shift-filter-btn-ELECTRIC" class="shift-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
+                        Electric EV (${rider_logs.filter((l: any) => l.power_type === 'ELECTRIC').length})
+                    </button>
+                    <button type="button" onclick="setShiftFilter('PETROL')" id="shift-filter-btn-PETROL" class="shift-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
+                        Petrol / ICE (${rider_logs.filter((l: any) => l.power_type !== 'ELECTRIC').length})
+                    </button>
+                </div>
             </div>
-            <div class="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                <table class="w-full text-left text-xs">
-                    <thead class="bg-gray-50 dark:bg-gray-800/60 uppercase text-gray-400 text-[10px]">
-                        <tr>
-                            <th class="p-4">Date</th>
-                            <th class="p-4">Shift Hours</th>
-                            <th class="p-4">Power & Station</th>
-                            <th class="p-4">Hourly Yield</th>
-                            <th class="p-4">Gross Earned</th>
-                            <th class="p-4">Energy & Upkeep</th>
-                            <th class="p-4">Net Remittance</th>
-                            <th class="p-4 text-center">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y dark:divide-gray-800">
-                        ${rider_logs.length > 0 ? rider_logs.map((l: any) => {
-                            const totalShiftExpenses = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
-                            const netShiftRemittance = Number(l.total_earned || 0) - totalShiftExpenses;
-                            return `
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
-                            <td class="p-4 font-medium">${l.date}</td>
-                            <td class="p-4">
-                                <span class="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold">
-                                    ⏰ ${l.start_time || '11:00'} – ${l.end_time || '22:00'} (${l.shift_hours}h)
+
+            ${(() => {
+                const totalShifts = rider_logs.length;
+                const shiftLimit = 5;
+
+                if (totalShifts === 0) {
+                    return `
+                    <div class="p-8 text-center text-gray-400">
+                        <p class="text-xs">No shift records logged yet. Log your first shift above!</p>
+                    </div>`;
+                }
+
+                return `
+                <!-- Mobile Feed (Phone View: compact cards, max 5 per page) -->
+                <div id="shift-mobile-container" class="block sm:hidden p-4 space-y-2.5">
+                    ${rider_logs.map((l: any, idx: number) => {
+                        const totalShiftExpenses = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
+                        const netShiftRemittance = Number(l.total_earned || 0) - totalShiftExpenses;
+                        const hrYield = Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1));
+                        const isElectric = l.power_type === 'ELECTRIC';
+                        const isHidden = idx >= shiftLimit;
+                        return `
+                        <div class="shift-item shift-mobile-item p-3.5 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100/70 dark:hover:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-2.5 transition ${isHidden ? 'hidden' : ''}" data-power-type="${isElectric ? 'ELECTRIC' : 'PETROL'}">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="font-bold text-xs text-gray-900 dark:text-white">${l.date}</span>
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                        ⏰ ${l.start_time || '11:00'}–${l.end_time || '22:00'} (${l.shift_hours}h)
+                                    </span>
+                                </div>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${isElectric ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'} shrink-0">
+                                    ${isElectric ? `🔋 ${l.fuel_station || 'SPIRO'}` : `⛽ ${l.fuel_station || 'RUBIS'}`}
                                 </span>
-                            </td>
-                            <td class="p-4">
-                                <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${l.power_type === 'ELECTRIC' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}">
-                                    ${l.power_type === 'ELECTRIC' ? `🔋 ${l.fuel_station || 'SPIRO'}` : `⛽ ${l.fuel_station || 'RUBIS'}`}
-                                </span>
-                            </td>
-                            <td class="p-4 font-bold text-amber-600 dark:text-amber-400">
-                                ⚡ <span class="convertible-amount" data-kes="${Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))}">Ksh ${(Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>/hr
-                            </td>
-                            <td class="p-4 font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${l.total_earned}">Ksh ${(Number(l.total_earned) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td class="p-4 text-rose-500 font-medium">
-                                <div class="font-bold convertible-amount" data-kes="${totalShiftExpenses}">
-                                    Ksh ${totalShiftExpenses.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 p-2.5 bg-white dark:bg-gray-900/80 rounded-xl border border-gray-100 dark:border-gray-800/60 text-center">
+                                <div>
+                                    <p class="text-[9px] text-gray-400 uppercase font-semibold">Yield</p>
+                                    <p class="text-xs font-black text-amber-600 dark:text-amber-400 mt-0.5">⚡ Ksh ${hrYield.toLocaleString()}/h</p>
                                 </div>
-                                <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap gap-1">
-                                    ${Number(l.fuel_cost || 0) > 0 ? `<span>⛽ ${l.fuel_cost}</span>` : ''}
-                                    ${Number(l.food_spent || 0) > 0 ? `<span>🍲 ${l.food_spent}</span>` : ''}
-                                    ${Number(l.airtime_spent || 0) > 0 ? `<span>📱 ${l.airtime_spent}</span>` : ''}
-                                    ${Number(l.misc_expenses || 0) > 0 ? `<span>🛠️ ${l.misc_expenses}</span>` : ''}
+                                <div>
+                                    <p class="text-[9px] text-gray-400 uppercase font-semibold">Gross</p>
+                                    <p class="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5 convertible-amount" data-kes="${l.total_earned}">+Ksh ${(Number(l.total_earned) || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
                                 </div>
-                            </td>
-                            <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400 convertible-amount" data-kes="${netShiftRemittance}">Ksh ${netShiftRemittance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td class="p-4 text-center">
-                                <div class="flex items-center justify-center gap-1.5">
-                                    <button type="button" onclick="shareStintWhatsApp('${l.date}', '${l.start_time || '11:00'}', '${l.end_time || '22:00'}', ${l.shift_hours || 8}, ${l.trips_completed || 0}, ${l.total_earned || 0}, ${l.fuel_cost || 0}, ${l.food_spent || 0}, ${l.airtime_spent || 0}, ${l.misc_expenses || 0}, ${netShiftRemittance}, '${l.power_type || 'PETROL'}', '${active_bike ? active_bike.plate_number : ''}')" class="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold transition active:scale-95 shadow-2xs" title="Share Stint to WhatsApp">
-                                        <span>📲</span>
-                                    </button>
-                                    <form action="/rider/logs/delete/${l.id}" method="POST" onsubmit="return confirm('Delete shift log?');">
-                                        <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold p-1 text-xs">Delete</button>
-                                    </form>
+                                <div>
+                                    <p class="text-[9px] text-gray-400 uppercase font-semibold">Net Profit</p>
+                                    <p class="text-xs font-black text-blue-600 dark:text-blue-400 mt-0.5 convertible-amount" data-kes="${netShiftRemittance}">Ksh ${netShiftRemittance.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
                                 </div>
-                            </td>
-                        </tr>`;
-                        }).join('') : `
-                        <tr>
-                            <td colspan="8" class="p-6 text-center text-gray-400">No shift records logged yet.</td>
-                        </tr>`}
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+
+                            ${totalShiftExpenses > 0 ? `
+                            <div class="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 px-1">
+                                <span>Expenses: <strong class="text-rose-500 font-bold">-Ksh ${totalShiftExpenses.toLocaleString()}</strong></span>
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    ${Number(l.fuel_cost || 0) > 0 ? `<span class="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">⛽ ${l.fuel_cost}</span>` : ''}
+                                    ${Number(l.food_spent || 0) > 0 ? `<span class="bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded">🍲 ${l.food_spent}</span>` : ''}
+                                    ${Number(l.airtime_spent || 0) > 0 ? `<span class="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">📱 ${l.airtime_spent}</span>` : ''}
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            <div class="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800/60">
+                                <button type="button" onclick="shareStintWhatsApp('${l.date}', '${l.start_time || '11:00'}', '${l.end_time || '22:00'}', ${l.shift_hours || 8}, ${l.trips_completed || 0}, ${l.total_earned || 0}, ${l.fuel_cost || 0}, ${l.food_spent || 0}, ${l.airtime_spent || 0}, ${l.misc_expenses || 0}, ${netShiftRemittance}, '${l.power_type || 'PETROL'}', '${active_bike ? active_bike.plate_number : ''}')" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-lg text-xs font-bold transition flex items-center gap-1 active:scale-95">
+                                    <span>📲 Share Stint</span>
+                                </button>
+                                <form action="/rider/logs/delete/${l.id}" method="POST" onsubmit="return confirm('Delete shift log?');">
+                                    <button type="submit" class="text-rose-400 hover:text-rose-600 font-bold text-xs p-1">Delete ✕</button>
+                                </form>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+
+                <!-- Desktop Table View (Tablet & Laptop/Desktop) -->
+                <div id="shift-desktop-container" class="hidden sm:block overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-gray-50 dark:bg-gray-800/60 uppercase text-gray-400 text-[10px]">
+                            <tr>
+                                <th class="p-4">Date</th>
+                                <th class="p-4">Shift Hours</th>
+                                <th class="p-4">Power & Station</th>
+                                <th class="p-4">Hourly Yield</th>
+                                <th class="p-4">Gross Earned</th>
+                                <th class="p-4">Energy & Upkeep</th>
+                                <th class="p-4">Net Remittance</th>
+                                <th class="p-4 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y dark:divide-gray-800">
+                            ${rider_logs.map((l: any, idx: number) => {
+                                const totalShiftExpenses = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
+                                const netShiftRemittance = Number(l.total_earned || 0) - totalShiftExpenses;
+                                const isElectric = l.power_type === 'ELECTRIC';
+                                const isHidden = idx >= shiftLimit;
+                                return `
+                            <tr class="shift-item shift-desktop-item hover:bg-gray-50 dark:hover:bg-gray-800/40 transition ${isHidden ? 'hidden' : ''}" data-power-type="${isElectric ? 'ELECTRIC' : 'PETROL'}">
+                                <td class="p-4 font-medium">${l.date}</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold">
+                                        ⏰ ${l.start_time || '11:00'} – ${l.end_time || '22:00'} (${l.shift_hours}h)
+                                    </span>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${isElectric ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}">
+                                        ${isElectric ? `🔋 ${l.fuel_station || 'SPIRO'}` : `⛽ ${l.fuel_station || 'RUBIS'}`}
+                                    </span>
+                                </td>
+                                <td class="p-4 font-bold text-amber-600 dark:text-amber-400">
+                                    ⚡ <span class="convertible-amount" data-kes="${Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))}">Ksh ${(Math.round(Number(l.total_earned) / (Number(l.shift_hours) || 1))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>/hr
+                                </td>
+                                <td class="p-4 font-bold text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${l.total_earned}">Ksh ${(Number(l.total_earned) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td class="p-4 text-rose-500 font-medium">
+                                    <div class="font-bold convertible-amount" data-kes="${totalShiftExpenses}">
+                                        Ksh ${totalShiftExpenses.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                    </div>
+                                    <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap gap-1">
+                                        ${Number(l.fuel_cost || 0) > 0 ? `<span>⛽ ${l.fuel_cost}</span>` : ''}
+                                        ${Number(l.food_spent || 0) > 0 ? `<span>🍲 ${l.food_spent}</span>` : ''}
+                                        ${Number(l.airtime_spent || 0) > 0 ? `<span>📱 ${l.airtime_spent}</span>` : ''}
+                                        ${Number(l.misc_expenses || 0) > 0 ? `<span>🛠️ ${l.misc_expenses}</span>` : ''}
+                                    </div>
+                                </td>
+                                <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400 convertible-amount" data-kes="${netShiftRemittance}">Ksh ${netShiftRemittance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td class="p-4 text-center">
+                                    <div class="flex items-center justify-center gap-1.5">
+                                        <button type="button" onclick="shareStintWhatsApp('${l.date}', '${l.start_time || '11:00'}', '${l.end_time || '22:00'}', ${l.shift_hours || 8}, ${l.trips_completed || 0}, ${l.total_earned || 0}, ${l.fuel_cost || 0}, ${l.food_spent || 0}, ${l.airtime_spent || 0}, ${l.misc_expenses || 0}, ${netShiftRemittance}, '${l.power_type || 'PETROL'}', '${active_bike ? active_bike.plate_number : ''}')" class="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold transition active:scale-95 shadow-2xs" title="Share Stint to WhatsApp">
+                                            <span>📲</span>
+                                        </button>
+                                        <form action="/rider/logs/delete/${l.id}" method="POST" onsubmit="return confirm('Delete shift log?');">
+                                            <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold p-1 text-xs">Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Shift Pagination Controls (5 per page) -->
+                <div id="shift-pagination-controls" class="p-4 sm:p-5 border-t border-gray-100 dark:border-gray-800/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs ${totalShifts <= shiftLimit ? 'hidden' : ''}">
+                    <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-xs text-center sm:text-left">
+                        <span>Showing <span id="shift-visible-range" class="font-bold text-gray-800 dark:text-gray-200">${totalShifts === 0 ? '0' : `1–${Math.min(shiftLimit, totalShifts)}`}</span> of <span id="shift-total-filtered-count" class="font-bold text-gray-800 dark:text-gray-200">${totalShifts}</span> shifts</span>
+                        <span class="text-gray-300 dark:text-gray-600">•</span>
+                        <span id="shift-page-info" class="font-semibold text-blue-600 dark:text-blue-400">Page 1 of ${Math.max(1, Math.ceil(totalShifts / shiftLimit))}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-wrap justify-center">
+                        <button type="button" id="shift-prev-btn" onclick="shiftPrevPage()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl transition flex items-center gap-1 active:scale-95 cursor-pointer opacity-40 cursor-not-allowed" disabled>
+                            <span>‹ Prev</span>
+                        </button>
+                        <div id="shift-pagination-pages" class="flex items-center gap-1 flex-wrap">
+                            ${Array.from({ length: Math.ceil(totalShifts / shiftLimit) }).map((_, i) => {
+                                const pageNum = i + 1;
+                                const isActive = pageNum === 1;
+                                return `<button type="button" onclick="shiftGoToPage(${pageNum})" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ${isActive ? 'bg-blue-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}">${pageNum}</button>`;
+                            }).join('')}
+                        </div>
+                        <button type="button" id="shift-next-btn" onclick="shiftNextPage()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl transition flex items-center gap-1 active:scale-95 cursor-pointer ${totalShifts <= shiftLimit ? 'opacity-40 cursor-not-allowed' : ''}" ${totalShifts <= shiftLimit ? 'disabled' : ''}>
+                            <span>Next ›</span>
+                        </button>
+                    </div>
+                </div>
+                `;
+            })()}
         </div>
 
     </main>
