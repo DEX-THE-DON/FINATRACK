@@ -673,118 +673,119 @@ export function renderFinanceDashboard(data: any): string {
         let _mpesaParsedList = [];
 
         async function parseMpesaClient() {
-            const input = document.getElementById("mpesa-batch-input");
-            const raw = input ? input.value : "";
+            var input = document.getElementById('mpesa-batch-input');
+            var raw = input ? input.value : '';
             if (!raw.trim()) {
-                alert("Please paste at least one M-Pesa or Kenyan Bank SMS message.");
+                alert('Please paste at least one M-Pesa or Kenyan Bank SMS message.');
                 return;
             }
 
-            const previewDiv = document.getElementById("mpesa-preview-area");
-            const tableBody = document.getElementById("mpesa-preview-tbody");
-            const countBadge = document.getElementById("mpesa-parsed-count");
-            const importBtn = document.getElementById("mpesa-import-submit-btn");
+            var previewDiv = document.getElementById('mpesa-preview-area');
+            var tableBody = document.getElementById('mpesa-preview-tbody');
+            var countBadge = document.getElementById('mpesa-parsed-count');
+            var importBtn = document.getElementById('mpesa-import-submit-btn');
 
-            if (previewDiv) previewDiv.classList.remove("hidden");
-            if (countBadge) countBadge.innerHTML = "<span class=\"text-emerald-600 dark:text-emerald-400 font-bold animate-pulse\">⏳ Analyzing & extracting SMS...</span>";
+            if (previewDiv) previewDiv.classList.remove('hidden');
+            if (countBadge) countBadge.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">⏳ Analyzing & extracting transactions...</span>';
 
+            var txList = [];
             try {
-                const formData = new FormData();
-                formData.append("raw_sms", raw);
+                var formData = new FormData();
+                formData.append('raw_sms', raw);
 
-                const response = await fetch("/finance/mpesa/parse", {
-                    method: "POST",
+                var response = await fetch('/finance/mpesa/parse', {
+                    method: 'POST',
                     body: formData
                 });
 
-                if (!response.ok) {
-                    throw new Error("Server returned status " + response.status);
+                if (response.ok) {
+                    var data = await response.json();
+                    if (data && data.success && Array.isArray(data.transactions) && data.transactions.length > 0) {
+                        txList = data.transactions;
+                    }
                 }
-
-                const data = await response.json();
-                if (!data.success || !data.transactions || data.transactions.length === 0) {
-                    _mpesaParsedList = [];
-                    if (countBadge) countBadge.innerText = "0 SMS Extracted";
-                    if (tableBody) tableBody.innerHTML = "<tr><td colspan=\"8\" class=\"py-4 text-center text-xs text-rose-500 font-bold\">No standard M-Pesa or Bank SMS formats detected. Please ensure text contains transaction code and amount (KES/Ksh).</td></tr>";
-                    if (importBtn) importBtn.setAttribute("disabled", "true");
-                    return;
-                }
-
-                _mpesaParsedList = data.transactions.map(function(tx, idx) {
-                    return {
-                        id: idx,
-                        selected: true,
-                        code: tx.code || ("TX" + idx),
-                        type: tx.type || "EXPENSE",
-                        amount: Number(tx.amount_kes || tx.amount || 0),
-                        party: tx.party || tx.counterparty || "Counterparty",
-                        date: tx.date || new Date().toISOString().slice(0, 10),
-                        time: tx.time || "",
-                        category: tx.suggested_category || "Living Expenses",
-                        description: tx.description || ("SMS #" + (tx.code || idx))
-                    };
-                });
-
-                renderMpesaReviewTable();
-            } catch (err) {
-                console.error("Error parsing SMS:", err);
-                if (countBadge) countBadge.innerText = "Extraction failed";
-                if (tableBody) tableBody.innerHTML = "<tr><td colspan=\"8\" class=\"py-4 text-center text-xs text-rose-500 font-bold\">Error communicating with SMS parser. Please check connection and try again.</td></tr>";
+            } catch (fetchErr) {
+                console.warn('Network parse error:', fetchErr);
             }
+
+            if (txList.length === 0) {
+                _mpesaParsedList = [];
+                if (countBadge) countBadge.innerText = '0 SMS Extracted';
+                if (tableBody) tableBody.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-xs text-rose-500 font-bold">No standard M-Pesa or Bank SMS formats detected. Please ensure message contains transaction code and amount (KES/Ksh).</td></tr>';
+                if (importBtn) importBtn.setAttribute('disabled', 'true');
+                return;
+            }
+
+            _mpesaParsedList = txList.map(function(tx, idx) {
+                return {
+                    id: idx,
+                    selected: true,
+                    code: tx.code || ('TX' + idx),
+                    type: tx.type || 'EXPENSE',
+                    amount: Number(tx.amount_kes || tx.amount || 0),
+                    party: tx.party || tx.counterparty || 'Counterparty',
+                    date: tx.date || new Date().toISOString().slice(0, 10),
+                    time: tx.time || '',
+                    category: tx.suggested_category || tx.category || 'Living Expenses',
+                    description: tx.description || ('SMS #' + (tx.code || idx))
+                };
+            });
+
+            renderMpesaReviewTable();
         }
 
         function renderMpesaReviewTable() {
-            const tableBody = document.getElementById("mpesa-preview-tbody");
-            const countBadge = document.getElementById("mpesa-parsed-count");
-            const importBtn = document.getElementById("mpesa-import-submit-btn");
-            const reviewedInput = document.getElementById("mpesa-reviewed-json");
+            var tableBody = document.getElementById('mpesa-preview-tbody');
+            var countBadge = document.getElementById('mpesa-parsed-count');
+            var importBtn = document.getElementById('mpesa-import-submit-btn');
+            var reviewedInput = document.getElementById('mpesa-reviewed-json');
 
             if (!tableBody) return;
 
-            const categories = [
-                "Rider & Boda Deliveries",
-                "Fuel & Petrol",
-                "EV Battery Swap & Charging",
-                "Vehicle Maintenance",
-                "Utilities & Bills",
-                "Food & Groceries",
-                "Living Expenses",
-                "Airtime & Internet",
-                "Bank Deposit & Inflow",
-                "Salary & Income",
-                "M-Pesa Income",
-                "Other"
+            var categories = [
+                'Rider & Boda Deliveries',
+                'Fuel & Petrol',
+                'EV Battery Swap & Charging',
+                'Vehicle Maintenance',
+                'Utilities & Bills',
+                'Food & Groceries',
+                'Living Expenses',
+                'Airtime & Internet',
+                'Bank Deposit & Inflow',
+                'Salary & Income',
+                'M-Pesa Income',
+                'Other'
             ];
 
-            const selectedItems = _mpesaParsedList.filter(function(t) { return t.selected; });
-            let totalIn = 0;
-            let totalOut = 0;
+            var selectedItems = _mpesaParsedList.filter(function(t) { return t.selected; });
+            var totalIn = 0;
+            var totalOut = 0;
             selectedItems.forEach(function(t) {
-                if (t.type === "INCOME") totalIn += t.amount;
+                if (t.type === 'INCOME') totalIn += t.amount;
                 else totalOut += t.amount;
             });
 
             if (countBadge) {
-                let badgeHtml = "<span class=\"font-extrabold text-emerald-600 dark:text-emerald-400\">" + selectedItems.length + " of " + _mpesaParsedList.length + " SMS Selected</span>";
+                var badgeHtml = '<span class="font-extrabold text-emerald-600 dark:text-emerald-400">' + selectedItems.length + ' of ' + _mpesaParsedList.length + ' SMS Selected</span>';
                 if (totalIn > 0 || totalOut > 0) {
-                    badgeHtml += "<span class=\"ml-2 font-medium text-gray-500 dark:text-gray-400\">(";
-                    if (totalIn > 0) badgeHtml += "<span class=\"text-emerald-600 font-bold\">+Ksh " + totalIn.toLocaleString(undefined, {minimumFractionDigits: 2}) + "</span> ";
-                    if (totalOut > 0) badgeHtml += "<span class=\"text-rose-600 font-bold\">-Ksh " + totalOut.toLocaleString(undefined, {minimumFractionDigits: 2}) + "</span>";
-                    badgeHtml += ")</span>";
+                    badgeHtml += '<span class="ml-2 font-medium text-gray-500 dark:text-gray-400">(';
+                    if (totalIn > 0) badgeHtml += '<span class="text-emerald-600 font-bold">+Ksh ' + totalIn.toLocaleString(undefined, {minimumFractionDigits: 2}) + '</span> ';
+                    if (totalOut > 0) badgeHtml += '<span class="text-rose-600 font-bold">-Ksh ' + totalOut.toLocaleString(undefined, {minimumFractionDigits: 2}) + '</span>';
+                    badgeHtml += ')</span>';
                 }
                 countBadge.innerHTML = badgeHtml;
             }
 
             if (_mpesaParsedList.length === 0) {
-                tableBody.innerHTML = "<tr><td colspan=\"8\" class=\"py-4 text-center text-xs text-gray-400\">No transactions to display.</td></tr>";
-                if (importBtn) importBtn.setAttribute("disabled", "true");
-                if (reviewedInput) reviewedInput.value = "";
+                tableBody.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-xs text-gray-400">No transactions to display.</td></tr>';
+                if (importBtn) importBtn.setAttribute('disabled', 'true');
+                if (reviewedInput) reviewedInput.value = '';
                 return;
             }
 
             if (importBtn) {
-                importBtn.removeAttribute("disabled");
-                importBtn.innerHTML = "<span>📥 1-Tap Import (" + selectedItems.length + ") to Ledger</span>";
+                importBtn.removeAttribute('disabled');
+                importBtn.innerHTML = '<span>📥 1-Tap Import (' + selectedItems.length + ') to Ledger</span>';
             }
 
             if (reviewedInput) {
@@ -804,35 +805,35 @@ export function renderFinanceDashboard(data: any): string {
             }
 
             tableBody.innerHTML = _mpesaParsedList.map(function(r, idx) {
-                const typeClass = r.type === "INCOME" 
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" 
-                    : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300";
+                var typeClass = r.type === 'INCOME' 
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' 
+                    : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300';
                 
-                const catOptions = categories.map(function(c) {
-                    return "<option value=\"" + c + "\" " + (c === r.category ? "selected" : "") + ">" + c + "</option>";
-                }).join("");
+                var catOptions = categories.map(function(c) {
+                    return '<option value="' + c + '" ' + (c === r.category ? 'selected' : '') + '>' + c + '</option>';
+                }).join('');
 
-                const rowClass = r.selected ? "" : "opacity-40 line-through";
+                var rowClass = r.selected ? '' : 'opacity-40 line-through';
 
-                return "<tr class=\"border-b border-gray-100 dark:border-gray-800 text-xs transition " + rowClass + "\">" +
-                    "<td class=\"py-2.5 px-3 text-center\">" +
-                        "<input type=\"checkbox\" onchange=\"toggleMpesaItem(" + idx + ", this.checked)\" " + (r.selected ? "checked" : "") + " class=\"rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer\">" +
-                    "</td>" +
-                    "<td class=\"py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap\">#" + r.code + "</td>" +
-                    "<td class=\"py-2.5 px-3 whitespace-nowrap text-gray-600 dark:text-gray-300\">" + r.date + (r.time ? " " + r.time : "") + "</td>" +
-                    "<td class=\"py-2.5 px-3 whitespace-nowrap\"><span class=\"px-2 py-0.5 rounded-full font-bold text-[10px] " + typeClass + "\">" + r.type + "</span></td>" +
-                    "<td class=\"py-2.5 px-3 font-medium max-w-[150px] truncate\" title=\"" + r.party + "\">" + r.party + "</td>" +
-                    "<td class=\"py-2.5 px-3 font-bold text-gray-900 dark:text-white whitespace-nowrap\">Ksh " + r.amount.toLocaleString(undefined, {minimumFractionDigits: 2}) + "</td>" +
-                    "<td class=\"py-2.5 px-3\">" +
-                        "<select onchange=\"updateMpesaCategory(" + idx + ", this.value)\" class=\"text-xs p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white\">" +
+                return '<tr class="border-b border-gray-100 dark:border-gray-800 text-xs transition ' + rowClass + '">' +
+                    '<td class="py-2.5 px-3 text-center">' +
+                        '<input type="checkbox" onchange="toggleMpesaItem(' + idx + ', this.checked)" ' + (r.selected ? 'checked' : '') + ' class="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer">' +
+                    '</td>' +
+                    '<td class="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">#' + r.code + '</td>' +
+                    '<td class="py-2.5 px-3 whitespace-nowrap text-gray-600 dark:text-gray-300">' + r.date + (r.time ? ' ' + r.time : '') + '</td>' +
+                    '<td class="py-2.5 px-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] ' + typeClass + '">' + r.type + '</span></td>' +
+                    '<td class="py-2.5 px-3 font-medium max-w-[150px] truncate" title="' + r.party + '">' + r.party + '</td>' +
+                    '<td class="py-2.5 px-3 font-bold text-gray-900 dark:text-white whitespace-nowrap">Ksh ' + r.amount.toLocaleString(undefined, {minimumFractionDigits: 2}) + '</td>' +
+                    '<td class="py-2.5 px-3">' +
+                        '<select onchange="updateMpesaCategory(' + idx + ', this.value)" class="text-xs p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white">' +
                             catOptions +
-                        "</select>" +
-                    "</td>" +
-                    "<td class=\"py-2.5 px-2 text-center\">" +
-                        "<button type=\"button\" onclick=\"removeMpesaItem(" + idx + ")\" class=\"text-gray-400 hover:text-rose-500 font-bold transition px-1\" title=\"Remove transaction\">✕</button>" +
-                    "</td>" +
-                "</tr>";
-            }).join("");
+                        '</select>' +
+                    '</td>' +
+                    '<td class="py-2.5 px-2 text-center">' +
+                        '<button type="button" onclick="removeMpesaItem(' + idx + ')" class="text-gray-400 hover:text-rose-500 font-bold transition px-1" title="Remove transaction">✕</button>' +
+                    '</td>' +
+                '</tr>';
+            }).join('');
         }
 
         function toggleMpesaItem(idx, checked) {
@@ -845,9 +846,9 @@ export function renderFinanceDashboard(data: any): string {
         function updateMpesaCategory(idx, cat) {
             if (_mpesaParsedList[idx]) {
                 _mpesaParsedList[idx].category = cat;
-                const reviewedInput = document.getElementById("mpesa-reviewed-json");
+                var reviewedInput = document.getElementById('mpesa-reviewed-json');
                 if (reviewedInput) {
-                    const selectedItems = _mpesaParsedList.filter(function(t) { return t.selected; });
+                    var selectedItems = _mpesaParsedList.filter(function(t) { return t.selected; });
                     reviewedInput.value = JSON.stringify(selectedItems.map(function(t) {
                         return {
                             code: t.code,
@@ -876,22 +877,23 @@ export function renderFinanceDashboard(data: any): string {
         }
 
         function pasteSampleMpesa(type) {
-            const input = document.getElementById("mpesa-batch-input");
+            var input = document.getElementById('mpesa-batch-input');
             if (!input) return;
-            const samples = {
-                single: "QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE 0712345678 on 12/9/26 at 11:30 AM. New M-PESA balance is Ksh5,400.00. Transaction cost, Ksh0.00.",
-                ev: "QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.",
+            var nl = String.fromCharCode(10);
+            var samples = {
+                single: 'QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE 0712345678 on 12/9/26 at 11:30 AM. New M-PESA balance is Ksh5,400.00. Transaction cost, Ksh0.00.',
+                ev: 'QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.',
                 bank: [
-                    "Dear Customer, your A/C *******1234 has been credited with KES 4,500.00 on 22/09/2026 10:30:15 from BOLT OPERATIONS Ref: BQD7654321. Available Bal: KES 18,200.00.",
-                    "Confirmed. Ksh 5,000.00 received from UBER B.V on 22/09/2026 at 09:15 AM. Ref: KCB123456. New balance is Ksh 22,000.00.",
-                    "Dear Customer, your A/C *******1234 has been debited with KES 1,500.00 on 22/09/2026 14:20:00 paid to RUBIS ENERGY Ref: EQ987654. Available Bal: KES 16,700.00."
-                ].join("\n\n"),
+                    'Dear Customer, your A/C *******1234 has been credited with KES 4,500.00 on 22/09/2026 10:30:15 from BOLT OPERATIONS Ref: BQD7654321. Available Bal: KES 18,200.00.',
+                    'Confirmed. Ksh 5,000.00 received from UBER B.V on 22/09/2026 at 09:15 AM. Ref: KCB123456. New balance is Ksh 22,000.00.',
+                    'Dear Customer, your A/C *******1234 has been debited with KES 1,500.00 on 22/09/2026 14:20:00 paid to RUBIS ENERGY Ref: EQ987654. Available Bal: KES 16,700.00.'
+                ].join(nl + nl),
                 batch: [
-                    "QA11111111 Confirmed. Ksh2,400.00 received from BOLT DELIVERIES on 12/9/26 at 6:00 PM. New M-PESA balance is Ksh7,170.00.",
-                    "QB22222222 Confirmed. Ksh630.00 paid to TOTAL ENERGIES. on 12/9/26 at 7:30 PM. New M-PESA balance is Ksh6,540.00.",
-                    "QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.",
-                    "QC33333333 Confirmed. Ksh450.00 paid to KPLC PREPAID on 12/9/26 at 8:15 PM. New M-PESA balance is Ksh6,090.00."
-                ].join("\n")
+                    'QA11111111 Confirmed. Ksh2,400.00 received from BOLT DELIVERIES on 12/9/26 at 6:00 PM. New M-PESA balance is Ksh7,170.00.',
+                    'QB22222222 Confirmed. Ksh630.00 paid to TOTAL ENERGIES. on 12/9/26 at 7:30 PM. New M-PESA balance is Ksh6,540.00.',
+                    'QD44444444 Confirmed. Ksh400.00 paid to SPIRO BATTERY SWAP on 12/9/26 at 4:30 PM. New M-PESA balance is Ksh5,320.00.',
+                    'QC33333333 Confirmed. Ksh450.00 paid to KPLC PREPAID on 12/9/26 at 8:15 PM. New M-PESA balance is Ksh6,090.00.'
+                ].join(nl)
             };
 
             input.value = samples[type] || samples.single;
