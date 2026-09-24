@@ -321,24 +321,71 @@ financeRoutes.post('/goals/create', async (c) => {
   const rawTarget = parseFloat(String(body['target_amount'] || '0.0')) || 0.0;
   const rawSplit = parseFloat(String(body['split_percentage'] || '0.0')) || 0.0;
   const targetDate = body['target_date'] ? String(body['target_date']) : null;
-  const accountId = body['account_id'] ? String(body['account_id']) : null;
   const addToSplit = body['add_to_split'] === '1' || body['add_to_split'] === 'on';
 
-  const { data: goal, error } = await supabase.from('goals').insert({
-    ...(userId ? { user_id: userId } : {}),
+  if (!title) {
+    return c.redirect('/?toast=Please+enter+a+goal+title', 303);
+  }
+  if (rawTarget <= 0) {
+    return c.redirect('/?toast=Please+enter+a+valid+target+amount', 303);
+  }
+
+  // 1. Insert into Supabase goals using only valid schema columns
+  const insertPayload: any = {
     title,
     target_amount: rawTarget,
     current_amount: 0.00,
-    target_date: targetDate,
-    split_percentage: rawSplit > 0 ? rawSplit : null,
-    account_id: accountId || null,
-  }).select().single();
+    target_date: targetDate || null,
+  };
+  if (userId) {
+    insertPayload.user_id = userId;
+  }
+
+  const { data: goal, error } = await supabase
+    .from('goals')
+    .insert(insertPayload)
+    .select()
+    .single();
 
   if (error) {
-    console.error('Failed to create goal:', error);
+    console.error('Failed to create goal in database:', error);
     return c.redirect(`/?toast=${encodeURIComponent('Failed to create goal: ' + error.message)}`, 303);
   }
 
+  // 2. Persist sub-split share % into finatrack_goal_splits cookie
+  if (rawSplit > 0 && goal) {
+    try {
+      const existingSplits = getSavedGoalSplits(c);
+      existingSplits[goal.id] = rawSplit;
+      existingSplits[goal.title] = rawSplit;
+      setCookie(c, 'finatrack_goal_splits', encodeURIComponent(JSON.stringify(existingSplits)), {
+        path: '/',
+        maxAge: 31536000,
+        sameSite: 'Lax',
+      });
+    } catch (e) {
+      console.warn('Failed to save goal split cookie:', e);
+    }
+  }
+
+  // 3. Persist guest goals in cookie if unauthenticated
+  if (!userId && goal) {
+    try {
+      let guestGoalsList: any[] = [];
+      const raw = getCookie(c, 'finatrack_guest_goals') || '';
+      if (raw) guestGoalsList = JSON.parse(decodeURIComponent(raw));
+      guestGoalsList.push(goal);
+      setCookie(c, 'finatrack_guest_goals', encodeURIComponent(JSON.stringify(guestGoalsList)), {
+        path: '/',
+        maxAge: 31536000,
+        sameSite: 'Lax',
+      });
+    } catch (e) {
+      console.warn('Failed to save guest goal cookie:', e);
+    }
+  }
+
+  // 4. Optional: Add to allocation rules if requested
   if (goal && addToSplit) {
     await supabase.from('allocation_rules').insert({
       ...(userId ? { user_id: userId } : {}),
@@ -372,14 +419,18 @@ financeRoutes.post('/goals/link-vault', async (c) => {
   if (userId) ruleQuery = ruleQuery.eq('user_id', userId);
   await ruleQuery;
 
-  // 3. Update all active goals with this master vault account_id
-  let goalQuery = supabase.from('goals').update({ account_id: vaultAccountId });
-  if (userId) {
-    goalQuery = goalQuery.eq('user_id', userId);
-  } else {
-    goalQuery = goalQuery.neq('id', '00000000-0000-0000-0000-000000000000');
+  // 3. Update all active goals with this master vault account_id (wrapped in try/catch if column absent)
+  try {
+    let goalQuery = supabase.from('goals').update({ account_id: vaultAccountId });
+    if (userId) {
+      goalQuery = goalQuery.eq('user_id', userId);
+    } else {
+      goalQuery = goalQuery.neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+    await goalQuery;
+  } catch (e) {
+    console.warn('account_id column not present in goals schema:', e);
   }
-  await goalQuery;
 
   return c.redirect(`/?toast=${encodeURIComponent(`Master Goal Vault linked to ${accName}!`)}`, 303);
 });
@@ -601,13 +652,57 @@ financeRoutes.post('/goals/withdraw/:id', async (c) => {
 });
 
 financeRoutes.post('/goals/delete/:id', async (c) => {
-  const { supabase } = await getRequestContext(c);
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
   await supabase.from('allocation_rules').delete().eq('target_id', id);
-  const { error } = await supabase.from('goals').delete().eq('id', id);
-  if (error) {
-    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete goal: ' + error.message)}`, 303);
+  try {
+    await supabase.from('goals').delete().eq('id', id);
+  } catch (e) {
+    console.warn('Failed to delete goal from DB:', e);
   }
+
+  // Update finatrack_guest_goals cookie
+  try {
+    const rawGuest = getCookie(c, 'finatrack_guest_goals') || '';
+    if (rawGuest) {
+      let guestGoalsList = JSON.parse(decodeURIComponent(rawGuest));
+      guestGoalsList = guestGoalsList.filter((g: any) => String(g.id) !== String(id));
+      setCookie(c, 'finatrack_guest_goals', encodeURIComponent(JSON.stringify(guestGoalsList)), {
+        path: '/',
+        maxAge: 31536000,
+        sameSite: 'Lax',
+      });
+    }
+  } catch (e) {}
+
+  // Save to finatrack_deleted_goals cookie to persist guest deletions across reloads
+  if (!userId) {
+    try {
+      let deletedList: string[] = [];
+      const rawDel = getCookie(c, 'finatrack_deleted_goals') || '';
+      if (rawDel) deletedList = JSON.parse(decodeURIComponent(rawDel));
+      if (!deletedList.includes(String(id))) deletedList.push(String(id));
+      setCookie(c, 'finatrack_deleted_goals', encodeURIComponent(JSON.stringify(deletedList)), {
+        path: '/',
+        maxAge: 31536000,
+        sameSite: 'Lax',
+      });
+    } catch (e) {}
+  }
+
+  // Also clean up from goal splits cookie if present
+  try {
+    const splits = getSavedGoalSplits(c);
+    if (splits[id] !== undefined) {
+      delete splits[id];
+      setCookie(c, 'finatrack_goal_splits', encodeURIComponent(JSON.stringify(splits)), {
+        path: '/',
+        maxAge: 31536000,
+        sameSite: 'Lax',
+      });
+    }
+  } catch (e) {}
+
   return c.redirect('/?toast=Goal+deleted', 303);
 });
 

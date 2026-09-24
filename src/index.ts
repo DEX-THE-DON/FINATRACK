@@ -199,11 +199,58 @@ app.get('/', async (c) => {
   } else {
     const { data: guestRules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
     allocationRules = guestRules || [];
-    goals = [
+
+    // Parse deleted goals cookie for guests
+    let deletedGoalIds: string[] = [];
+    try {
+      const rawDel = getCookie(c, 'finatrack_deleted_goals') || '';
+      if (rawDel) deletedGoalIds = JSON.parse(decodeURIComponent(rawDel));
+    } catch (e) {}
+
+    // Fetch guest goals from DB (where user_id is null)
+    let dbGuestGoals: any[] = [];
+    try {
+      const { data: gData } = await supabase.from('goals').select('*').is('user_id', null).order('created_at', { ascending: true });
+      if (gData && gData.length > 0) {
+        dbGuestGoals = gData;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch guest goals from DB:', e);
+    }
+
+    // Fetch guest goals from cookie
+    let cookieGuestGoals: any[] = [];
+    try {
+      const rawGuest = getCookie(c, 'finatrack_guest_goals') || '';
+      if (rawGuest) {
+        cookieGuestGoals = JSON.parse(decodeURIComponent(rawGuest));
+      }
+    } catch (e) {}
+
+    const defaultGoals = [
       { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
       { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
       { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
     ];
+
+    const combinedMap = new Map<string, any>();
+    for (const g of defaultGoals) {
+      if (!deletedGoalIds.includes(String(g.id))) {
+        combinedMap.set(String(g.id), g);
+      }
+    }
+    for (const g of dbGuestGoals) {
+      if (!deletedGoalIds.includes(String(g.id))) {
+        combinedMap.set(String(g.id), g);
+      }
+    }
+    for (const g of cookieGuestGoals) {
+      if (!deletedGoalIds.includes(String(g.id))) {
+        combinedMap.set(String(g.id), g);
+      }
+    }
+
+    goals = Array.from(combinedMap.values());
     debts = [];
   }
 
