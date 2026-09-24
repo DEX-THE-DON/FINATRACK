@@ -252,6 +252,14 @@ app.get('/', async (c) => {
 
     goals = Array.from(combinedMap.values());
     debts = [];
+
+    // Fetch guest transactions from DB (where user_id is null)
+    try {
+      const { data: guestTxs } = await supabase.from('transactions').select('*').is('user_id', null).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100);
+      transactions = sortTransactionsLatestFirst(guestTxs || []);
+    } catch (e) {
+      transactions = [];
+    }
   }
 
   // Synchronize goal sub-splits from cookie (persists custom and proportional splits across guest mode & user changes)

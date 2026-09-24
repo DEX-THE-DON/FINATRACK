@@ -450,6 +450,111 @@ export function renderFinanceDashboard(data: any): string {
             saveGoalSplitsLocally();
         }
 
+        var txCurrentLimit = 5;
+        var txCurrentFilter = 'ALL';
+        var txInitialLimit = 5;
+
+        function setTxFilter(type) {
+            txCurrentFilter = type;
+            document.querySelectorAll('.tx-filter-btn').forEach(function(b) {
+                b.className = 'tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition';
+            });
+            var activeBtn = document.getElementById('tx-filter-btn-' + type);
+            if (activeBtn) {
+                activeBtn.className = 'tx-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition';
+            }
+            applyTxDisplay();
+        }
+
+        function showMoreTxs() {
+            txCurrentLimit += 5;
+            applyTxDisplay();
+        }
+
+        function showAllTxs() {
+            txCurrentLimit = 999999;
+            applyTxDisplay();
+        }
+
+        function showLessTxs() {
+            txCurrentLimit = txInitialLimit;
+            applyTxDisplay();
+            var card = document.getElementById('tx-card');
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function applyTxDisplay() {
+            var mobileItems = document.querySelectorAll('.tx-mobile-item');
+            var desktopItems = document.querySelectorAll('.tx-desktop-item');
+            var matchingTotal = 0;
+
+            mobileItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-tx-type');
+                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                    matchingTotal++;
+                }
+            });
+
+            var mIdx = 0;
+            mobileItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-tx-type');
+                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                    if (mIdx < txCurrentLimit) {
+                        el.classList.remove('hidden');
+                    } else {
+                        el.classList.add('hidden');
+                    }
+                    mIdx++;
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+
+            var dIdx = 0;
+            desktopItems.forEach(function(el) {
+                var itemType = el.getAttribute('data-tx-type');
+                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                    if (dIdx < txCurrentLimit) {
+                        el.classList.remove('hidden');
+                    } else {
+                        el.classList.add('hidden');
+                    }
+                    dIdx++;
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+
+            var visibleNow = Math.min(txCurrentLimit, matchingTotal);
+            var countEl = document.getElementById('tx-visible-count');
+            if (countEl) countEl.innerText = String(visibleNow);
+
+            var totalEl = document.getElementById('tx-total-filtered-count');
+            if (totalEl) totalEl.innerText = String(matchingTotal);
+
+            var showMoreBtn = document.getElementById('tx-show-more-btn');
+            var showAllBtn = document.getElementById('tx-show-all-btn');
+            var showLessBtn = document.getElementById('tx-show-less-btn');
+
+            if (matchingTotal <= txInitialLimit) {
+                if (showMoreBtn) showMoreBtn.classList.add('hidden');
+                if (showAllBtn) showAllBtn.classList.add('hidden');
+                if (showLessBtn) showLessBtn.classList.add('hidden');
+            } else if (txCurrentLimit >= matchingTotal) {
+                if (showMoreBtn) showMoreBtn.classList.add('hidden');
+                if (showAllBtn) showAllBtn.classList.add('hidden');
+                if (showLessBtn) showLessBtn.classList.remove('hidden');
+            } else {
+                if (showMoreBtn) showMoreBtn.classList.remove('hidden');
+                if (showAllBtn) showAllBtn.classList.remove('hidden');
+                if (txCurrentLimit > txInitialLimit) {
+                    if (showLessBtn) showLessBtn.classList.remove('hidden');
+                } else {
+                    if (showLessBtn) showLessBtn.classList.add('hidden');
+                }
+            }
+        }
+
         function updateVaultDepositPreview() {
             const amt = parseFloat(document.getElementById('vault-deposit-amt-input')?.value || '0') || 0;
             const previewContainer = document.getElementById('vault-deposit-live-preview');
@@ -2818,35 +2923,107 @@ export function renderFinanceDashboard(data: any): string {
                 </div>
             </form>
 
-            <!-- Recent Transactions Table -->
-            <div class="pt-4 border-t dark:border-gray-800 space-y-2">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200">Recent Transactions (${transactions.length})</h3>
-                    <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1">
-                        <span>⚡</span> Latest First
-                    </span>
+            <!-- Recent Transactions Table & Mobile Feed -->
+            <div class="pt-4 border-t dark:border-gray-800 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200">Recent Transactions</h3>
+                        <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                            ${transactions.length}
+                        </span>
+                        <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1">
+                            <span>⚡</span> Latest First
+                        </span>
+                    </div>
+
+                    <!-- Type Filter Tabs -->
+                    <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 p-1 rounded-xl text-xs font-semibold self-start sm:self-auto">
+                        <button type="button" onclick="setTxFilter('ALL')" id="tx-filter-btn-ALL" class="tx-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition">
+                            All (${transactions.length})
+                        </button>
+                        <button type="button" onclick="setTxFilter('INCOME')" id="tx-filter-btn-INCOME" class="tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+                            Income (${transactions.filter((t: any) => t.transaction_type === 'INCOME').length})
+                        </button>
+                        <button type="button" onclick="setTxFilter('EXPENSE')" id="tx-filter-btn-EXPENSE" class="tx-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+                            Expense (${transactions.filter((t: any) => t.transaction_type !== 'INCOME').length})
+                        </button>
+                    </div>
                 </div>
-                <div class="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                    <table class="w-full text-left text-xs">
-                        <thead class="bg-gray-50 dark:bg-gray-800/60 uppercase text-gray-400 text-[10px]">
-                            <tr>
-                                <th class="py-3 px-3">Date & Time</th>
-                                <th class="py-3 px-3">Type</th>
-                                <th class="py-3 px-3">Category & Details</th>
-                                <th class="py-3 px-3">Amount</th>
-                                <th class="py-3 px-3 text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y dark:divide-gray-800">
-                            ${(() => {
-                                const sortedTxs = sortTransactionsLatestFirst(transactions);
-                                if (sortedTxs.length === 0) {
-                                    return `
-                                    <tr>
-                                        <td colspan="5" class="py-6 text-center text-gray-400">No transactions recorded yet. Use the form above or the M-Pesa SMS auto-parser!</td>
-                                    </tr>`;
-                                }
-                                return sortedTxs.slice(0, 30).map((t: any) => {
+
+                ${(() => {
+                    const sortedTxs = sortTransactionsLatestFirst(transactions);
+                    const totalTxs = sortedTxs.length;
+                    const initialLimit = 5;
+
+                    if (totalTxs === 0) {
+                        return `
+                        <div class="py-8 text-center bg-gray-50/50 dark:bg-gray-800/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
+                            <p class="text-xs text-gray-400">No transactions recorded yet. Use the form above or the M-Pesa SMS auto-parser!</p>
+                        </div>`;
+                    }
+
+                    return `
+                    <!-- Mobile Feed (Phone View: compact cards, fits screen width, max 5 shown by default) -->
+                    <div id="tx-mobile-container" class="block sm:hidden space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                        ${sortedTxs.map((t: any, idx: number) => {
+                            const isIncome = t.transaction_type === 'INCOME';
+                            const acc = accounts.find((a: any) => a.id === t.account_id);
+                            let timeStr = '';
+                            if (t.created_at && String(t.created_at).includes('T')) {
+                                try {
+                                    const d = new Date(t.created_at);
+                                    if (!isNaN(d.getTime())) {
+                                        timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                    }
+                                } catch {}
+                            }
+                            const isHidden = idx >= initialLimit;
+                            return `
+                            <div class="tx-item tx-mobile-item p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100/70 dark:hover:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${t.transaction_type}">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm font-black ${isIncome ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-300'}">
+                                        ${isIncome ? '↓' : '↑'}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <span class="font-bold text-xs text-gray-900 dark:text-white truncate">${t.category}</span>
+                                            ${acc ? `<span class="text-[9px] px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-semibold">• ${acc.name}</span>` : ''}
+                                        </div>
+                                        <div class="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                                            <span>${t.date}${timeStr ? ' • ' + timeStr : ''}</span>
+                                            ${t.description ? `<span class="truncate max-w-[120px] text-gray-500 dark:text-gray-400">• ${t.description}</span>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <div class="text-right">
+                                        <div class="font-extrabold text-xs ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount" data-kes="${t.amount}" data-prefix="${isIncome ? '+' : '-'}">
+                                            ${isIncome ? '+' : '-'}${formatKes(t.amount)}
+                                        </div>
+                                        <span class="text-[9px] font-bold uppercase tracking-wider ${isIncome ? 'text-emerald-500' : 'text-rose-500'}">${t.transaction_type}</span>
+                                    </div>
+                                    <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
+                                        <button type="submit" class="text-gray-300 dark:text-gray-600 hover:text-rose-600 dark:hover:text-rose-400 font-bold text-xs p-1 transition" title="Delete">✕</button>
+                                    </form>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+
+                    <!-- Desktop Table View (Tablet & Laptop/Desktop) -->
+                    <div id="tx-desktop-container" class="hidden sm:block overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 max-h-[460px] overflow-y-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800/95 uppercase text-gray-400 text-[10px] backdrop-blur-xs z-10">
+                                <tr>
+                                    <th class="py-2.5 px-3">Date & Time</th>
+                                    <th class="py-2.5 px-3">Type</th>
+                                    <th class="py-2.5 px-3">Category & Details</th>
+                                    <th class="py-2.5 px-3">Amount</th>
+                                    <th class="py-2.5 px-3 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y dark:divide-gray-800">
+                                ${sortedTxs.map((t: any, idx: number) => {
                                     const acc = accounts.find((a: any) => a.id === t.account_id);
                                     let timeStr = '';
                                     if (t.created_at && String(t.created_at).includes('T')) {
@@ -2857,14 +3034,16 @@ export function renderFinanceDashboard(data: any): string {
                                             }
                                         } catch {}
                                     }
+                                    const isIncome = t.transaction_type === 'INCOME';
+                                    const isHidden = idx >= initialLimit;
                                     return `
-                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
+                                    <tr class="tx-item tx-desktop-item hover:bg-gray-50 dark:hover:bg-gray-800/40 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${t.transaction_type}">
                                         <td class="py-2.5 px-3 whitespace-nowrap">
                                             <div class="font-bold text-gray-800 dark:text-gray-200">${t.date}</div>
                                             ${timeStr ? `<div class="text-[10px] text-gray-400 dark:text-gray-500 font-mono">${timeStr}</div>` : ''}
                                         </td>
                                         <td class="py-2.5 px-3 whitespace-nowrap">
-                                            <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${t.transaction_type === 'INCOME' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}">
+                                            <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${isIncome ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}">
                                                 ${t.transaction_type}
                                             </span>
                                         </td>
@@ -2875,20 +3054,41 @@ export function renderFinanceDashboard(data: any): string {
                                                 ${acc ? `<span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-semibold">• ${acc.name}</span>` : ''}
                                             </div>
                                         </td>
-                                        <td class="py-2.5 px-3 font-bold ${t.transaction_type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount whitespace-nowrap" data-kes="${t.amount}" data-prefix="${t.transaction_type === 'INCOME' ? '+' : '-'}">
-                                            ${t.transaction_type === 'INCOME' ? '+' : '-'}${formatKes(t.amount)}
+                                        <td class="py-2.5 px-3 font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} convertible-amount whitespace-nowrap" data-kes="${t.amount}" data-prefix="${isIncome ? '+' : '-'}">
+                                            ${isIncome ? '+' : '-'}${formatKes(t.amount)}
                                         </td>
                                         <td class="py-2.5 px-3 text-center whitespace-nowrap">
                                             <form action="/transactions/delete/${t.id}" method="POST" onsubmit="return confirm('Delete transaction?');">
-                                                <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold text-xs p-1">✕</button>
+                                                <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold text-xs p-1" title="Delete">✕</button>
                                             </form>
                                         </td>
                                     </tr>`;
-                                }).join('');
-                            })()}
-                        </tbody>
-                    </table>
-                </div>
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination / Show More Controls -->
+                    ${totalTxs > initialLimit ? `
+                    <div class="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800/60 text-xs">
+                        <span class="text-gray-500 dark:text-gray-400 text-xs text-center sm:text-left">
+                            Showing <span id="tx-visible-count" class="font-bold text-gray-800 dark:text-gray-200">${Math.min(initialLimit, totalTxs)}</span> of <span id="tx-total-filtered-count" class="font-bold text-gray-800 dark:text-gray-200">${totalTxs}</span> transactions
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="tx-show-more-btn" onclick="showMoreTxs()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl transition flex items-center gap-1 active:scale-95">
+                                <span>Show More (+5)</span>
+                            </button>
+                            <button type="button" id="tx-show-all-btn" onclick="showAllTxs()" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-bold rounded-xl transition flex items-center gap-1 active:scale-95">
+                                <span>View All (${totalTxs})</span>
+                            </button>
+                            <button type="button" id="tx-show-less-btn" onclick="showLessTxs()" class="hidden px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl transition flex items-center gap-1 active:scale-95">
+                                <span>Show Less ▴</span>
+                            </button>
+                        </div>
+                    </div>
+                    ` : ''}
+                    `;
+                })()}
             </div>
         </div>
 
