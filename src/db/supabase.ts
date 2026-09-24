@@ -113,6 +113,10 @@ function createMockClient() {
           currentData = currentData.filter((r) => r[col] !== val);
           return builder;
         },
+        is(col: string, val: any) {
+          currentData = currentData.filter((r) => r[col] === val || (val === null && (r[col] === null || r[col] === undefined)));
+          return builder;
+        },
         async single() {
           return { data: currentData[0] || null, error: null };
         },

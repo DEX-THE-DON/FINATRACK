@@ -686,35 +686,364 @@ export function renderFinanceDashboard(data: any): string {
             if (el) el.classList.toggle('hidden');
         }
 
+        var accCurrentPage = 1;
+        var accPageSize = 5;
+        var accCurrentFilter = 'ALL';
+
+        function setAccFilter(type) {
+            accCurrentFilter = type;
+            accCurrentPage = 1;
+            document.querySelectorAll('.acc-filter-btn').forEach(function(b) {
+                b.className = 'acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer';
+            });
+            var activeBtn = document.getElementById('acc-filter-btn-' + type);
+            if (activeBtn) {
+                activeBtn.className = 'acc-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition cursor-pointer';
+            }
+            applyAccDisplay();
+        }
+
+        function accGoToPage(p) {
+            accCurrentPage = p;
+            applyAccDisplay();
+            var card = document.getElementById('accounts-card');
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function accPrevPage() {
+            if (accCurrentPage > 1) {
+                accGoToPage(accCurrentPage - 1);
+            }
+        }
+
+        function accNextPage() {
+            var items = document.querySelectorAll('.account-row-item');
+            var matchingTotal = 0;
+            items.forEach(function(el) {
+                var itemType = el.getAttribute('data-acc-type');
+                if (accCurrentFilter === 'ALL' || itemType === accCurrentFilter || (accCurrentFilter === 'SAVINGS_MMF' && (itemType === 'MMF' || itemType === 'SAVINGS'))) {
+                    matchingTotal++;
+                }
+            });
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / accPageSize));
+            if (accCurrentPage < totalPages) {
+                accGoToPage(accCurrentPage + 1);
+            }
+        }
+
+        function applyAccDisplay() {
+            var items = document.querySelectorAll('.account-row-item');
+            var matchingTotal = 0;
+
+            items.forEach(function(el) {
+                var itemType = el.getAttribute('data-acc-type');
+                if (accCurrentFilter === 'ALL' || itemType === accCurrentFilter || (accCurrentFilter === 'SAVINGS_MMF' && (itemType === 'MMF' || itemType === 'SAVINGS'))) {
+                    matchingTotal++;
+                }
+            });
+
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / accPageSize));
+            if (accCurrentPage > totalPages) accCurrentPage = totalPages;
+            if (accCurrentPage < 1) accCurrentPage = 1;
+
+            var startIdx = (accCurrentPage - 1) * accPageSize;
+            var endIdx = startIdx + accPageSize;
+
+            var idx = 0;
+            items.forEach(function(el) {
+                var itemType = el.getAttribute('data-acc-type');
+                if (accCurrentFilter === 'ALL' || itemType === accCurrentFilter || (accCurrentFilter === 'SAVINGS_MMF' && (itemType === 'MMF' || itemType === 'SAVINGS'))) {
+                    if (idx >= startIdx && idx < endIdx) {
+                        el.classList.remove('hidden');
+                    } else {
+                        el.classList.add('hidden');
+                    }
+                    idx++;
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+
+            var startDisplay = matchingTotal === 0 ? 0 : startIdx + 1;
+            var endDisplay = Math.min(endIdx, matchingTotal);
+
+            var rangeEl = document.getElementById('acc-visible-range');
+            if (rangeEl) rangeEl.innerText = startDisplay + '–' + endDisplay;
+
+            var totalEl = document.getElementById('acc-total-filtered-count');
+            if (totalEl) totalEl.innerText = String(matchingTotal);
+
+            var pageInfoEl = document.getElementById('acc-page-info');
+            if (pageInfoEl) pageInfoEl.innerText = 'Page ' + accCurrentPage + ' of ' + totalPages;
+
+            var prevBtn = document.getElementById('acc-prev-btn');
+            if (prevBtn) {
+                if (accCurrentPage <= 1) {
+                    prevBtn.disabled = true;
+                    prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    prevBtn.disabled = false;
+                    prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var nextBtn = document.getElementById('acc-next-btn');
+            if (nextBtn) {
+                if (accCurrentPage >= totalPages) {
+                    nextBtn.disabled = true;
+                    nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var paginationContainer = document.getElementById('acc-pagination-controls');
+            if (paginationContainer) {
+                if (matchingTotal <= accPageSize) {
+                    paginationContainer.classList.add('hidden');
+                } else {
+                    paginationContainer.classList.remove('hidden');
+                }
+            }
+
+            var pagesContainer = document.getElementById('acc-pagination-pages');
+            if (pagesContainer) {
+                var html = '';
+                for (var p = 1; p <= totalPages; p++) {
+                    var isActive = p === accCurrentPage;
+                    html += '<button type="button" onclick="accGoToPage(' + p + ')" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ' +
+                        (isActive ? 'bg-emerald-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700') + '">' + p + '</button>';
+                }
+                pagesContainer.innerHTML = html;
+            }
+        }
+
+        var debtCurrentPage = 1;
+        var debtPageSize = 4;
+        var debtCurrentFilter = 'all';
+
         function switchDebtTab(filter) {
-            ['all', 'borrowed', 'lent', 'danger'].forEach(tab => {
-                const btn = document.getElementById('debt-tab-btn-' + tab);
+            debtCurrentFilter = filter;
+            debtCurrentPage = 1;
+            ['all', 'borrowed', 'lent', 'danger'].forEach(function(tab) {
+                var btn = document.getElementById('debt-tab-btn-' + tab);
                 if (btn) {
                     if (tab === filter) {
-                        btn.className = 'debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs bg-indigo-600 text-white';
+                        btn.className = 'debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs bg-indigo-600 text-white cursor-pointer';
                     } else {
-                        btn.className = 'debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700';
+                        btn.className = 'debt-tab-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer';
                     }
                 }
             });
-
-            document.querySelectorAll('.debt-card-item').forEach(card => {
-                const isBorrowed = card.getAttribute('data-debt-type') === 'I_OWE';
-                const isDanger = card.getAttribute('data-is-danger') === 'true';
-
-                if (filter === 'all') {
-                    card.classList.remove('hidden');
-                } else if (filter === 'borrowed') {
-                    if (isBorrowed) card.classList.remove('hidden'); else card.classList.add('hidden');
-                } else if (filter === 'lent') {
-                    if (!isBorrowed) card.classList.remove('hidden'); else card.classList.add('hidden');
-                } else if (filter === 'danger') {
-                    if (isDanger) card.classList.remove('hidden'); else card.classList.add('hidden');
-                }
-            });
+            applyDebtDisplay();
         }
 
+        function debtGoToPage(p) {
+            debtCurrentPage = p;
+            applyDebtDisplay();
+            var card = document.getElementById('debts-card');
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
 
+        function debtPrevPage() {
+            if (debtCurrentPage > 1) {
+                debtGoToPage(debtCurrentPage - 1);
+            }
+        }
+
+        function debtNextPage() {
+            var cards = document.querySelectorAll('.debt-card-item');
+            var matchingTotal = 0;
+            cards.forEach(function(card) {
+                var isBorrowed = card.getAttribute('data-debt-type') === 'I_OWE';
+                var isDanger = card.getAttribute('data-is-danger') === 'true';
+                if (debtCurrentFilter === 'all' ||
+                    (debtCurrentFilter === 'borrowed' && isBorrowed) ||
+                    (debtCurrentFilter === 'lent' && !isBorrowed) ||
+                    (debtCurrentFilter === 'danger' && isDanger)) {
+                    matchingTotal++;
+                }
+            });
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / debtPageSize));
+            if (debtCurrentPage < totalPages) {
+                debtGoToPage(debtCurrentPage + 1);
+            }
+        }
+
+        function applyDebtDisplay() {
+            var cards = document.querySelectorAll('.debt-card-item');
+            var matchingTotal = 0;
+            cards.forEach(function(card) {
+                var isBorrowed = card.getAttribute('data-debt-type') === 'I_OWE';
+                var isDanger = card.getAttribute('data-is-danger') === 'true';
+                if (debtCurrentFilter === 'all' ||
+                    (debtCurrentFilter === 'borrowed' && isBorrowed) ||
+                    (debtCurrentFilter === 'lent' && !isBorrowed) ||
+                    (debtCurrentFilter === 'danger' && isDanger)) {
+                    matchingTotal++;
+                }
+            });
+
+            var totalPages = Math.max(1, Math.ceil(matchingTotal / debtPageSize));
+            if (debtCurrentPage > totalPages) debtCurrentPage = totalPages;
+            if (debtCurrentPage < 1) debtCurrentPage = 1;
+
+            var startIdx = (debtCurrentPage - 1) * debtPageSize;
+            var endIdx = startIdx + debtPageSize;
+
+            var idx = 0;
+            cards.forEach(function(card) {
+                var isBorrowed = card.getAttribute('data-debt-type') === 'I_OWE';
+                var isDanger = card.getAttribute('data-is-danger') === 'true';
+                if (debtCurrentFilter === 'all' ||
+                    (debtCurrentFilter === 'borrowed' && isBorrowed) ||
+                    (debtCurrentFilter === 'lent' && !isBorrowed) ||
+                    (debtCurrentFilter === 'danger' && isDanger)) {
+                    if (idx >= startIdx && idx < endIdx) {
+                        card.classList.remove('hidden');
+                    } else {
+                        card.classList.add('hidden');
+                    }
+                    idx++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+
+            var startDisplay = matchingTotal === 0 ? 0 : startIdx + 1;
+            var endDisplay = Math.min(endIdx, matchingTotal);
+
+            var rangeEl = document.getElementById('debt-visible-range');
+            if (rangeEl) rangeEl.innerText = startDisplay + '–' + endDisplay;
+
+            var totalEl = document.getElementById('debt-total-filtered-count');
+            if (totalEl) totalEl.innerText = String(matchingTotal);
+
+            var pageInfoEl = document.getElementById('debt-page-info');
+            if (pageInfoEl) pageInfoEl.innerText = 'Page ' + debtCurrentPage + ' of ' + totalPages;
+
+            var prevBtn = document.getElementById('debt-prev-btn');
+            if (prevBtn) {
+                if (debtCurrentPage <= 1) {
+                    prevBtn.disabled = true;
+                    prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    prevBtn.disabled = false;
+                    prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var nextBtn = document.getElementById('debt-next-btn');
+            if (nextBtn) {
+                if (debtCurrentPage >= totalPages) {
+                    nextBtn.disabled = true;
+                    nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var paginationContainer = document.getElementById('debt-pagination-controls');
+            if (paginationContainer) {
+                if (matchingTotal <= debtPageSize) {
+                    paginationContainer.classList.add('hidden');
+                } else {
+                    paginationContainer.classList.remove('hidden');
+                }
+            }
+
+            var pagesContainer = document.getElementById('debt-pagination-pages');
+            if (pagesContainer) {
+                var html = '';
+                for (var p = 1; p <= totalPages; p++) {
+                    var isActive = p === debtCurrentPage;
+                    html += '<button type="button" onclick="debtGoToPage(' + p + ')" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ' +
+                        (isActive ? 'bg-indigo-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700') + '">' + p + '</button>';
+                }
+                pagesContainer.innerHTML = html;
+            }
+        }
+
+        var mmfCurrentPage = 1;
+        var mmfPageSize = 3;
+
+        function mmfGoToPage(p) {
+            mmfCurrentPage = p;
+            applyMmfDisplay();
+        }
+
+        function mmfPrevPage() {
+            if (mmfCurrentPage > 1) mmfGoToPage(mmfCurrentPage - 1);
+        }
+
+        function mmfNextPage() {
+            var items = document.querySelectorAll('.mmf-card-item');
+            var totalPages = Math.max(1, Math.ceil(items.length / mmfPageSize));
+            if (mmfCurrentPage < totalPages) mmfGoToPage(mmfCurrentPage + 1);
+        }
+
+        function applyMmfDisplay() {
+            var items = document.querySelectorAll('.mmf-card-item');
+            var totalPages = Math.max(1, Math.ceil(items.length / mmfPageSize));
+            if (mmfCurrentPage > totalPages) mmfCurrentPage = totalPages;
+            if (mmfCurrentPage < 1) mmfCurrentPage = 1;
+
+            var startIdx = (mmfCurrentPage - 1) * mmfPageSize;
+            var endIdx = startIdx + mmfPageSize;
+
+            items.forEach(function(item, idx) {
+                if (idx >= startIdx && idx < endIdx) {
+                    item.classList.remove('hidden');
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+
+            var startDisplay = items.length === 0 ? 0 : startIdx + 1;
+            var endDisplay = Math.min(endIdx, items.length);
+
+            var rangeEl = document.getElementById('mmf-visible-range');
+            if (rangeEl) rangeEl.innerText = startDisplay + '–' + endDisplay;
+
+            var totalEl = document.getElementById('mmf-total-filtered-count');
+            if (totalEl) totalEl.innerText = String(items.length);
+
+            var pageInfoEl = document.getElementById('mmf-page-info');
+            if (pageInfoEl) pageInfoEl.innerText = 'Page ' + mmfCurrentPage + ' of ' + totalPages;
+
+            var prevBtn = document.getElementById('mmf-prev-btn');
+            if (prevBtn) {
+                if (mmfCurrentPage <= 1) {
+                    prevBtn.disabled = true;
+                    prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    prevBtn.disabled = false;
+                    prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var nextBtn = document.getElementById('mmf-next-btn');
+            if (nextBtn) {
+                if (mmfCurrentPage >= totalPages) {
+                    nextBtn.disabled = true;
+                    nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                } else {
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                }
+            }
+
+            var paginationContainer = document.getElementById('mmf-pagination-controls');
+            if (paginationContainer) {
+                if (items.length <= mmfPageSize) {
+                    paginationContainer.classList.add('hidden');
+                } else {
+                    paginationContainer.classList.remove('hidden');
+                }
+            }
+        }
 
         function updateThemeIcon() {
             const isDark = document.documentElement.classList.contains('dark');
@@ -742,6 +1071,9 @@ export function renderFinanceDashboard(data: any): string {
             applyConversion();
             updateSplitBreakdown();
             updateRulesModalTotal();
+            applyAccDisplay();
+            applyDebtDisplay();
+            applyMmfDisplay();
             if (!isRunningStandalone()) {
                 showInstallUi();
             }
@@ -1210,6 +1542,30 @@ export function renderFinanceDashboard(data: any): string {
                 <p class="text-[11px] text-amber-700 dark:text-amber-300">From MMF & Sacco high yields</p>
             </div>
         </div>
+
+        <!-- 📌 Quick-Jump Sticky Navigation Dock -->
+        <nav id="quick-jump-dock" class="sticky top-14 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-md py-2 px-1 border-y border-gray-200/80 dark:border-gray-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar shadow-2xs">
+            <a href="#accounts-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
+                <span>💳 Accounts</span>
+                <span class="px-1.5 py-0.2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded-md text-[10px]">${accounts.length}</span>
+            </a>
+            <a href="#debts-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-300 dark:hover:border-rose-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
+                <span>💸 Loans & Debts</span>
+                <span class="px-1.5 py-0.2 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded-md text-[10px]">${debts.length}</span>
+            </a>
+            <a href="#mmf-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
+                <span>📈 MMF & Wealth</span>
+                <span class="px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 rounded-md text-[10px]">${mmf_accounts.length}</span>
+            </a>
+            <a href="#goals-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
+                <span>🎯 Goals</span>
+                <span class="px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-md text-[10px]">${goals.length}</span>
+            </a>
+            <a href="#tx-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
+                <span>📝 Transactions</span>
+                <span class="px-1.5 py-0.2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[10px]">${transactions.length}</span>
+            </a>
+        </nav>
 
         <!-- 🛡️ & 🏆 Emergency Runway & Financial Health Score Twin Cards -->
         <div id="runway-score-card" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -2422,62 +2778,70 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 👥 SACCO & Chama Dividend Forecaster Card -->
-        <div id="sacco-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-5 text-gray-900 dark:text-white">
+        <div id="sacco-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-indigo-500/10 via-teal-500/5 to-transparent dark:from-indigo-950/30 p-5 sm:p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-4 text-gray-900 dark:text-white">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-teal-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
                         👥
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span>SACCO & Chama Dividend Forecaster</span>
-                            <span class="text-[10px] bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-teal-200 dark:border-teal-500/30">10% - 15% Annual Rebates</span>
+                        <h2 class="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>SACCO & Chama Forecaster</span>
+                            <span class="text-[10px] bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-teal-200 dark:border-teal-500/30">10% - 15% Rebates</span>
                         </h2>
-                        <p class="text-xs text-gray-600 dark:text-indigo-200/80">Simulate wealth compounding and annual dividend payouts from your SACCO deposits and Chama merry-go-rounds.</p>
+                        <p class="text-xs text-gray-600 dark:text-indigo-200/80">Simulate wealth compounding and annual dividend payouts from your SACCO deposits.</p>
                     </div>
                 </div>
+
+                <button type="button" id="sacco-forecaster-toggle" onclick="document.getElementById('sacco-body-container')?.classList.toggle('hidden'); this.querySelector('.sacco-chevron')?.classList.toggle('rotate-180')" class="px-3.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs">
+                    <span>📐 Forecaster</span>
+                    <span class="sacco-chevron transition-transform text-xs">▾</span>
+                </button>
             </div>
 
-            <!-- Dynamic Input Form -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Current Share Capital (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" id="sacco-initial-capital" value="50000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-400">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Monthly Deposit / Contribution (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" id="sacco-monthly-deposit" value="5000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-400">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Annual Dividend / Interest Rate (%)</label>
-                    <input type="number" step="any" id="sacco-rate-pct" value="12" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-teal-600 dark:text-teal-400 focus:ring-2 focus:ring-teal-400">
-                </div>
-            </div>
-
-            <!-- Dynamic Projection Result Badges -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
-                    <p class="text-[10px] text-indigo-600 dark:text-indigo-300 font-bold uppercase tracking-wider">📈 1-Yr Total Capital</p>
-                    <p class="text-lg font-black text-gray-900 dark:text-white mt-1 convertible-amount" id="sacco-yr1-capital" data-kes="110000">Ksh 110,000.00</p>
-                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Principal + 12 monthly deposits</p>
+            <!-- Collapsible Body Container -->
+            <div id="sacco-body-container" class="hidden space-y-4 pt-1">
+                <!-- Dynamic Input Form -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Current Share Capital (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" id="sacco-initial-capital" value="50000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-400">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Monthly Deposit / Contribution (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" id="sacco-monthly-deposit" value="5000" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-400">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-indigo-300 mb-1">Annual Dividend / Interest Rate (%)</label>
+                        <input type="number" step="any" id="sacco-rate-pct" value="12" oninput="updateSaccoProjection()" class="w-full p-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-indigo-700 rounded-xl text-sm font-bold text-teal-600 dark:text-teal-400 focus:ring-2 focus:ring-teal-400">
+                    </div>
                 </div>
 
-                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
-                    <p class="text-[10px] text-teal-600 dark:text-teal-300 font-bold uppercase tracking-wider">💰 Estimated Annual Payout</p>
-                    <p class="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1 convertible-amount" id="sacco-annual-dividend" data-kes="9600">Ksh 9,600.00</p>
-                    <p class="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold">Annual dividend return</p>
-                </div>
+                <!-- Dynamic Projection Result Badges -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                    <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                        <p class="text-[10px] text-indigo-600 dark:text-indigo-300 font-bold uppercase tracking-wider">📈 1-Yr Total Capital</p>
+                        <p class="text-lg font-black text-gray-900 dark:text-white mt-1 convertible-amount" id="sacco-yr1-capital" data-kes="110000">Ksh 110,000.00</p>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Principal + 12 monthly deposits</p>
+                    </div>
 
-                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
-                    <p class="text-[10px] text-indigo-600 dark:text-indigo-300 font-bold uppercase tracking-wider">💵 Monthly Passive Equiv.</p>
-                    <p class="text-lg font-black text-teal-600 dark:text-teal-300 mt-1 convertible-amount" id="sacco-monthly-dividend" data-kes="800">Ksh 800.00</p>
-                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Distributed monthly equivalent</p>
-                </div>
+                    <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                        <p class="text-[10px] text-teal-600 dark:text-teal-300 font-bold uppercase tracking-wider">💰 Estimated Annual Payout</p>
+                        <p class="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1 convertible-amount" id="sacco-annual-dividend" data-kes="9600">Ksh 9,600.00</p>
+                        <p class="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold">Annual dividend return</p>
+                    </div>
 
-                <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
-                    <p class="text-[10px] text-purple-600 dark:text-purple-300 font-bold uppercase tracking-wider">🚀 3-Year Compounding</p>
-                    <p class="text-lg font-black text-purple-600 dark:text-purple-300 mt-1 convertible-amount" id="sacco-3yr-compound" data-kes="268480">Ksh 268,480.00</p>
-                    <p class="text-[10px] text-purple-700 dark:text-purple-200">Reinvesting dividends</p>
+                    <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                        <p class="text-[10px] text-indigo-600 dark:text-indigo-300 font-bold uppercase tracking-wider">💵 Monthly Passive Equiv.</p>
+                        <p class="text-lg font-black text-teal-600 dark:text-teal-300 mt-1 convertible-amount" id="sacco-monthly-dividend" data-kes="800">Ksh 800.00</p>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Distributed monthly equivalent</p>
+                    </div>
+
+                    <div class="p-3 bg-white dark:bg-gray-950/80 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
+                        <p class="text-[10px] text-purple-600 dark:text-purple-300 font-bold uppercase tracking-wider">🚀 3-Year Compounding</p>
+                        <p class="text-lg font-black text-purple-600 dark:text-purple-300 mt-1 convertible-amount" id="sacco-3yr-compound" data-kes="268480">Ksh 268,480.00</p>
+                        <p class="text-[10px] text-purple-700 dark:text-purple-200">Reinvesting dividends</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2606,7 +2970,7 @@ export function renderFinanceDashboard(data: any): string {
 
             <!-- Debts Cards Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                ${debts.length > 0 ? debts.map((d: any) => {
+                ${debts.length > 0 ? debts.map((d: any, idx: number) => {
                     const isBorrowed = d.debt_type === 'I_OWE';
                     const danger = d.danger_status;
                     const isDanger = danger?.isDangerZone && !d.is_settled;
@@ -2616,7 +2980,7 @@ export function renderFinanceDashboard(data: any): string {
                     const percent = d.percent ?? (totalAmt > 0 ? Math.min(100, Math.round((paidAmt / totalAmt) * 100)) : 0);
 
                     return `
-                    <div class="debt-card-item ${isDanger ? 'border-2 border-rose-500 ring-2 ring-rose-500/30 shadow-md' : 'border border-gray-200 dark:border-gray-800 shadow-2xs'} bg-gray-50 dark:bg-gray-950 p-4 rounded-xl space-y-3 flex flex-col justify-between transition-all" data-debt-type="${d.debt_type}" data-is-danger="${isDanger ? 'true' : 'false'}">
+                    <div class="debt-card-item ${idx >= 4 ? 'hidden ' : ''}${isDanger ? 'border-2 border-rose-500 ring-2 ring-rose-500/30 shadow-md' : 'border border-gray-200 dark:border-gray-800 shadow-2xs'} bg-gray-50 dark:bg-gray-950 p-4 rounded-xl space-y-3 flex flex-col justify-between transition-all" data-debt-type="${d.debt_type}" data-is-danger="${isDanger ? 'true' : 'false'}">
                         <div class="space-y-2.5">
                             <div class="flex justify-between items-start gap-2">
                                 <div>
@@ -2700,7 +3064,7 @@ export function renderFinanceDashboard(data: any): string {
                                         <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">${isBorrowed ? 'Payment Source Account' : 'Deposit Destination Account'}</label>
                                         <select name="account_id" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg text-xs font-medium">
                                             <option value="">-- No Account Ledger Sync --</option>
-                                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                                             ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
                                         </select>
                                     </div>
                                     <div>
@@ -2726,22 +3090,41 @@ export function renderFinanceDashboard(data: any): string {
                     <p class="text-xs text-gray-500 dark:text-gray-400">Track money you borrowed (Hustler Fund, Fuliza, Tala) or money you lent out with automatic danger zone countdowns!</p>
                 </div>`}
             </div>
+
+            <!-- Debts Pagination Controls (4 per page) -->
+            <div id="debt-pagination-controls" class="${debts.length <= 4 ? 'hidden' : ''} flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs">
+                <div class="text-gray-500 dark:text-gray-400 font-medium">
+                    Showing <span id="debt-visible-range" class="font-bold text-gray-900 dark:text-white">1–${Math.min(4, debts.length)}</span> of <span id="debt-total-filtered-count" class="font-bold text-gray-900 dark:text-white">${debts.length}</span> loans & debts
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="debt-prev-btn" onclick="debtPrevPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 opacity-40 cursor-not-allowed" disabled>
+                        <span>‹</span> Prev
+                    </button>
+                    <div id="debt-pagination-pages" class="flex items-center gap-1">
+                        <!-- Rendered dynamically by applyDebtDisplay() -->
+                    </div>
+                    <button type="button" id="debt-next-btn" onclick="debtNextPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 ${debts.length <= 4 ? 'opacity-40 cursor-not-allowed' : ''}">
+                        Next <span>›</span>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- 📈 MMF & Passive Yields Section -->
-        <div class="bg-white dark:bg-gray-900 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-sm space-y-4">
-            <div class="flex justify-between items-center">
+        <div id="mmf-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
                     <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <span>📈 Money Market Funds & Sacco Yields</span>
+                        <span class="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/60">${mmf_accounts.length} Total</span>
                     </h2>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Track passive interest compounding daily (Ziidi MMF 13.5%, Sanlam 14.5%, Britam 13.8%).</p>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                ${mmf_accounts.length > 0 ? mmf_accounts.map((m: any) => `
-                <div class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-xs space-y-3">
+                ${mmf_accounts.length > 0 ? mmf_accounts.map((m: any, idx: number) => `
+                <div class="mmf-card-item ${idx >= 3 ? 'hidden ' : ''}bg-white dark:bg-gray-900 p-4 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-xs space-y-3 transition-all">
                     <div class="flex justify-between items-start">
                         <div>
                             <h3 class="font-bold text-gray-900 dark:text-white text-base">${m.name}</h3>
@@ -2774,98 +3157,204 @@ export function renderFinanceDashboard(data: any): string {
                     <p class="text-xs text-gray-500">No MMF or High-Yield accounts setup yet. Add Ziidi MMF (Safaricom) or Sacco savings below with an APY rate!</p>
                 </div>`}
             </div>
+
+            <!-- MMF Pagination Controls (3 per page) -->
+            <div id="mmf-pagination-controls" class="${mmf_accounts.length <= 3 ? 'hidden' : ''} flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-amber-100 dark:border-amber-900/40 text-xs">
+                <div class="text-gray-500 dark:text-gray-400 font-medium">
+                    Showing <span id="mmf-visible-range" class="font-bold text-gray-900 dark:text-white">1–${Math.min(3, mmf_accounts.length)}</span> of <span id="mmf-total-filtered-count" class="font-bold text-gray-900 dark:text-white">${mmf_accounts.length}</span> funds
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="mmf-prev-btn" onclick="mmfPrevPage()" class="px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-950 font-bold transition flex items-center gap-1 opacity-40 cursor-not-allowed" disabled>
+                        <span>‹</span> Prev
+                    </button>
+                    <div id="mmf-pagination-pages" class="flex items-center gap-1">
+                        <!-- Rendered dynamically by applyMmfDisplay() -->
+                    </div>
+                    <button type="button" id="mmf-next-btn" onclick="mmfNextPage()" class="px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-950 font-bold transition flex items-center gap-1 ${mmf_accounts.length <= 3 ? 'opacity-40 cursor-not-allowed' : ''}">
+                        Next <span>›</span>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Accounts & Quick Transfer Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Accounts (2 cols) -->
-            <div class="lg:col-span-2 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
-                <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">Your Accounts</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    ${accounts.length > 0 ? accounts.map((acc: any) => `
-                    <div class="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl space-y-3">
-                        <div id="acc-display-${acc.id}" class="space-y-2">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg">${acc.name}</h3>
-                                    <div class="flex flex-wrap items-center gap-1.5 mt-1">
-                                        <span class="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-full font-medium">${acc.account_type}</span>
-                                        ${acc.account_number ? `<span class="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-200/70 dark:bg-gray-700 px-2 py-0.5 rounded-md font-semibold"># ${acc.account_number}</span>` : ''}
-                                        ${acc.interest_rate_p_a > 0 ? `<span class="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded-md">📈 ${acc.interest_rate_p_a}% APY</span>` : ''}
+            <div id="accounts-card" class="lg:col-span-2 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-xl shrink-0">
+                            🏦
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <span>Your Accounts</span>
+                                <span class="text-xs bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">${accounts.length}</span>
+                            </h2>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Wallets, mobile money, banks, MMFs and cash pots</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="document.getElementById('add-account-form-container')?.classList.toggle('hidden')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95">
+                        <span>➕ Add Account</span>
+                    </button>
+                </div>
+
+                <!-- Account Type Filter Pills -->
+                <div class="flex flex-wrap items-center gap-1.5 p-1 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700/60 text-xs">
+                    <button type="button" id="acc-filter-btn-ALL" onclick="setAccFilter('ALL')" class="acc-filter-btn px-2.5 py-1 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs font-bold transition cursor-pointer">
+                        All (${accounts.length})
+                    </button>
+                    <button type="button" id="acc-filter-btn-MOBILE" onclick="setAccFilter('MOBILE')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
+                        📱 Mobile (${accounts.filter((a: any) => a.account_type === 'MOBILE').length})
+                    </button>
+                    <button type="button" id="acc-filter-btn-BANK" onclick="setAccFilter('BANK')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
+                        🏦 Banks (${accounts.filter((a: any) => a.account_type === 'BANK').length})
+                    </button>
+                    <button type="button" id="acc-filter-btn-SAVINGS_MMF" onclick="setAccFilter('SAVINGS_MMF')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
+                        📈 MMF & Savings (${accounts.filter((a: any) => a.account_type === 'MMF' || a.account_type === 'SAVINGS').length})
+                    </button>
+                    <button type="button" id="acc-filter-btn-CASH" onclick="setAccFilter('CASH')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
+                        💵 Cash (${accounts.filter((a: any) => a.account_type === 'CASH' || a.account_type === 'LOOP').length})
+                    </button>
+                </div>
+
+                <!-- Collapsible Add Account Drawer -->
+                <div id="add-account-form-container" class="hidden p-4 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl space-y-3">
+                    <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+                        <h3 class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                            <span>➕ Add New Wallet or Bank Account</span>
+                        </h3>
+                        <button type="button" onclick="document.getElementById('add-account-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs">✕</button>
+                    </div>
+                    <form action="/accounts/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, Ziidi MMF)" class="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium" required>
+                        <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium">
+                        <select name="account_type" class="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                            <option value="MOBILE">Mobile Money (M-Pesa, Airtel)</option>
+                            <option value="BANK">Bank Account</option>
+                            <option value="SAVINGS">Savings Account (Sacco / Fixed)</option>
+                            <option value="MMF">Money Market Fund (MMF)</option>
+                            <option value="LOOP">Loop Business</option>
+                            <option value="CASH">Cash / Petty Cash</option>
+                        </select>
+                        <input type="number" step="any" inputmode="decimal" name="interest_rate_p_a" placeholder="APY % (e.g. 13.45)" class="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium">
+                        <input type="number" step="any" inputmode="decimal" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
+                        <div class="sm:col-span-2 lg:col-span-5 flex justify-end gap-2 pt-1">
+                            <button type="button" onclick="document.getElementById('add-account-form-container')?.classList.add('hidden')" class="px-3 py-2 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold">Cancel</button>
+                            <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs active:scale-95">Save Account</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Accounts Compact List -->
+                <div class="space-y-2.5">
+                    ${accounts.length > 0 ? accounts.map((acc: any, idx: number) => {
+                        const accIcon = acc.account_type === 'MOBILE' ? '📱' :
+                            acc.account_type === 'BANK' ? '🏦' :
+                            acc.account_type === 'MMF' ? '📈' :
+                            acc.account_type === 'SAVINGS' ? '🐷' :
+                            acc.account_type === 'LOOP' ? '🔄' : '💵';
+
+                        const iconBg = acc.account_type === 'MOBILE' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
+                            acc.account_type === 'BANK' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
+                            acc.account_type === 'MMF' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
+                            acc.account_type === 'SAVINGS' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' :
+                            'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+
+                        return `
+                        <div class="account-row-item ${idx >= 5 ? 'hidden ' : ''}p-3.5 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100/80 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl transition-all" data-acc-type="${acc.account_type}">
+                            <div id="acc-display-${acc.id}" class="flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center text-lg shrink-0">
+                                        ${accIcon}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <h3 class="font-bold text-gray-900 dark:text-white text-sm truncate">${acc.name}</h3>
+                                            <span class="text-[10px] px-2 py-0.5 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded-full font-semibold border border-gray-200 dark:border-gray-700 shrink-0">${acc.account_type}</span>
+                                            ${acc.interest_rate_p_a > 0 ? `<span class="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded shrink-0">📈 ${acc.interest_rate_p_a}%</span>` : ''}
+                                        </div>
+                                        ${acc.account_number ? `<p class="text-[11px] font-mono text-gray-400 truncate"># ${acc.account_number}</p>` : ''}
                                     </div>
                                 </div>
-                                <form action="/accounts/delete/${acc.id}" method="POST" onsubmit="return confirm('Delete account?');">
-                                    <button type="submit" class="text-rose-500 text-xs font-semibold hover:text-rose-700">Delete</button>
+                                <div class="flex items-center gap-3 shrink-0">
+                                    <div class="text-right">
+                                        <p class="font-black text-sm sm:text-base text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${acc.balance}">${formatKes(acc.balance)}</p>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" onclick="toggleEdit('${acc.id}')" title="Edit Account" class="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white text-xs transition active:scale-95">
+                                            ✏️
+                                        </button>
+                                        <form action="/accounts/delete/${acc.id}" method="POST" onsubmit="return confirm('Delete account?');" class="inline">
+                                            <button type="submit" title="Delete Account" class="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-950 rounded-lg text-rose-500 dark:text-rose-400 hover:text-rose-700 text-xs transition active:scale-95">
+                                                🗑️
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="acc-edit-${acc.id}" class="hidden space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
+                                <form action="/accounts/update/${acc.id}" method="POST" onsubmit="return onAccountEditSubmit(this)" class="space-y-2">
+                                    <div>
+                                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account Name</label>
+                                        <input type="text" name="name" value="${acc.name}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account / Phone / Till No.</label>
+                                        <input type="text" name="account_number" value="${acc.account_number || ''}" placeholder="e.g. 0712345678" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
+                                        <select name="account_type" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
+                                            <option value="MOBILE" ${acc.account_type === 'MOBILE' ? 'selected' : ''}>Mobile Money (M-Pesa, Airtel)</option>
+                                            <option value="BANK" ${acc.account_type === 'BANK' ? 'selected' : ''}>Bank Account</option>
+                                            <option value="SAVINGS" ${acc.account_type === 'SAVINGS' ? 'selected' : ''}>Savings Account (Sacco / Fixed)</option>
+                                            <option value="MMF" ${acc.account_type === 'MMF' ? 'selected' : ''}>Money Market Fund (MMF)</option>
+                                            <option value="LOOP" ${acc.account_type === 'LOOP' ? 'selected' : ''}>Loop Business</option>
+                                            <option value="CASH" ${acc.account_type === 'CASH' ? 'selected' : ''}>Cash / Petty Cash</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Annual APY % (e.g. 13.45)</label>
+                                        <input type="number" step="any" name="interest_rate_p_a" value="${acc.interest_rate_p_a || 0.0}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance (<span class="curr-symbol-label">Ksh</span>)</label>
+                                        <input type="number" step="any" inputmode="decimal" name="balance" value="${acc.balance}" data-kes="${acc.balance}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-input" required>
+                                    </div>
+                                    <div class="flex space-x-2 pt-1">
+                                        <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1 rounded text-xs font-semibold active:scale-95">Save</button>
+                                        <button type="button" onclick="toggleEdit('${acc.id}')" class="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 text-gray-700 dark:text-gray-200 py-1 rounded text-xs active:scale-95">Cancel</button>
+                                    </div>
                                 </form>
                             </div>
-                            <div class="pt-2">
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Balance</p>
-                                <p class="font-bold text-xl text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${acc.balance}">${formatKes(acc.balance)}</p>
-                            </div>
-                            <button type="button" onclick="toggleEdit('${acc.id}')" class="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-semibold py-1.5 rounded-lg transition mt-2 active:scale-95">Edit Account</button>
-                        </div>
-
-                        <div id="acc-edit-${acc.id}" class="hidden space-y-2">
-                            <form action="/accounts/update/${acc.id}" method="POST" onsubmit="return onAccountEditSubmit(this)" class="space-y-2">
-                                <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account Name</label>
-                                    <input type="text" name="name" value="${acc.name}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs" required>
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account / Phone / Till No.</label>
-                                    <input type="text" name="account_number" value="${acc.account_number || ''}" placeholder="e.g. 0712345678" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
-                                    <select name="account_type" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
-                                        <option value="MOBILE" ${acc.account_type === 'MOBILE' ? 'selected' : ''}>Mobile Money (M-Pesa, Airtel)</option>
-                                        <option value="BANK" ${acc.account_type === 'BANK' ? 'selected' : ''}>Bank Account</option>
-                                        <option value="SAVINGS" ${acc.account_type === 'SAVINGS' ? 'selected' : ''}>Savings Account (Sacco / Fixed)</option>
-                                        <option value="MMF" ${acc.account_type === 'MMF' ? 'selected' : ''}>Money Market Fund (MMF)</option>
-                                        <option value="LOOP" ${acc.account_type === 'LOOP' ? 'selected' : ''}>Loop Business</option>
-                                        <option value="CASH" ${acc.account_type === 'CASH' ? 'selected' : ''}>Cash / Petty Cash</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Annual APY % (e.g. 13.45)</label>
-                                    <input type="number" step="any" name="interest_rate_p_a" value="${acc.interest_rate_p_a || 0.0}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs">
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Balance (<span class="curr-symbol-label">Ksh</span>)</label>
-                                    <input type="number" step="any" inputmode="decimal" name="balance" value="${acc.balance}" data-kes="${acc.balance}" class="w-full p-1.5 border dark:border-gray-600 dark:bg-gray-900 dark:text-white rounded text-xs convertible-input" required>
-                                </div>
-                                <div class="flex space-x-2 pt-1">
-                                    <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1 rounded text-xs font-semibold active:scale-95">Save</button>
-                                    <button type="button" onclick="toggleEdit('${acc.id}')" class="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 text-gray-700 dark:text-gray-200 py-1 rounded text-xs active:scale-95">Cancel</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>`).join('') : `
-                    <div class="md:col-span-2 p-6 bg-gray-50 dark:bg-gray-800/60 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-center space-y-2">
+                        </div>`;
+                    }).join('') : `
+                    <div class="p-6 bg-gray-50 dark:bg-gray-800/60 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-center space-y-2">
                         <div class="text-3xl">💳</div>
                         <h4 class="font-bold text-gray-700 dark:text-gray-200">No accounts added yet</h4>
                         <p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">Add your real accounts below (e.g. M-Pesa, Bank, Sacco, Ziidi MMF, or Cash) to start tracking your real funds!</p>
                     </div>`}
                 </div>
 
-                <!-- Add Account Form -->
-                <form action="/accounts/create" method="POST" class="pt-4 border-t dark:border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                    <input type="text" name="name" placeholder="Account Name (e.g. M-Pesa, Ziidi MMF)" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium" required>
-                    <input type="text" name="account_number" placeholder="Account / Phone / Till No." class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium">
-                    <select name="account_type" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
-                        <option value="MOBILE">Mobile Money (M-Pesa, Airtel)</option>
-                        <option value="BANK">Bank Account</option>
-                        <option value="SAVINGS">Savings Account (Sacco / Fixed)</option>
-                        <option value="MMF">Money Market Fund (MMF)</option>
-                        <option value="LOOP">Loop Business</option>
-                        <option value="CASH">Cash / Petty Cash</option>
-                    </select>
-                    <input type="number" step="any" inputmode="decimal" name="interest_rate_p_a" placeholder="APY % (e.g. 13.45)" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-medium">
-                    <input type="number" step="any" inputmode="decimal" name="balance" placeholder="Initial Balance" data-placeholder-base="Initial Balance" class="p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
-                    <div class="sm:col-span-2 lg:col-span-5">
-                        <button type="submit" class="w-full bg-gray-900 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white text-sm font-semibold py-2.5 rounded-xl transition">Add Account</button>
+                <!-- Accounts Pagination Controls (5 per page) -->
+                <div id="acc-pagination-controls" class="${accounts.length <= 5 ? 'hidden' : ''} flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs">
+                    <div class="text-gray-500 dark:text-gray-400 font-medium">
+                        Showing <span id="acc-visible-range" class="font-bold text-gray-900 dark:text-white">1–${Math.min(5, accounts.length)}</span> of <span id="acc-total-filtered-count" class="font-bold text-gray-900 dark:text-white">${accounts.length}</span> accounts
                     </div>
-                </form>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="acc-prev-btn" onclick="accPrevPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 opacity-40 cursor-not-allowed" disabled>
+                            <span>‹</span> Prev
+                        </button>
+                        <div id="acc-pagination-pages" class="flex items-center gap-1">
+                            <!-- Rendered dynamically by applyAccDisplay() -->
+                        </div>
+                        <button type="button" id="acc-next-btn" onclick="accNextPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 ${accounts.length <= 5 ? 'opacity-40 cursor-not-allowed' : ''}">
+                            Next <span>›</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Quick Transfer -->
