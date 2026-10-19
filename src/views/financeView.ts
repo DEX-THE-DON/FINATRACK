@@ -2826,11 +2826,18 @@ export function renderFinanceDashboard(data: any): string {
                     <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.toggle('hidden'); document.getElementById('vault-deposit-container')?.classList.add('hidden'); document.getElementById('goal-splits-container')?.classList.add('hidden'); document.getElementById('link-vault-container')?.classList.add('hidden');" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
                         <span>➕ New Goal</span>
                     </button>
+                    ${goals.length > 0 ? `
                     <form action="/goals/reset-all" method="POST" onsubmit="return confirm('Reset all goal balances to Ksh 0.00?');" class="inline">
                         <button type="submit" title="Reset all goal balances" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-gray-600 dark:text-gray-400 hover:text-amber-700 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95 border border-gray-200 dark:border-gray-700">
                             <span>🔄</span>
                         </button>
                     </form>
+                    <form action="/goals/clear-all" method="POST" onsubmit="return confirm('Clear all goals and start fresh with your own goals?');" class="inline">
+                        <button type="submit" title="Clear all goals" class="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95 border border-rose-200 dark:border-rose-800/60">
+                            <span>🗑️ Clear All</span>
+                        </button>
+                    </form>
+                    ` : ''}
                 </div>
             </div>
 
@@ -3207,10 +3214,13 @@ export function renderFinanceDashboard(data: any): string {
                         </div>
                     </div>`;
                 }).join('') : `
-                <div class="md:col-span-3 p-6 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 space-y-2">
+                <div class="md:col-span-3 p-6 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 space-y-3">
                     <p class="text-3xl">🎯</p>
-                    <h4 class="font-bold text-gray-700 dark:text-gray-200">No Savings Goals Active</h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Click "➕ New Goal" above to create savings goals for your TV, Gas Cooker, Living Room Seats, etc.!</p>
+                    <h4 class="font-bold text-gray-700 dark:text-gray-200">No Savings Goals Added Yet</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Your goals vault is clean and ready! Create your personal savings targets (e.g. Malindi Vacation, Emergency Shield, Land, Vehicle Upgrade, or Home Appliances).</p>
+                    <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.remove('hidden'); document.getElementById('new-goal-form-container')?.scrollIntoView({behavior: 'smooth'});" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold rounded-xl transition shadow-xs inline-flex items-center gap-1.5 active:scale-95">
+                        <span>➕ Create Your First Savings Goal</span>
+                    </button>
                 </div>`}
             </div>
         </div>

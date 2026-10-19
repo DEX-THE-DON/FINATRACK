@@ -602,14 +602,6 @@ financeRoutes.post('/goals/deposit-vault', async (c) => {
   const userAccounts = accRes.data || [];
   let userGoals = goalRes.data || [];
 
-  if (userGoals.length === 0) {
-    userGoals = [
-      { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
-      { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
-      { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
-    ];
-  }
-
   const cookieSplits = getSavedGoalSplits(c);
   userGoals = userGoals.map((g: any, idx: number) => {
     let splitPct = g.split_percentage;
@@ -832,7 +824,33 @@ financeRoutes.post('/goals/reset-all', async (c) => {
     query = query.neq('id', '00000000-0000-0000-0000-000000000000');
   }
   await query;
-  return c.redirect('/?toast=All+goal+balances+reset+to+Ksh+0.00', 303);
+  return c.redirect('/?toast=All+goal+balances+reset+to+Ksh+0.00#goals-card', 303);
+});
+
+financeRoutes.post('/goals/clear-all', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  try {
+    if (userId) {
+      await supabase.from('goals').delete().eq('user_id', userId);
+    } else {
+      await supabase.from('goals').delete().is('user_id', null);
+    }
+  } catch (e) {}
+
+  try {
+    setCookie(c, 'finatrack_guest_goals', encodeURIComponent(JSON.stringify([])), {
+      path: '/',
+      maxAge: 31536000,
+      sameSite: 'Lax',
+    });
+    setCookie(c, 'finatrack_goal_splits', encodeURIComponent(JSON.stringify({})), {
+      path: '/',
+      maxAge: 31536000,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+
+  return c.redirect('/?toast=All+goals+cleared.+Ready+for+your+personal+goals!#goals-card', 303);
 });
 
 
@@ -1105,14 +1123,6 @@ financeRoutes.post('/split/distribute', async (c) => {
   let userGoals = goalRes.data || [];
   const userDebts = debtRes.data || [];
   const userBills = billRes.data || [];
-
-  if (userGoals.length === 0) {
-    userGoals = [
-      { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
-      { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
-      { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
-    ];
-  }
 
   const cookieSplits = getSavedGoalSplits(c);
   userGoals = userGoals.map((g: any, idx: number) => {

@@ -4,6 +4,7 @@ export function renderRiderDashboard(data: any): string {
     bikes = [],
     rider_logs = [],
     odometer_config = null,
+    strict_saver_config = null,
     time_intelligence = {},
     maintenance_schedules = [],
     compliance_deadlines = [],
@@ -36,6 +37,7 @@ export function renderRiderDashboard(data: any): string {
 
   const lastShift = rider_logs && rider_logs.length > 0 ? rider_logs[0] : null;
   const lastShiftTotalExp = lastShift ? (Number(lastShift.fuel_cost || 0) + Number(lastShift.food_spent || 0) + Number(lastShift.airtime_spent || 0) + Number(lastShift.misc_expenses || 0) + Number(lastShift.maintenance_cost || 0)) : 0;
+  const lastShiftPersonalSpend = lastShift ? (Number(lastShift.food_spent || 0) + Number(lastShift.airtime_spent || 0) + Number(lastShift.misc_expenses || 0)) : 0;
   const lastShiftNet = lastShift ? (Number(lastShift.total_earned || 0) - lastShiftTotalExp) : 0;
 
   // CPK (Cost Per Kilometer) & Odometer synchronization across all shifts
@@ -63,7 +65,7 @@ export function renderRiderDashboard(data: any): string {
     ? ((totalFuelExp + totalMaintExp) / effectiveCpkDistance).toFixed(2)
     : overallCpk;
 
-  // Remittance & Kodi calculations for today
+  // Remittance, Strict Saver Floor, Home-Lunch Bonus & Savings Account Tracker
   const todayShifts = (rider_logs || []).filter((l: any) => l.date === today);
   const todayNetEarned = todayShifts.reduce((acc: number, l: any) => {
     const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
@@ -73,8 +75,56 @@ export function renderRiderDashboard(data: any): string {
   const latestShiftNet = latestShiftLog
     ? Math.max(0, Number(latestShiftLog.total_earned || 0) - (Number(latestShiftLog.fuel_cost || 0) + Number(latestShiftLog.food_spent || 0) + Number(latestShiftLog.airtime_spent || 0) + Number(latestShiftLog.misc_expenses || 0) + Number(latestShiftLog.maintenance_cost || 0)))
     : 0;
-  const closeoutSplitAmount = todayNetEarned > 0 ? todayNetEarned : (latestShiftNet > 0 ? latestShiftNet : 2000);
-  const dailyTarget = Number(active_bike?.daily_target || 2500);
+  const strictNetFloor = Number(strict_saver_config?.net_floor_kes || active_bike?.daily_target || 1000);
+  const strictFuelAllowance = Number(strict_saver_config?.fuel_allowance_kes ?? (activePowerType === 'ELECTRIC' ? 300 : 500));
+  const strictLunchAllowance = Number(strict_saver_config?.lunch_allowance_kes ?? 150);
+  const strictAirtimeAllowance = Number(strict_saver_config?.airtime_allowance_kes ?? 50);
+  const strictPersonalCap = strictLunchAllowance + strictAirtimeAllowance;
+  const strictDailyKodi = Number(strict_saver_config?.daily_kodi_kes ?? 0);
+  const saveUnspentLunch = strict_saver_config?.save_unspent_lunch !== false;
+
+  const linkedSavingsAcc = (accounts || []).find((a: any) => String(a.id) === String(strict_saver_config?.savings_account_id || ''))
+    || (accounts || []).find((a: any) => ['SAVINGS', 'INVESTMENT', 'MMF'].includes(String(a.account_type || '').toUpperCase()) || /mmf|sacco|lock|save|ziidi/i.test(String(a.name || '')));
+  const savingsAccountId = strict_saver_config?.savings_account_id || (linkedSavingsAcc ? String(linkedSavingsAcc.id) : '');
+  const savingsAccountName = (strict_saver_config?.savings_account_name && strict_saver_config.savings_account_name !== 'Strict Savings Account')
+    ? strict_saver_config.savings_account_name
+    : (linkedSavingsAcc?.name || 'Strict Savings Account');
+  const startingSavingsBalance = Number(strict_saver_config?.starting_savings_balance || 0);
+
+  // Chronological ledger across all shifts to compute cumulative savings & overdue
+  let cumulativeSavedFromShifts = 0;
+  let cumulativeOverdueKes = 0;
+  const chronologicalShifts = [...(rider_logs || [])].reverse();
+  for (const s of chronologicalShifts) {
+    const sGross = Number(s.total_earned || 0);
+    const sFuel = Number(s.fuel_cost || 0);
+    const sFood = Number(s.food_spent || 0);
+    const sAirtime = Number(s.airtime_spent || 0);
+    const sMisc = Number(s.misc_expenses || 0) + Number(s.maintenance_cost || 0);
+    const sNet = sGross - (sFuel + sFood + sAirtime + sMisc);
+    const sLunchBonus = saveUnspentLunch ? Math.max(0, strictLunchAllowance - sFood) : 0;
+    const sStrictTarget = strictNetFloor + sLunchBonus;
+
+    cumulativeSavedFromShifts += Math.max(0, sNet);
+    if (sNet >= sStrictTarget) {
+      const sExtra = sNet - sStrictTarget;
+      cumulativeOverdueKes = Math.max(0, cumulativeOverdueKes - sExtra);
+    } else {
+      const sDeficit = sStrictTarget - Math.max(0, sNet);
+      cumulativeOverdueKes += sDeficit;
+    }
+  }
+
+  const expectedSavingsAccountBalance = startingSavingsBalance + cumulativeSavedFromShifts;
+  const lastShiftFood = lastShift ? Number(lastShift.food_spent || 0) : 0;
+  const lastShiftLunchSaved = (lastShift && saveUnspentLunch) ? Math.max(0, strictLunchAllowance - lastShiftFood) : 0;
+  const lastShiftStrictTarget = strictNetFloor + lastShiftLunchSaved;
+  const lastShiftMetStrict = lastShift ? (lastShiftNet >= lastShiftStrictTarget) : false;
+  const lastShiftShortfall = lastShift ? Math.max(0, lastShiftStrictTarget - Math.max(0, lastShiftNet)) : 0;
+  const lastShiftOverflow = lastShift ? Math.max(0, lastShiftNet - lastShiftStrictTarget) : 0;
+  const requiredGrossBeforeHome = strictNetFloor + strictFuelAllowance + strictPersonalCap + strictDailyKodi + cumulativeOverdueKes;
+  const closeoutSplitAmount = todayNetEarned > 0 ? todayNetEarned : (latestShiftNet > 0 ? latestShiftNet : strictNetFloor);
+  const dailyTarget = Number(active_bike?.daily_target || strictNetFloor);
   const dailyTargetMetPct = Math.min(100, Math.round((todayNetEarned / (dailyTarget || 1)) * 100));
 
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -350,6 +400,9 @@ export function renderRiderDashboard(data: any): string {
             var jsonInput = document.getElementById('stints_json_input');
             if (jsonInput) {
                 jsonInput.value = items.length > 0 ? JSON.stringify(items) : '';
+            }
+            if (typeof updateStrictSaverAudit === 'function') {
+                updateStrictSaverAudit();
             }
         }
 
@@ -693,6 +746,113 @@ export function renderRiderDashboard(data: any): string {
             }
 
             calcOdometerServiceStatus(false);
+            updateStrictSaverAudit();
+        }
+
+        var STRICT_NET_FLOOR = ${strictNetFloor};
+        var STRICT_FUEL_ALLOWANCE = ${strictFuelAllowance};
+        var STRICT_LUNCH_ALLOWANCE = ${strictLunchAllowance};
+        var STRICT_AIRTIME_ALLOWANCE = ${strictAirtimeAllowance};
+        var STRICT_PERSONAL_CAP = ${strictPersonalCap};
+        var STRICT_DAILY_KODI = ${strictDailyKodi};
+        var STRICT_SAVE_UNSPENT_LUNCH = ${saveUnspentLunch ? 'true' : 'false'};
+        var STRICT_SHORTFALL = ${cumulativeOverdueKes};
+        var STRICT_EXPECTED_ACC_BALANCE = ${expectedSavingsAccountBalance};
+        var STRICT_SAVINGS_ACC_NAME = ${JSON.stringify(savingsAccountName)};
+
+        function setShiftLunchMode(ateAtHome) {
+            var foodInput = document.querySelector('input[name="food_spent"]');
+            if (foodInput) {
+                foodInput.value = ateAtHome ? '0' : String(STRICT_LUNCH_ALLOWANCE);
+            }
+            var badgeEl = document.getElementById('shift-lunch-bonus-badge');
+            if (badgeEl) {
+                if (ateAtHome) {
+                    badgeEl.className = 'mt-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400';
+                    badgeEl.innerText = '🏠 12:00 PM Home-Lunch Rule Active: +Ksh ' + STRICT_LUNCH_ALLOWANCE.toLocaleString() + ' unspent lunch locked into today\\'s savings!';
+                } else {
+                    badgeEl.className = 'mt-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400';
+                    badgeEl.innerText = '🍲 Standard Lunch Allowance: Ksh ' + STRICT_LUNCH_ALLOWANCE.toLocaleString() + ' (or click Ate at Home to save +Ksh ' + STRICT_LUNCH_ALLOWANCE.toLocaleString() + ')';
+                }
+            }
+            updateStrictSaverAudit();
+        }
+
+        function updateStrictContractPreview() {
+            var nf = Math.max(100, parseFloat(document.getElementById('strict_net_floor_input')?.value) || 1000);
+            var fa = Math.max(0, parseFloat(document.getElementById('strict_fuel_allowance_input')?.value) || 0);
+            var la = Math.max(0, parseFloat(document.getElementById('strict_lunch_allowance_input')?.value) || 0);
+            var aa = Math.max(0, parseFloat(document.getElementById('strict_airtime_allowance_input')?.value) || 0);
+            var pc = la + aa;
+            var dk = Math.max(0, parseFloat(document.getElementById('strict_daily_kodi_input')?.value) || 0);
+            var sul = document.getElementById('strict_save_unspent_lunch_select')?.value !== '0';
+            STRICT_NET_FLOOR = nf;
+            STRICT_FUEL_ALLOWANCE = fa;
+            STRICT_LUNCH_ALLOWANCE = la;
+            STRICT_AIRTIME_ALLOWANCE = aa;
+            STRICT_PERSONAL_CAP = pc;
+            STRICT_DAILY_KODI = dk;
+            STRICT_SAVE_UNSPENT_LUNCH = sul;
+            var reqGross = nf + fa + pc + dk + STRICT_SHORTFALL;
+            var reqEl = document.getElementById('strict_required_gross_display');
+            if (reqEl) reqEl.innerText = 'Ksh ' + reqGross.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            var floorEl = document.getElementById('strict_net_floor_display');
+            if (floorEl) floorEl.innerText = 'Ksh ' + nf.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            var capEl = document.getElementById('strict_cap_display');
+            if (capEl) capEl.innerText = 'Ksh ' + pc.toLocaleString();
+            updateStrictSaverAudit();
+        }
+
+        function updateStrictSaverAudit() {
+            var gross = Math.max(0, parseFloat(document.querySelector('input[name="total_earned"]')?.value) || 0);
+            var fuel = Math.max(0, parseFloat(document.getElementById('shift_fuel_cost_input')?.value) || 0);
+            var foodRaw = document.querySelector('input[name="food_spent"]')?.value;
+            var food = Math.max(0, parseFloat(foodRaw) || 0);
+            var airtime = Math.max(0, parseFloat(document.querySelector('input[name="airtime_spent"]')?.value) || 0);
+            var misc = Math.max(0, parseFloat(document.querySelector('input[name="misc_expenses"]')?.value) || 0);
+
+            var personalSpend = food + airtime + misc;
+            var totalExp = fuel + personalSpend;
+            var pureNet = gross - totalExp;
+            var lunchSaved = STRICT_SAVE_UNSPENT_LUNCH ? Math.max(0, STRICT_LUNCH_ALLOWANCE - food) : 0;
+            var strictTargetToday = STRICT_NET_FLOOR + lunchSaved;
+            var projectedAccBalance = STRICT_EXPECTED_ACC_BALANCE + Math.max(0, pureNet);
+
+            var netVerdictEl = document.getElementById('live-strict-net-verdict');
+            var capVerdictEl = document.getElementById('live-strict-cap-verdict');
+            var splitLinkEl = document.getElementById('live-strict-split-link');
+
+            if (netVerdictEl) {
+                if (gross <= 0) {
+                    netVerdictEl.className = 'text-xs font-extrabold text-indigo-300';
+                    netVerdictEl.innerText = '🎯 Strict Daily Contract: Save Ksh ' + strictTargetToday.toLocaleString() + (lunchSaved > 0 ? ' (Ksh ' + STRICT_NET_FLOOR.toLocaleString() + ' Target + 🏠 Ksh ' + lunchSaved.toLocaleString() + ' Home-Lunch Saved)' : ' Net Target') + ' • 🏦 Your ' + STRICT_SAVINGS_ACC_NAME + ' currently reads: Ksh ' + STRICT_EXPECTED_ACC_BALANCE.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                } else if (pureNet >= strictTargetToday) {
+                    var extraProfit = pureNet - strictTargetToday;
+                    netVerdictEl.className = 'text-xs font-extrabold text-emerald-400';
+                    netVerdictEl.innerText = '🎉 CONGRATS! You saved Ksh ' + pureNet.toLocaleString() + ' today (Ksh ' + STRICT_NET_FLOOR.toLocaleString() + ' Target' + (lunchSaved > 0 ? ' + Ksh ' + lunchSaved.toLocaleString() + ' Home-Lunch Saved' : '') + (extraProfit > 0 ? ' + Ksh ' + extraProfit.toLocaleString() + ' Extra Profit' : '') + ')! 🏦 Your ' + STRICT_SAVINGS_ACC_NAME + ' should now read: Ksh ' + projectedAccBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                } else {
+                    var todayDeficit = strictTargetToday - Math.max(0, pureNet);
+                    var totalOverdue = STRICT_SHORTFALL + todayDeficit;
+                    netVerdictEl.className = 'text-xs font-extrabold text-rose-400';
+                    netVerdictEl.innerText = '💪 LET\\'S CATCH UP! You have an overdue of Ksh ' + totalOverdue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' (Today\\'s Net: Ksh ' + Math.max(0, pureNet).toLocaleString() + ' vs Ksh ' + strictTargetToday.toLocaleString() + ' strict target' + (lunchSaved > 0 ? ' incl. Ksh ' + lunchSaved.toLocaleString() + ' home-lunch lock' : '') + '). 🏦 Your ' + STRICT_SAVINGS_ACC_NAME + ' should now read: Ksh ' + projectedAccBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                }
+            }
+
+            if (capVerdictEl) {
+                if (personalSpend <= STRICT_PERSONAL_CAP && fuel <= STRICT_FUEL_ALLOWANCE) {
+                    capVerdictEl.className = 'text-[11px] font-bold text-emerald-300';
+                    capVerdictEl.innerText = '🟢 Shift Expenses Within Budget! Fuel: Ksh ' + fuel.toLocaleString() + '/' + STRICT_FUEL_ALLOWANCE.toLocaleString() + ' • Lunch: Ksh ' + food.toLocaleString() + '/' + STRICT_LUNCH_ALLOWANCE.toLocaleString() + (lunchSaved > 0 ? ' (🏠 +Ksh ' + lunchSaved.toLocaleString() + ' Lunch Saved!)' : '') + ' • Airtime: Ksh ' + airtime.toLocaleString() + '/' + STRICT_AIRTIME_ALLOWANCE.toLocaleString();
+                } else {
+                    var overCap = Math.max(0, personalSpend - STRICT_PERSONAL_CAP) + Math.max(0, fuel - STRICT_FUEL_ALLOWANCE);
+                    capVerdictEl.className = 'text-[11px] font-black text-amber-300';
+                    capVerdictEl.innerText = '⚠️ Expense Check: Fuel Ksh ' + fuel.toLocaleString() + '/' + STRICT_FUEL_ALLOWANCE.toLocaleString() + ' • Lunch Ksh ' + food.toLocaleString() + '/' + STRICT_LUNCH_ALLOWANCE.toLocaleString() + ' • Airtime Ksh ' + airtime.toLocaleString() + '/' + STRICT_AIRTIME_ALLOWANCE.toLocaleString() + (overCap > 0 ? ' (Ksh ' + overCap.toLocaleString() + ' above standard budget)' : '');
+                }
+            }
+
+            if (splitLinkEl && pureNet > 0) {
+                splitLinkEl.href = '/?pay_yourself_amount=' + pureNet.toFixed(2) + '#waterfall-card';
+                splitLinkEl.innerText = '👑 23:50 Split Ksh ' + pureNet.toLocaleString() + ' Now →';
+            }
         }
 
         function calcOdometerServiceStatus(fromUserEdit) {
@@ -1194,69 +1354,199 @@ export function renderRiderDashboard(data: any): string {
             </button>
         </div>
 
-        <!-- ☀️ Daily Rider Shift Briefing & Night Wrap-up Snapshot Card -->
+        <!-- ☀️ Daily Rider Shift Briefing & Strict Saver Contract Card -->
         <div id="shift-briefing-card" class="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-blue-800/40 space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-blue-800/60 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-xl shadow-xs">
-                        ☀️
+                        🛡️
                     </div>
                     <div>
                         <h2 class="text-lg font-black text-white flex items-center gap-2">
-                            <span>Daily Shift Briefing & Take-Home Wrap-up</span>
-                            <span class="text-[10px] bg-blue-500/20 text-blue-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-blue-400/30">Live Briefing</span>
+                            <span>Strict Money Follower &amp; Daily Shift Contract</span>
+                            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-400/30">Strict Saver Mode</span>
                         </h2>
-                        <p class="text-xs text-blue-200">Daily earnings target, safe fuel/swap allowance, and your 23:50 Pay Yourself First closeout.</p>
+                        <p class="text-xs text-blue-200">Memorize 1 Gross number while on the road • Audit Net Floor &amp; Expense Cap when you log at home at 23:50.</p>
                     </div>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="document.getElementById('strict-contract-drawer')?.classList.toggle('hidden')" class="px-3 py-1.5 bg-indigo-900/80 hover:bg-indigo-800 border border-indigo-500/50 text-indigo-200 text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                        <span>⚙️ Edit Strict Rules</span>
+                    </button>
                     <a href="/?pay_yourself_amount=${closeoutSplitAmount.toFixed(2)}#waterfall-card" class="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 text-xs font-black rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
                         <span>👑 23:50 Pay Yourself First (Ksh ${closeoutSplitAmount.toLocaleString()})</span>
                     </a>
                     <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
-                        <span>⚡ Log Today's Shift</span>
+                        <span>⚡ Log Shift (At Home)</span>
                     </button>
-                    <a href="/rider/export/csv" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
-                        <span>📥 CSV</span>
-                    </a>
                 </div>
             </div>
 
+            <!-- Collapsible Strict Saver Contract Editor -->
+            <div id="strict-contract-drawer" class="hidden p-4 bg-slate-950/90 border border-indigo-700/60 rounded-2xl space-y-3">
+                <div class="flex flex-wrap justify-between items-center gap-2 border-b border-indigo-900/60 pb-2">
+                    <div>
+                        <h3 class="text-xs font-black text-amber-300 uppercase tracking-wider">🛡️ Set Your Strict Money Follower Contract (Fuel 500 • Lunch 150 • Airtime 50 • Net Target 1,000)</h3>
+                        <p class="text-[11px] text-gray-400">When you leave home at 12:00 PM having already eaten lunch, unspent lunch is automatically locked into your savings alongside your target and extra profit.</p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] text-gray-400 font-bold">Quick Target:</span>
+                        <button type="button" onclick="document.getElementById('strict_net_floor_input').value='1000'; updateStrictContractPreview();" class="px-2 py-0.5 bg-slate-800 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/50 rounded-lg text-[10px] font-bold">Ksh 1,000</button>
+                        <button type="button" onclick="document.getElementById('strict_net_floor_input').value='1500'; updateStrictContractPreview();" class="px-2 py-0.5 bg-slate-800 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/50 rounded-lg text-[10px] font-bold">Ksh 1,500</button>
+                        <button type="button" onclick="document.getElementById('strict_net_floor_input').value='2000'; updateStrictContractPreview();" class="px-2 py-0.5 bg-slate-800 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/50 rounded-lg text-[10px] font-bold">Ksh 2,000</button>
+                    </div>
+                </div>
+                <form action="/rider/strict-contract" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end text-xs">
+                    <input type="hidden" name="bike_id" value="${active_bike?.id || ''}">
+                    <div>
+                        <label class="block text-[11px] font-bold text-emerald-300 mb-1">🎯 1. Strict Net Target (After Exp)</label>
+                        <input type="number" step="any" id="strict_net_floor_input" name="net_floor_kes" value="${strictNetFloor}" oninput="updateStrictContractPreview()" class="w-full p-2 bg-slate-900 border border-emerald-700 rounded-xl font-black text-emerald-400 text-sm" required>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-cyan-300 mb-1">⛽ 2. Daily Fuel / Swap Budget</label>
+                        <input type="number" step="any" id="strict_fuel_allowance_input" name="fuel_allowance_kes" value="${strictFuelAllowance}" oninput="updateStrictContractPreview()" class="w-full p-2 bg-slate-900 border border-cyan-800 rounded-xl font-bold text-cyan-300 text-sm" required>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-amber-300 mb-1">🍲 3. Daily Lunch Budget (Default 150)</label>
+                        <input type="number" step="any" id="strict_lunch_allowance_input" name="lunch_allowance_kes" value="${strictLunchAllowance}" oninput="updateStrictContractPreview()" class="w-full p-2 bg-slate-900 border border-amber-800 rounded-xl font-bold text-amber-300 text-sm" required>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-rose-300 mb-1">📱 4. Daily Airtime Budget (Default 50)</label>
+                        <input type="number" step="any" id="strict_airtime_allowance_input" name="airtime_allowance_kes" value="${strictAirtimeAllowance}" oninput="updateStrictContractPreview()" class="w-full p-2 bg-slate-900 border border-rose-800 rounded-xl font-bold text-rose-300 text-sm" required>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-emerald-300 mb-1">🏠 5. 12 PM Home-Lunch Savings Rule</label>
+                        <select id="strict_save_unspent_lunch_select" name="save_unspent_lunch" onchange="updateStrictContractPreview()" class="w-full p-2 bg-slate-900 border border-emerald-700 rounded-xl font-bold text-emerald-300 text-xs">
+                            <option value="1" ${saveUnspentLunch ? 'selected' : ''}>🔒 Strict: Save Unspent Lunch (+Ksh ${strictLunchAllowance})</option>
+                            <option value="0" ${!saveUnspentLunch ? 'selected' : ''}>Relaxed: Don't Lock Unspent Lunch</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-indigo-300 mb-1">🏦 6. Target Account You Save To</label>
+                        <select name="savings_account_id" onchange="if(this.selectedOptions[0] && this.value){document.getElementById('strict_savings_acc_name_input').value=this.selectedOptions[0].dataset.accname || '';}" class="w-full p-2 bg-slate-900 border border-indigo-700 rounded-xl font-bold text-indigo-200 text-xs">
+                            <option value="">-- Custom / Strict Savings Vault --</option>
+                            ${(accounts || []).map((a: any) => `<option value="${a.id}" data-accname="${a.name}" ${String(savingsAccountId) === String(a.id) ? 'selected' : ''}>${a.name} (${a.account_type})</option>`).join('')}
+                        </select>
+                        <input type="hidden" id="strict_savings_acc_name_input" name="savings_account_name" value="${savingsAccountName}">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-purple-300 mb-1">💰 7. Opening Balance Before Shifts</label>
+                        <input type="number" step="any" name="starting_savings_balance" value="${startingSavingsBalance}" class="w-full p-2 bg-slate-900 border border-purple-800 rounded-xl font-bold text-purple-300 text-sm">
+                    </div>
+                    <div class="flex gap-2 items-end">
+                        <input type="hidden" id="strict_daily_kodi_input" name="daily_kodi_kes" value="${strictDailyKodi}">
+                        <button type="submit" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs transition shadow-md active:scale-95">
+                            🔒 Lock Strict Contract
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 🎉 LIVE CONGRATS vs 💪 LET'S CATCH UP (OVERDUE) & EXPECTED ACCOUNT BALANCE BANNER -->
+            ${lastShift ? (
+              (lastShiftMetStrict && cumulativeOverdueKes <= 0) ? `
+              <div class="p-4 bg-gradient-to-r from-emerald-950/95 via-teal-950/90 to-slate-950 border-2 border-emerald-500/70 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                  <div class="space-y-1">
+                      <div class="flex items-center gap-2 flex-wrap">
+                          <span class="px-2.5 py-0.5 bg-emerald-500 text-slate-950 font-black text-[11px] rounded-full uppercase tracking-wider">🎉 CONGRATS! TARGET &amp; PROFIT HIT</span>
+                          <span class="text-xs font-bold text-emerald-300">Latest Shift (${lastShift.date})</span>
+                      </div>
+                      <p class="text-sm sm:text-base font-black text-white">
+                          You saved <span class="text-emerald-400 convertible-amount" data-kes="${lastShiftNet}">Ksh ${lastShiftNet.toLocaleString(undefined, {minimumFractionDigits: 2})}</span> on your shift!
+                          <span class="text-xs font-bold text-emerald-200">
+                              (Ksh ${strictNetFloor.toLocaleString()} Target${lastShiftLunchSaved > 0 ? ` + 🏠 Ksh ${lastShiftLunchSaved.toLocaleString()} Home-Lunch Saved` : ''}${lastShiftOverflow > 0 ? ` + 🚀 Ksh ${lastShiftOverflow.toLocaleString()} Extra Profit` : ''})
+                          </span>
+                      </p>
+                      <p class="text-xs text-emerald-200/90">
+                          🏦 Your <strong class="text-amber-300 underline decoration-amber-400/60">${savingsAccountName}</strong> should now read:
+                          <strong class="text-base font-black text-amber-300 ml-1 convertible-amount" data-kes="${expectedSavingsAccountBalance}">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                      </p>
+                  </div>
+                  <div class="bg-slate-950/90 border border-emerald-500/50 px-4 py-2.5 rounded-xl text-right shrink-0">
+                      <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-300 block">🏦 ${savingsAccountName} Should Read</span>
+                      <span class="text-xl font-black text-emerald-400 convertible-amount" data-kes="${expectedSavingsAccountBalance}">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      <span class="text-[10px] text-gray-400 block">✅ Ksh 0.00 Overdue</span>
+                  </div>
+              </div>
+              ` : `
+              <div class="p-4 bg-gradient-to-r from-rose-950/95 via-amber-950/85 to-slate-950 border-2 border-rose-500/70 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                  <div class="space-y-1">
+                      <div class="flex items-center gap-2 flex-wrap">
+                          <span class="px-2.5 py-0.5 bg-rose-500 text-white font-black text-[11px] rounded-full uppercase tracking-wider animate-pulse">💪 LET'S CATCH UP! OVERDUE ACTIVE</span>
+                          <span class="text-xs font-bold text-rose-200">Latest Shift (${lastShift.date}): Saved Ksh ${lastShiftNet.toLocaleString()} vs Ksh ${lastShiftStrictTarget.toLocaleString()} Strict Target</span>
+                      </div>
+                      <p class="text-sm sm:text-base font-black text-white">
+                          Let's catch up! You have an overdue of <span class="text-rose-400 underline convertible-amount" data-kes="${cumulativeOverdueKes}">Ksh ${cumulativeOverdueKes.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> to recover.
+                      </p>
+                      <p class="text-xs text-amber-200/90">
+                          🏦 Your <strong class="text-amber-300">${savingsAccountName}</strong> should currently read <strong class="text-white font-black convertible-amount" data-kes="${expectedSavingsAccountBalance}">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                          (and will read <strong class="text-emerald-300 font-black convertible-amount" data-kes="${expectedSavingsAccountBalance + cumulativeOverdueKes}">Ksh ${(expectedSavingsAccountBalance + cumulativeOverdueKes).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong> once you clear the overdue!).
+                      </p>
+                  </div>
+                  <div class="bg-slate-950/90 border border-rose-500/50 px-4 py-2.5 rounded-xl text-right shrink-0">
+                      <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300 block">⚠️ Overdue To Catch Up</span>
+                      <span class="text-xl font-black text-rose-400 convertible-amount" data-kes="${cumulativeOverdueKes}">Ksh ${cumulativeOverdueKes.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      <span class="text-[10px] text-amber-300 block">🏦 Account Now: Ksh ${expectedSavingsAccountBalance.toLocaleString()}</span>
+                  </div>
+              </div>
+              `
+            ) : `
+              <div class="p-4 bg-slate-950/90 border border-indigo-500/40 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div class="space-y-1">
+                      <span class="text-[10px] font-black uppercase tracking-wider text-amber-300">🏦 Strict Savings &amp; Overdue Tracker (${savingsAccountName})</span>
+                      <p class="text-xs sm:text-sm font-bold text-white">
+                          Daily Rule: <strong class="text-emerald-400">Ksh ${strictNetFloor.toLocaleString()} Net Target</strong> + <strong class="text-cyan-300">Ksh ${strictFuelAllowance.toLocaleString()} Fuel</strong> + <strong class="text-amber-300">Ksh ${strictLunchAllowance.toLocaleString()} Lunch</strong> + <strong class="text-rose-300">Ksh ${strictAirtimeAllowance.toLocaleString()} Airtime</strong>.
+                          If you eat lunch at home at 12:00 PM (<code class="text-emerald-300">Lunch = 0</code>), that <strong>Ksh ${strictLunchAllowance.toLocaleString()}</strong> is automatically added to your savings!
+                      </p>
+                  </div>
+                  <div class="bg-slate-900 border border-indigo-700/60 px-3.5 py-2 rounded-xl text-right shrink-0">
+                      <span class="text-[10px] text-indigo-300 font-bold block">🏦 ${savingsAccountName} Should Read</span>
+                      <span class="text-lg font-black text-emerald-400">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+              </div>
+            `}
+
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <!-- Morning Targets Card -->
-                <div class="p-4 bg-slate-950/80 border border-blue-900/60 rounded-2xl space-y-2">
+                <!-- 1. Strict Net Take-Home Floor -->
+                <div class="p-4 bg-slate-950/80 border border-emerald-800/60 rounded-2xl space-y-2">
                     <div class="flex justify-between items-center text-xs">
-                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">🎯 Today's Target</span>
-                        <span class="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full font-bold">Goal</span>
+                        <span class="text-[10px] text-emerald-300 font-bold uppercase tracking-wider">🎯 1. Strict Net Target (+ Home Lunch)</span>
+                        <span class="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full font-bold">Pure Savings</span>
                     </div>
-                    <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${active_bike?.daily_target || 2500}">Ksh ${(Number(active_bike?.daily_target) || 2500).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
-                    <p class="text-[11px] text-gray-300">Peak Window: <strong class="text-indigo-300">${ti.best_time_window || '11am – 10pm'}</strong></p>
+                    <p id="strict_net_floor_display" class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${strictNetFloor}">Ksh ${strictNetFloor.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                    <p class="text-[11px] text-gray-300">With Lunch: <strong class="text-emerald-300">Save Ksh ${strictNetFloor.toLocaleString()}</strong> • Ate at Home (12 PM): <strong class="text-amber-300">Save Ksh ${(strictNetFloor + strictLunchAllowance).toLocaleString()}</strong> (+ extra profit)</p>
                 </div>
 
-                <!-- Safe Operating Allowance -->
+                <!-- 2. Hard Shift Expense Cap (Fuel 500 + Lunch 150 + Airtime 50) -->
                 <div class="p-4 bg-slate-950/80 border border-blue-900/60 rounded-2xl space-y-2">
                     <div class="flex justify-between items-center text-xs">
-                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">⛽ Shift Budget Allowance</span>
-                        <span class="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full font-bold">${activePowerType === 'ELECTRIC' ? 'EV Swap' : 'Petrol'}</span>
+                        <span class="text-[10px] text-rose-300 font-bold uppercase tracking-wider">🛑 2. Strict Shift Expense Budget</span>
+                        <span class="text-[10px] px-2 py-0.5 ${lastShiftPersonalSpend <= strictPersonalCap ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'} rounded-full font-bold">
+                            ${lastShiftPersonalSpend <= strictPersonalCap ? '🟢 Within Cap' : '🚨 Over Cap!'}
+                        </span>
                     </div>
-                    <p class="text-2xl font-black text-cyan-300 convertible-amount" data-kes="${activePowerType === 'ELECTRIC' ? 300 : 600}">Ksh ${(activePowerType === 'ELECTRIC' ? 300 : 600).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
-                    <p class="text-[11px] text-gray-300">Target net yield: <strong class="text-cyan-300 convertible-amount" data-kes="${ti.overall_avg_net_hourly || 280}">Ksh ${(Number(ti.overall_avg_net_hourly) || 280).toFixed(0)}/hr</strong></p>
+                    <p class="text-2xl font-black text-cyan-300">
+                        <span id="strict_cap_display">Ksh ${strictPersonalCap.toLocaleString()}</span>
+                        <span class="text-xs font-normal text-gray-400">+ Ksh ${strictFuelAllowance.toLocaleString()} ${activePowerType === 'ELECTRIC' ? 'Swap' : 'Fuel'}</span>
+                    </p>
+                    <p class="text-[11px] text-gray-300">
+                        🍲 Lunch: <strong class="text-amber-300">Ksh ${strictLunchAllowance}</strong> (or <strong class="text-emerald-400">Ksh 0</strong> if ate at home) • 📱 Airtime: <strong class="text-rose-300">Ksh ${strictAirtimeAllowance}</strong> • ⛽ Fuel: <strong class="text-cyan-300">Ksh ${strictFuelAllowance}</strong>
+                    </p>
                 </div>
 
-                <!-- Last Shift Debrief -->
-                <div class="p-4 bg-slate-950/80 border border-blue-900/60 rounded-2xl space-y-2">
+                <!-- 3. On-Road "Can I Go Home?" Gross Target & Post-Shift Overflow Verdict -->
+                <div class="p-4 bg-slate-950/80 border border-amber-700/60 rounded-2xl space-y-2">
                     <div class="flex justify-between items-center text-xs">
-                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">🌙 Latest Shift Take-Home</span>
-                        <span class="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold">${lastShift ? lastShift.date : 'Recent'}</span>
+                        <span class="text-[10px] text-amber-300 font-bold uppercase tracking-wider">🏁 3. Required Gross Before Home</span>
+                        <span class="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full font-bold">Roadside Rule</span>
                     </div>
-                    ${lastShift ? `
-                    <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${lastShiftNet}">Ksh ${lastShiftNet.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
-                    <p class="text-[11px] text-gray-400">Earned <span class="text-white font-bold convertible-amount" data-kes="${lastShift.total_earned}">Ksh ${Number(lastShift.total_earned).toLocaleString()}</span> − Exp <span class="text-rose-400 font-bold convertible-amount" data-kes="${lastShiftTotalExp}">Ksh ${lastShiftTotalExp.toLocaleString()}</span></p>
-                    ` : `
-                    <p class="text-base font-bold text-gray-400 mt-2">Ready for first shift</p>
-                    <p class="text-[11px] text-gray-500">Log a shift below to see net take-home debrief.</p>
-                    `}
+                    <p id="strict_required_gross_display" class="text-2xl font-black text-amber-400 convertible-amount" data-kes="${requiredGrossBeforeHome}">Ksh ${requiredGrossBeforeHome.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                    <p class="text-[11px] text-gray-300">
+                        ${cumulativeOverdueKes > 0
+                          ? `⚠️ Includes <strong class="text-rose-400">+Ksh ${cumulativeOverdueKes.toLocaleString()} overdue catch-up</strong> on top of Ksh ${(strictNetFloor + strictFuelAllowance + strictPersonalCap + strictDailyKodi).toLocaleString()} standard gross`
+                          : `Ksh ${strictNetFloor.toLocaleString()} Target + Ksh ${strictFuelAllowance.toLocaleString()} Fuel + Ksh ${strictLunchAllowance.toLocaleString()} Lunch + Ksh ${strictAirtimeAllowance.toLocaleString()} Airtime`}
+                    </p>
                 </div>
             </div>
         </div>
@@ -1279,7 +1569,7 @@ export function renderRiderDashboard(data: any): string {
                                 Quick Setup
                             </span>`}
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${active_bike ? `Daily Revenue Target: <strong class="convertible-amount text-blue-600 dark:text-blue-400 font-bold" data-kes="${active_bike?.daily_target || 3500}">Ksh ${(Number(active_bike?.daily_target) || 3500).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong> • Managed by ${active_bike?.owner_name || username}` : 'Register your car (Uber/Bolt), motorbike or electric EV below to start tracking shifts & finance.'}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${active_bike ? `Strict Net Take-Home Floor: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400 font-bold" data-kes="${active_bike?.daily_target || strictNetFloor}">Ksh ${(Number(active_bike?.daily_target) || strictNetFloor).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong> (Required Gross: Ksh ${requiredGrossBeforeHome.toLocaleString()}) • Managed by ${active_bike?.owner_name || username}` : 'Register your car (Uber/Bolt), motorbike or electric EV below to start tracking shifts & finance.'}</p>
                     </div>
                 </div>
 
@@ -1312,8 +1602,8 @@ export function renderRiderDashboard(data: any): string {
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Daily Target (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="daily_target" placeholder="3500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold convertible-placeholder">
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Strict Net Target After Expenses (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" inputmode="decimal" name="daily_target" value="${strictNetFloor}" placeholder="1000.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 convertible-placeholder">
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-xs">
@@ -1494,11 +1784,11 @@ export function renderRiderDashboard(data: any): string {
                     </div>
                     <div>
                         <label class="block text-[10px] text-gray-400 mb-0.5">Earned (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" id="sim_stint_earned" value="567" oninput="calcSimStintYield()" class="w-full p-2 bg-slate-900 border border-blue-900 rounded-xl text-xs font-bold text-emerald-400">
+                        <input type="number" step="any" id="sim_stint_earned" placeholder="e.g. 600" oninput="calcSimStintYield()" class="w-full p-2 bg-slate-900 border border-blue-900 rounded-xl text-xs font-bold text-emerald-400">
                     </div>
                     <div class="p-2.5 bg-blue-950/60 border border-blue-800/60 rounded-xl text-center">
                         <p class="text-[10px] text-blue-300 uppercase font-semibold">Calculated Yield</p>
-                        <p class="text-base font-black text-cyan-300" id="sim_stint_result">Ksh 189.00 / hr (3.0h)</p>
+                        <p class="text-base font-black text-cyan-300" id="sim_stint_result">Ksh 0.00 / hr (3.0h)</p>
                     </div>
                 </div>
             </div>
@@ -1604,19 +1894,19 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <!-- ⚡ Optional Online Stints / Multi-Session Splitter (Uber / Bolt) -->
-                <details open class="sm:col-span-2 lg:col-span-4 bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/90 dark:from-blue-950/50 dark:via-indigo-950/30 dark:to-blue-950/50 p-4 sm:p-5 rounded-2xl border-2 border-blue-400 dark:border-blue-700/80 space-y-3.5 shadow-xs">
+                <details class="sm:col-span-2 lg:col-span-4 bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/90 dark:from-blue-950/50 dark:via-indigo-950/30 dark:to-blue-950/50 p-4 sm:p-5 rounded-2xl border border-blue-300 dark:border-blue-800/80 space-y-3.5 shadow-xs">
                     <summary class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer list-none select-none">
                         <div class="space-y-1">
                             <div class="flex items-center space-x-2">
-                                <span class="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider shadow-xs">MULTI-SESSION STINTS</span>
+                                <span class="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider shadow-xs">MULTI-SESSION STINTS (OPTIONAL)</span>
                                 <h3 class="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-white flex items-center gap-1.5">
                                     <span>⚡ Multi-Session Online Stints (Uber / Bolt / Glovo)</span>
                                 </h3>
                             </div>
-                            <p class="text-[11px] text-gray-600 dark:text-gray-300">Went online 11am–2pm, took a break, then 2:13pm–5pm? Log each stint to pinpoint peak earning hours.</p>
+                            <p class="text-[11px] text-gray-600 dark:text-gray-300">Took a break between sessions? Click "➕ Add Stint" to log each session separately.</p>
                         </div>
                         <div class="flex items-center gap-2">
-                            <button type="button" onclick="event.stopPropagation(); addStintRow();" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs shrink-0 cursor-pointer">
+                            <button type="button" onclick="event.stopPropagation(); this.closest('details').open = true; addStintRow();" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs shrink-0 cursor-pointer">
                                 <span>➕ Add Stint</span>
                             </button>
                             <button type="button" onclick="event.stopPropagation(); clearAllStints();" class="px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 active:scale-95 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer" title="Clear stints">
@@ -1628,82 +1918,16 @@ export function renderRiderDashboard(data: any): string {
                     <!-- Hidden input to transmit stints JSON -->
                     <input type="hidden" name="stints_json" id="stints_json_input" value="">
 
-                    <!-- Stints Container (Pre-rendered directly in HTML) -->
+                    <!-- Stints Container (Starts empty — no dummy data) -->
                     <div id="stints-builder-container" class="space-y-2.5 pt-3 border-t border-blue-200 dark:border-blue-900/60">
-                        <div id="stints-list" class="space-y-2">
-                            <!-- Stint #1 pre-rendered -->
-                            <div class="stint-row p-2.5 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-900/60 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs shadow-xs">
-                                <div class="sm:col-span-1 font-extrabold text-blue-600 dark:text-blue-400 row-num">#1</div>
-                                <div class="sm:col-span-4 flex items-center gap-1.5">
-                                    <input type="time" value="11:00" class="stint-start w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" oninput="recalcStintsSummary()">
-                                    <span class="text-gray-400 text-xs font-semibold">to</span>
-                                    <input type="time" value="14:00" class="stint-end w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" oninput="recalcStintsSummary()">
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium" onchange="recalcStintsSummary()">
-                                        <option value="Uber Car / Ride">Uber Car / Ride</option>
-                                        <option value="Bolt Car / Ride">Bolt Car / Ride</option>
-                                        <option value="Little Cab">Little Cab</option>
-                                        <option value="Faras">Faras</option>
-                                        <option value="inDrive">inDrive</option>
-                                        <option value="Uber Eats" selected>Uber Eats</option>
-                                        <option value="Bolt Deliveries">Bolt</option>
-                                        <option value="Glovo / Jumia">Glovo/Jumia</option>
-                                        <option value="Boda Passenger">Boda Passenger</option>
-                                        <option value="Direct Client">Direct Client</option>
-                                    </select>
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <input type="number" step="any" inputmode="decimal" value="567" placeholder="Earned Ksh" class="stint-earned w-full p-2 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400" oninput="recalcStintsSummary()">
-                                </div>
-                                <div class="sm:col-span-3 flex items-center justify-between gap-1.5">
-                                    <span class="stint-badge px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold text-[11px] whitespace-nowrap border border-blue-200 dark:border-blue-900">
-                                        ⚡ Ksh 189/hr (3.0h)
-                                    </span>
-                                    <button type="button" onclick="this.closest('.stint-row').remove(); recalcStintsSummary();" class="text-rose-500 hover:text-rose-700 font-bold p-1 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-md transition" title="Delete stint">✕</button>
-                                </div>
-                            </div>
-
-                            <!-- Stint #2 pre-rendered -->
-                            <div class="stint-row p-2.5 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-900/60 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs shadow-xs">
-                                <div class="sm:col-span-1 font-extrabold text-blue-600 dark:text-blue-400 row-num">#2</div>
-                                <div class="sm:col-span-4 flex items-center gap-1.5">
-                                    <input type="time" value="14:13" class="stint-start w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" oninput="recalcStintsSummary()">
-                                    <span class="text-gray-400 text-xs font-semibold">to</span>
-                                    <input type="time" value="17:00" class="stint-end w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-bold" oninput="recalcStintsSummary()">
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium" onchange="recalcStintsSummary()">
-                                        <option value="Uber Car / Ride">Uber Car / Ride</option>
-                                        <option value="Bolt Car / Ride" selected>Bolt Car / Ride</option>
-                                        <option value="Little Cab">Little Cab</option>
-                                        <option value="Faras">Faras</option>
-                                        <option value="inDrive">inDrive</option>
-                                        <option value="Uber Eats">Uber Eats</option>
-                                        <option value="Bolt Deliveries">Bolt</option>
-                                        <option value="Glovo / Jumia">Glovo/Jumia</option>
-                                        <option value="Boda Passenger">Boda Passenger</option>
-                                        <option value="Direct Client">Direct Client</option>
-                                    </select>
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <input type="number" step="any" inputmode="decimal" value="700" placeholder="Earned Ksh" class="stint-earned w-full p-2 border border-emerald-300 dark:border-emerald-700 dark:bg-gray-800 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400" oninput="recalcStintsSummary()">
-                                </div>
-                                <div class="sm:col-span-3 flex items-center justify-between gap-1.5">
-                                    <span class="stint-badge px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold text-[11px] whitespace-nowrap border border-blue-200 dark:border-blue-900">
-                                        ⚡ Ksh 251/hr (2.8h)
-                                    </span>
-                                    <button type="button" onclick="this.closest('.stint-row').remove(); recalcStintsSummary();" class="text-rose-500 hover:text-rose-700 font-bold p-1 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-md transition" title="Delete stint">✕</button>
-                                </div>
-                            </div>
-                        </div>
+                        <div id="stints-list" class="space-y-2"></div>
 
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-blue-200/60 dark:border-gray-800 text-xs">
                             <button type="button" onclick="addStintRow()" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold rounded-xl transition shadow-xs flex items-center gap-1 text-xs cursor-pointer">
-                                <span>➕ Add Another Session</span>
+                                <span>➕ Add Session</span>
                             </button>
                             <div class="text-xs font-bold text-gray-700 dark:text-gray-300 bg-white/80 dark:bg-gray-900/80 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900">
-                                Total Sessions: <span id="stints-summary-hours" class="text-blue-600 dark:text-blue-400 font-black">5.8 hrs</span> • Gross: <span id="stints-summary-earned" class="text-emerald-600 dark:text-emerald-400 font-extrabold">Ksh 1,267.00</span>
+                                Total Sessions: <span id="stints-summary-hours" class="text-blue-600 dark:text-blue-400 font-black">0.0 hrs</span> • Gross: <span id="stints-summary-earned" class="text-emerald-600 dark:text-emerald-400 font-extrabold">Ksh 0.00</span>
                             </div>
                         </div>
                     </div>
@@ -1711,7 +1935,7 @@ export function renderRiderDashboard(data: any): string {
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Total Earned (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" inputmode="decimal" name="total_earned" placeholder="e.g. 3500.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400" required>
+                    <input type="number" step="any" inputmode="decimal" name="total_earned" oninput="updateStrictSaverAudit()" placeholder="e.g. ${requiredGrossBeforeHome.toFixed(0)}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-emerald-600 dark:text-emerald-400" required>
                 </div>
 
                 <!-- Dynamic Station Select -->
@@ -1741,10 +1965,15 @@ export function renderRiderDashboard(data: any): string {
 
                 <!-- Dynamic Cost Label -->
                 <div>
-                    <label id="energy-cost-label" class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                        ${activePowerType === 'ELECTRIC' ? '🔋 Battery Swap Cost (<span class="curr-symbol-label">Ksh</span>)' : '⛽ Fuel & Petrol Cost (<span class="curr-symbol-label">Ksh</span>)'}
-                    </label>
-                    <input type="number" step="any" inputmode="decimal" id="shift_fuel_cost_input" name="fuel_cost" oninput="onShiftKmOrFuelInput()" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                    <div class="flex items-center justify-between mb-1">
+                        <label id="energy-cost-label" class="block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                            ${activePowerType === 'ELECTRIC' ? '🔋 Battery Swap Cost (<span class="curr-symbol-label">Ksh</span>)' : '⛽ Fuel & Petrol Cost (<span class="curr-symbol-label">Ksh</span>)'}
+                        </label>
+                        <button type="button" onclick="document.getElementById('shift_fuel_cost_input').value=String(STRICT_FUEL_ALLOWANCE); onShiftKmOrFuelInput();" class="px-2 py-0.5 bg-cyan-50 dark:bg-cyan-950/70 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800 rounded-md text-[10px] font-bold hover:bg-cyan-100 transition">
+                            ⛽ Ksh ${strictFuelAllowance}
+                        </button>
+                    </div>
+                    <input type="number" step="any" inputmode="decimal" id="shift_fuel_cost_input" name="fuel_cost" value="${strictFuelAllowance}" oninput="onShiftKmOrFuelInput()" placeholder="${strictFuelAllowance}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-semibold">
                 </div>
 
                 <!-- Dynamic Metric (Litres vs Swaps Count) -->
@@ -1759,18 +1988,36 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🍲 Food / Lunch (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" inputmode="decimal" name="food_spent" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                    <div class="flex items-center justify-between gap-1 mb-1">
+                        <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400">🍲 Food / Lunch (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <div class="flex items-center gap-1">
+                            <button type="button" onclick="setShiftLunchMode(true)" class="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-md text-[10px] font-extrabold hover:bg-emerald-100 transition" title="Left home around 12 PM already fed — lock Ksh ${strictLunchAllowance} lunch into savings!">
+                                🏠 Ate at Home (0 → Save +${strictLunchAllowance})
+                            </button>
+                            <button type="button" onclick="setShiftLunchMode(false)" class="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-md text-[10px] font-bold hover:bg-amber-100 transition">
+                                🍲 ${strictLunchAllowance}
+                            </button>
+                        </div>
+                    </div>
+                    <input type="number" step="any" inputmode="decimal" name="food_spent" value="${strictLunchAllowance}" oninput="updateStrictSaverAudit()" placeholder="${strictLunchAllowance}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-semibold">
+                    <p id="shift-lunch-bonus-badge" class="mt-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+                        🍲 Standard Lunch: Ksh ${strictLunchAllowance} (Click "🏠 Ate at Home" if you left at 12 PM fed to save +Ksh ${strictLunchAllowance}!)
+                    </p>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">📱 Airtime & Data (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" inputmode="decimal" name="airtime_spent" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400">📱 Airtime &amp; Data (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <button type="button" onclick="document.querySelector('input[name=\\'airtime_spent\\']').value=String(STRICT_AIRTIME_ALLOWANCE); updateStrictSaverAudit();" class="px-2 py-0.5 bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-md text-[10px] font-bold hover:bg-rose-100 transition">
+                            📱 Ksh ${strictAirtimeAllowance}
+                        </button>
+                    </div>
+                    <input type="number" step="any" inputmode="decimal" name="airtime_spent" value="${strictAirtimeAllowance}" oninput="updateStrictSaverAudit()" placeholder="${strictAirtimeAllowance}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-semibold">
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🛠️ Daily Upkeep / Parking / Misc (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" inputmode="decimal" name="misc_expenses" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                    <input type="number" step="any" inputmode="decimal" name="misc_expenses" oninput="updateStrictSaverAudit()" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
                 </div>
 
                 <div>
@@ -1805,8 +2052,23 @@ export function renderRiderDashboard(data: any): string {
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Target Account (Sync Income & Expenses)</label>
                     <select name="earnings_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium text-emerald-600">
                         <option value="">-- Don't Sync to Account --</option>
-                        ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
+                        ${accounts.map((a: any) => `<option value="${a.id}" ${String(savingsAccountId) === String(a.id) ? 'selected' : ''}>${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                     </select>
+                </div>
+
+                <!-- 🛡️ Live Post-Shift Strict Saver Audit & Expected Account Balance Bar -->
+                <div class="sm:col-span-2 lg:col-span-4 p-4 bg-slate-900 dark:bg-slate-950 border-2 border-indigo-600/60 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-md">
+                    <div class="space-y-1">
+                        <p id="live-strict-net-verdict" class="text-xs font-extrabold text-indigo-300">
+                            🎯 Strict Daily Contract: Ksh ${strictNetFloor.toLocaleString()} Net + Ksh ${strictFuelAllowance.toLocaleString()} Fuel + Ksh ${strictLunchAllowance.toLocaleString()} Lunch + Ksh ${strictAirtimeAllowance.toLocaleString()} Airtime • 🏦 Your ${savingsAccountName} currently reads: Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        </p>
+                        <p id="live-strict-cap-verdict" class="text-[11px] font-bold text-emerald-300">
+                            🟢 Standard Shift Budget: Fuel Ksh ${strictFuelAllowance} • Lunch Ksh ${strictLunchAllowance} (or click "🏠 Ate at Home" to save +Ksh ${strictLunchAllowance}) • Airtime Ksh ${strictAirtimeAllowance}
+                        </p>
+                    </div>
+                    <a id="live-strict-split-link" href="/?pay_yourself_amount=${closeoutSplitAmount.toFixed(2)}#waterfall-card" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-black rounded-xl text-[11px] shrink-0 transition active:scale-95">
+                        👑 23:50 Split Ksh ${closeoutSplitAmount.toLocaleString()} →
+                    </a>
                 </div>
 
                 <div class="sm:col-span-2 lg:col-span-4">

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules } from './routes/finance';
-import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveRiderLogs, getOdometerConfig } from './routes/rider';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig } from './routes/rider';
 import { exportRoutes } from './routes/export';
 import { authRoutes } from './routes/auth';
 import { renderFinanceDashboard } from './views/financeView';
@@ -168,28 +168,31 @@ app.get('/', async (c) => {
     riderLogs = logRes?.data || [];
     complianceDeadlines = compRes?.data || [];
 
-    if (goals.length === 0) {
-      const defaultToInsert = [
-        { user_id: userId, title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
-        { user_id: userId, title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
-        { user_id: userId, title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
-      ];
+    const legacyDummyGoalTitles = new Set([
+      '55" 4K Smart TV',
+      '4-Burner Gas Cooker & Oven',
+      '5-Seater Living Room Sofa / Seat',
+    ]);
+    const untouchedDummyIds = goals
+      .filter((g: any) => legacyDummyGoalTitles.has(String(g.title || '').trim()) && Number(g.current_amount || 0) === 0)
+      .map((g: any) => g.id)
+      .filter(Boolean);
+    if (untouchedDummyIds.length > 0) {
+      goals = goals.filter((g: any) => !untouchedDummyIds.includes(g.id));
       try {
-        const { data: insertedGoals } = await supabase.from('goals').insert(defaultToInsert).select();
-        goals = (insertedGoals && insertedGoals.length > 0) ? insertedGoals : defaultToInsert.map((g, idx) => ({ id: `default-goal-${idx + 1}`, ...g }));
-      } catch (e) {
-        goals = defaultToInsert.map((g, idx) => ({ id: `default-goal-${idx + 1}`, ...g }));
-      }
+        await supabase.from('goals').delete().in('id', untouchedDummyIds);
+      } catch (e) {}
     }
 
     const savedCookieRules = getSavedAllocationRules(c);
     if (allocationRules.length === 0 && (!savedCookieRules || savedCookieRules.length === 0)) {
       const defaultRulesToInsert = [
-        { user_id: userId, bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
-        { user_id: userId, bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
-        { user_id: userId, bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
-        { user_id: userId, bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
-        { user_id: userId, bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
+        { user_id: userId, bucket_name: '👑 Pay Yourself First — Ziidi / MMF', target_type: 'ACCOUNT', percentage: 15.0, icon: '👑', is_active: 1 },
+        { user_id: userId, bucket_name: '🔒 Pay Yourself First — Sacco / Lock', target_type: 'ACCOUNT', percentage: 15.0, icon: '🔒', is_active: 1 },
+        { user_id: userId, bucket_name: '🏖️ Goals & Malindi Vacation Vault', target_type: 'GOAL', percentage: 20.0, icon: '🏖️', is_active: 1 },
+        { user_id: userId, bucket_name: '⚡ Monthly Bills & Rent Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
+        { user_id: userId, bucket_name: '🛠️ Fleet Service & Docs Reserve', target_type: 'ACCOUNT', percentage: 10.0, icon: '🛠️', is_active: 1 },
+        { user_id: userId, bucket_name: '💵 Guilt-Free Daily Pocket', target_type: 'CASH', percentage: 25.0, icon: '💵', is_active: 1 }
       ];
       try {
         const { data: insertedRules } = await supabase.from('allocation_rules').insert(defaultRulesToInsert).select();
@@ -199,12 +202,7 @@ app.get('/', async (c) => {
       }
     }
   } else {
-    try {
-      const { data: guestRules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
-      allocationRules = guestRules || [];
-    } catch (e) {
-      allocationRules = [];
-    }
+    allocationRules = [];
 
     // Parse deleted goals cookie for guests
     let deletedGoalIds: string[] = [];
@@ -213,18 +211,7 @@ app.get('/', async (c) => {
       if (rawDel) deletedGoalIds = JSON.parse(decodeURIComponent(rawDel));
     } catch (e) {}
 
-    // Fetch guest goals from DB (where user_id is null)
-    let dbGuestGoals: any[] = [];
-    try {
-      const { data: gData } = await supabase.from('goals').select('*').is('user_id', null).order('created_at', { ascending: true });
-      if (gData && gData.length > 0) {
-        dbGuestGoals = gData;
-      }
-    } catch (e) {
-      console.warn('Failed to fetch guest goals from DB:', e);
-    }
-
-    // Fetch guest goals from cookie
+    // Fetch guest goals strictly from this browser's cookie (no shared dummy goals)
     let cookieGuestGoals: any[] = [];
     try {
       const rawGuest = getCookie(c, 'finatrack_guest_goals') || '';
@@ -233,39 +220,23 @@ app.get('/', async (c) => {
       }
     } catch (e) {}
 
-    const defaultGoals = [
-      { id: 'goal-1', title: '55" 4K Smart TV', target_amount: 45000, current_amount: 0, target_date: '2026-12-31' },
-      { id: 'goal-2', title: '4-Burner Gas Cooker & Oven', target_amount: 28000, current_amount: 0, target_date: '2026-11-30' },
-      { id: 'goal-3', title: '5-Seater Living Room Sofa / Seat', target_amount: 35000, current_amount: 0, target_date: '2027-01-31' }
-    ];
+    const legacyDummyGoalTitles = new Set([
+      '55" 4K Smart TV',
+      '4-Burner Gas Cooker & Oven',
+      '5-Seater Living Room Sofa / Seat',
+    ]);
 
     const combinedMap = new Map<string, any>();
-    for (const g of defaultGoals) {
-      if (!deletedGoalIds.includes(String(g.id))) {
-        combinedMap.set(String(g.id), g);
-      }
-    }
-    for (const g of dbGuestGoals) {
-      if (!deletedGoalIds.includes(String(g.id))) {
-        combinedMap.set(String(g.id), g);
-      }
-    }
     for (const g of cookieGuestGoals) {
-      if (!deletedGoalIds.includes(String(g.id))) {
+      const isLegacyUntouched = legacyDummyGoalTitles.has(String(g.title || '').trim()) && Number(g.current_amount || 0) === 0;
+      if (!deletedGoalIds.includes(String(g.id)) && !isLegacyUntouched) {
         combinedMap.set(String(g.id), g);
       }
     }
 
     goals = Array.from(combinedMap.values());
     debts = [];
-
-    // Fetch guest transactions from DB (where user_id is null)
-    try {
-      const { data: guestTxs } = await supabase.from('transactions').select('*').is('user_id', null).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100);
-      transactions = sortTransactionsLatestFirst(guestTxs || []);
-    } catch (e) {
-      transactions = [];
-    }
+    transactions = [];
   }
 
   // Synchronize goal sub-splits from cookie (persists custom and proportional splits across guest mode & user changes)
@@ -709,11 +680,15 @@ app.get('/rider', async (c) => {
 
   const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
 
+  const primaryActiveBike = (activeBikes || []).find((b: any) => b.is_active === 1) || activeBikes[0] || null;
+  const strictSaverConfig = getStrictSaverConfig(c, primaryActiveBike);
+
   const html = renderRiderDashboard({
-    active_bike: (activeBikes || []).find((b: any) => b.is_active === 1) || activeBikes[0] || null,
+    active_bike: primaryActiveBike,
     bikes: activeBikes,
     rider_logs: shiftLogs,
     odometer_config: odometerConfig,
+    strict_saver_config: strictSaverConfig,
     time_intelligence: timeIntelligence,
     maintenance_schedules: maintenance || [],
     compliance_deadlines: resolveEffectiveComplianceDeadlines(c, compliance),
