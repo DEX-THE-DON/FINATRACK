@@ -1171,6 +1171,9 @@ export function renderRiderDashboard(data: any): string {
 
         <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
         <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <a href="/?pay_yourself_amount=${closeoutSplitAmount.toFixed(2)}#waterfall-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 active:scale-95 text-slate-950 text-xs font-black rounded-xl shadow-xs shrink-0 transition">
+                <span>👑 Pay Yourself (23:50)</span>
+            </a>
             <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>⏱️ Log Shift</span>
             </button>
@@ -1203,11 +1206,14 @@ export function renderRiderDashboard(data: any): string {
                             <span>Daily Shift Briefing & Take-Home Wrap-up</span>
                             <span class="text-[10px] bg-blue-500/20 text-blue-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-blue-400/30">Live Briefing</span>
                         </h2>
-                        <p class="text-xs text-blue-200">Daily earnings target, safe fuel/swap allowance, and your latest shift take-home debrief.</p>
+                        <p class="text-xs text-blue-200">Daily earnings target, safe fuel/swap allowance, and your 23:50 Pay Yourself First closeout.</p>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="/?pay_yourself_amount=${closeoutSplitAmount.toFixed(2)}#waterfall-card" class="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 text-xs font-black rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                        <span>👑 23:50 Pay Yourself First (Ksh ${closeoutSplitAmount.toLocaleString()})</span>
+                    </a>
                     <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
                         <span>⚡ Log Today's Shift</span>
                     </button>

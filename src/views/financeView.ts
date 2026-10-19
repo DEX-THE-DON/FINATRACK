@@ -1839,6 +1839,9 @@ export function renderFinanceDashboard(data: any): string {
 
         <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
         <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <button onclick="document.getElementById('waterfall-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 active:scale-95 text-slate-950 text-xs font-black rounded-xl shadow-xs shrink-0 transition">
+                <span>👑 Pay Yourself First</span>
+            </button>
             <button onclick="document.getElementById('runway-score-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🛡️ Runway (${runway_status.displayMonths})</span>
             </button>
@@ -1858,10 +1861,7 @@ export function renderFinanceDashboard(data: any): string {
                 <span>📲 Parse M-Pesa</span>
             </button>
             <button onclick="document.getElementById('goals-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-purple-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
-                <span>🎯 Goals</span>
-            </button>
-            <button onclick="document.getElementById('waterfall-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
-                <span>🌊 Auto-Split</span>
+                <span>🏖️ Goals / Malindi</span>
             </button>
             <button onclick="document.getElementById('debts-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-rose-600 to-amber-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>💳 Loans & Debts ${dangerCount > 0 ? `<span class="px-1.5 py-0.2 bg-white text-rose-700 rounded-full font-black text-[10px] animate-pulse">🚨 ${dangerCount}</span>` : ''}</span>
@@ -1906,6 +1906,10 @@ export function renderFinanceDashboard(data: any): string {
 
         <!-- 📌 Quick-Jump Sticky Navigation Dock -->
         <nav id="quick-jump-dock" class="sticky top-14 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-md py-2 px-1 border-y border-gray-200/80 dark:border-gray-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar shadow-2xs">
+            <a href="#waterfall-card" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-emerald-500/20 dark:from-amber-500/20 dark:to-emerald-500/20 border border-amber-400 dark:border-amber-700 text-xs font-black text-amber-900 dark:text-amber-300 hover:border-emerald-500 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
+                <span>👑 Pay Yourself First (23:50 Split)</span>
+                <span class="px-1.5 py-0.2 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 rounded-md text-[10px]">${allocation_rules.length}</span>
+            </a>
             <a href="#accounts-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
                 <span>💳 Accounts</span>
                 <span class="px-1.5 py-0.2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded-md text-[10px]">${accounts.length}</span>
@@ -1919,7 +1923,7 @@ export function renderFinanceDashboard(data: any): string {
                 <span class="px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 rounded-md text-[10px]">${mmf_accounts.length}</span>
             </a>
             <a href="#goals-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
-                <span>🎯 Goals</span>
+                <span>🏖️ Goals &amp; Malindi</span>
                 <span class="px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-md text-[10px]">${goals.length}</span>
             </a>
             <a href="#tx-card" class="px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-800 shrink-0 transition shadow-2xs active:scale-95 flex items-center gap-1.5">
@@ -2611,10 +2615,10 @@ export function renderFinanceDashboard(data: any): string {
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
                 <div>
                     <div class="flex items-center space-x-2">
-                        <span class="text-2xl">🌊</span>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Dynamic Waterfall Income Auto-Split (Zero Cent Leakage)</h2>
+                        <span class="text-2xl">👑</span>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Pay Yourself First &amp; Dynamic Waterfall Auto-Split (23:50 Closeout)</h2>
                     </div>
-                    <p class="text-xs text-gray-600 dark:text-indigo-200/80">Automatically calculate and distribute daily earnings across MMF, Savings, Goals, Loans/Debts, Bills, or any custom options you create.</p>
+                    <p class="text-xs text-gray-600 dark:text-indigo-200/80">Automatically calculate and distribute daily shift net earnings across MMF, Savings, Malindi/Home Goals, Loans, Bills, and Fleet Service.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <form action="/rules/preset" method="POST" class="inline">
