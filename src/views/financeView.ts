@@ -1886,17 +1886,38 @@ export function renderFinanceDashboard(data: any): string {
             }
         }
 
+        function isImageFile(f) {
+            if (!f) return false;
+            if (f.type && f.type.toLowerCase().indexOf('image/') === 0) return true;
+            return /\.(png|jpe?g|webp|gif|bmp|heic|svg)$/i.test(f.name || '');
+        }
+
+        var _currentScreenshotFiles = [];
+
         async function handleMpesaScreenshots(fileList) {
             if (!fileList || fileList.length === 0) return;
-            var files = Array.from(fileList).filter(function(f) {
-                return f && f.type && f.type.indexOf('image/') === 0;
-            });
+            var files = Array.from(fileList).filter(isImageFile);
             if (files.length === 0) {
-                alert('Please select or snap a valid screenshot image (PNG, JPG, WebP).');
-                return;
+                // If browser did not report MIME type, accept first file anyway if it looks like a file
+                if (fileList.length > 0 && fileList[0].size > 0) {
+                    files = [fileList[0]];
+                } else {
+                    alert('Please select or snap a valid image (PNG, JPG, WebP).');
+                    return;
+                }
             }
 
+            _currentScreenshotFiles = files;
+
+            // Reset input values so picking the same file again works
+            var inputEl = document.getElementById('mpesa-screenshot-input');
+            if (inputEl) inputEl.value = '';
+            var camEl = document.getElementById('mpesa-camera-input');
+            if (camEl) camEl.value = '';
+
+            // Ensure scanner panel is open
             setSmsInputMode('SCAN');
+
             var statusBox = document.getElementById('mpesa-ocr-status-box');
             var statusText = document.getElementById('mpesa-ocr-status-text');
             var progressBar = document.getElementById('mpesa-ocr-progress-bar');
@@ -1908,34 +1929,65 @@ export function renderFinanceDashboard(data: any): string {
                 thumbsContainer.innerHTML = '';
                 thumbsContainer.classList.remove('hidden');
             }
-            if (statusText) statusText.innerText = '⏳ Loading smart screenshot OCR scanner...';
-            if (progressBar) progressBar.style.width = '10%';
+            if (statusText) statusText.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">📸 Screenshot loaded! Pre-processing image...</span>';
+            if (progressBar) progressBar.style.width = '15%';
 
+            // 1. INSTANT ZERO-DELAY VISUAL PREVIEW: Read images immediately via FileReader
+            var dataUrls = [];
+            for (var idx = 0; idx < files.length; idx++) {
+                var fObj = files[idx];
+                var fSizeKb = Math.round(fObj.size / 1024);
+                try {
+                    var dUrl = await (function(file) {
+                        return new Promise(function(resolve) {
+                            var r = new FileReader();
+                            r.onload = function(e) { resolve(e.target.result); };
+                            r.onerror = function() { resolve(null); };
+                            r.readAsDataURL(file);
+                        });
+                    })(fObj);
+
+                    if (dUrl && thumbsContainer) {
+                        dataUrls.push({ file: fObj, dataUrl: dUrl, sizeKb: fSizeKb });
+                        var card = document.createElement('div');
+                        card.className = 'p-3 bg-white dark:bg-gray-900 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm space-y-2 max-w-sm';
+                        card.innerHTML = 
+                            '<div class="flex items-center justify-between text-xs">' +
+                                '<span class="font-extrabold text-gray-900 dark:text-white truncate max-w-[200px]" title="' + fObj.name + '">📷 ' + fObj.name + '</span>' +
+                                '<span class="text-[10px] text-gray-400 font-mono">' + fSizeKb + ' KB</span>' +
+                            '</div>' +
+                            '<div class="w-full h-44 bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200 dark:border-gray-800">' +
+                                '<img src="' + dUrl + '" class="max-h-full max-w-full object-contain" alt="Uploaded Screenshot">' +
+                            '</div>';
+                        thumbsContainer.appendChild(card);
+                    }
+                } catch(readErr) {
+                    console.warn('Error reading file preview:', readErr);
+                }
+            }
+
+            statusBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            // 2. RUN OCR SCANNER
             try {
+                if (statusText) statusText.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">⏳ Starting OCR engine to read SMS text...</span>';
+                if (progressBar) progressBar.style.width = '30%';
+
                 var Tesseract = await loadTesseractJs();
                 var extractedChunks = [];
 
                 for (var i = 0; i < files.length; i++) {
-                    var f = files[i];
-                    if (statusText) {
-                        statusText.innerText = '📸 Pre-processing screenshot ' + (i + 1) + ' of ' + files.length + ' (' + f.name + ')...';
-                    }
-                    var prep = await preprocessScreenshotForOcr(f);
+                    var curFile = files[i];
+                    var prep = await preprocessScreenshotForOcr(curFile);
+                    var imgToScan = (prep && prep.processedUrl) ? prep.processedUrl : (dataUrls[i] ? dataUrls[i].dataUrl : curFile);
 
-                    if (thumbsContainer && prep.previewUrl) {
-                        var thumbWrap = document.createElement('div');
-                        thumbWrap.className = 'relative w-14 h-14 rounded-lg overflow-hidden border border-emerald-300 dark:border-emerald-700 shadow-2xs shrink-0 bg-gray-900';
-                        thumbWrap.innerHTML = '<img src="' + prep.previewUrl + '" class="w-full h-full object-cover" alt="SMS Screenshot">';
-                        thumbsContainer.appendChild(thumbWrap);
-                    }
-
-                    var result = await Tesseract.recognize(prep.processedUrl, 'eng', {
+                    var result = await Tesseract.recognize(imgToScan, 'eng', {
                         logger: function(m) {
                             if (m && m.status === 'recognizing text' && typeof m.progress === 'number') {
-                                var overallPct = Math.round(((i + m.progress) / files.length) * 100);
-                                if (progressBar) progressBar.style.width = Math.max(15, overallPct) + '%';
+                                var pct = Math.round(((i + m.progress) / files.length) * 100);
+                                if (progressBar) progressBar.style.width = Math.max(30, pct) + '%';
                                 if (statusText) {
-                                    statusText.innerText = '🔍 Reading SMS screenshot ' + (i + 1) + ' of ' + files.length + '... (' + Math.round(m.progress * 100) + '%)';
+                                    statusText.innerText = '🔍 Reading SMS from screenshot ' + (i + 1) + ' of ' + files.length + '... (' + Math.round(m.progress * 100) + '%)';
                                 }
                             }
                         }
@@ -1957,18 +2009,28 @@ export function renderFinanceDashboard(data: any): string {
                         textarea.value = existing ? (existing + nl + nl + combined) : combined;
                     }
                     if (statusText) {
-                        statusText.innerText = '✅ Scanned ' + files.length + ' screenshot' + (files.length === 1 ? '' : 's') + '! Extracted text loaded below — reviewing transactions...';
+                        statusText.innerHTML = '<span class="text-emerald-700 dark:text-emerald-300 font-extrabold">✅ Scanned successfully! Extracted SMS placed in text box below &amp; reviewed!</span>';
                     }
                     await parseMpesaClient();
                 } else {
                     if (statusText) {
-                        statusText.innerText = '⚠️ Could not detect clear SMS text in the image. Try cropping closer to the message or paste text below.';
+                        statusText.innerHTML = '<div class="space-y-1">' +
+                            '<p class="text-amber-700 dark:text-amber-300 font-bold">⚠️ Could not detect clear SMS text in this image.</p>' +
+                            '<p class="text-[11px] text-gray-500 dark:text-gray-400">Ensure the screenshot clearly shows the M-Pesa / Bank message (e.g. "Confirmed. Ksh..."). You can also copy &amp; paste text below.</p>' +
+                            '</div>';
                     }
                 }
             } catch (err) {
                 console.warn('Screenshot OCR error:', err);
+                if (progressBar) progressBar.style.width = '100%';
                 if (statusText) {
-                    statusText.innerText = '⚠️ Scanner could not process screenshot (' + (err && err.message ? err.message : 'OCR error') + '). You can still copy & paste text below.';
+                    statusText.innerHTML = '<div class="space-y-1.5">' +
+                        '<p class="text-rose-600 dark:text-rose-400 font-bold">⚠️ OCR scanner encountered an issue: ' + (err && err.message ? err.message : 'Network error') + '</p>' +
+                        '<div class="flex items-center gap-2">' +
+                            '<button type="button" onclick="handleMpesaScreenshots(_currentScreenshotFiles)" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition shadow-xs">🔄 Retry OCR</button>' +
+                            '<span class="text-[11px] text-gray-500">Or copy &amp; paste the message text into the box below</span>' +
+                        '</div>' +
+                        '</div>';
                 }
             }
         }
@@ -1985,9 +2047,7 @@ export function renderFinanceDashboard(data: any): string {
 
         function handleMpesaPasteEvent(ev) {
             if (!ev.clipboardData || !ev.clipboardData.files || ev.clipboardData.files.length === 0) return;
-            var imgFiles = Array.from(ev.clipboardData.files).filter(function(f) {
-                return f && f.type && f.type.indexOf('image/') === 0;
-            });
+            var imgFiles = Array.from(ev.clipboardData.files).filter(isImageFile);
             if (imgFiles.length > 0) {
                 ev.preventDefault();
                 handleMpesaScreenshots(imgFiles);

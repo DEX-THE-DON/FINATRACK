@@ -1222,23 +1222,44 @@ export function renderRiderDashboard(data: any): string {
             var ocrStatus = document.getElementById('new-doc-scan-ocr-status');
 
             if (previewBox) previewBox.classList.remove('hidden');
-            if (metaText) metaText.innerText = 'Compressing ' + file.name + '...';
-
-            var res = await compressDocumentFile(file);
-            _pendingNewDocScan = res;
-
             if (thumbImg) {
-                if (res.type === 'pdf') {
+                if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
                     thumbImg.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="%23e11d48" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
                 } else {
-                    thumbImg.src = res.dataUri;
+                    try {
+                        thumbImg.src = URL.createObjectURL(file);
+                    } catch(e) {}
                 }
             }
-            if (metaText) {
-                metaText.innerHTML = '<strong>' + res.name + '</strong> (' + res.sizeKb + ' KB) • Ready to attach';
-            }
+            if (metaText) metaText.innerText = '📷 ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
             if (ocrStatus) {
-                ocrStatus.innerHTML = '<button type="button" onclick="runOcrOnPendingDocScan()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs active:scale-95">🔍 Auto-Read Expiry &amp; Ref # from Document</button>';
+                ocrStatus.innerHTML = '<span class="text-xs text-amber-600 dark:text-amber-400 font-bold animate-pulse">⏳ Optimizing image...</span>';
+            }
+
+            // Clear input values
+            var camInput = document.getElementById('new-doc-camera-input');
+            if (camInput) camInput.value = '';
+            var fileInput = document.getElementById('new-doc-file-input');
+            if (fileInput) fileInput.value = '';
+
+            try {
+                var res = await compressDocumentFile(file);
+                _pendingNewDocScan = res;
+
+                if (thumbImg && res.type !== 'pdf' && res.dataUri) {
+                    thumbImg.src = res.dataUri;
+                }
+                if (metaText) {
+                    metaText.innerHTML = '<strong>' + res.name + '</strong> (' + res.sizeKb + ' KB) • Ready to attach';
+                }
+                if (ocrStatus) {
+                    ocrStatus.innerHTML = '<button type="button" onclick="runOcrOnPendingDocScan()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs active:scale-95">🔍 Auto-Read Expiry &amp; Ref # from Document</button>';
+                }
+            } catch (err) {
+                console.warn('Doc compression error:', err);
+                if (ocrStatus) {
+                    ocrStatus.innerHTML = '<span class="text-rose-500 text-xs font-bold">⚠️ Could not compress, but original attached.</span>';
+                }
             }
         }
 
