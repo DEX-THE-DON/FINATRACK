@@ -31,6 +31,115 @@ export function getSavedGoalSplits(c: any): Record<string, number> {
   return {};
 }
 
+export const DEFAULT_ALLOCATION_RULES = [
+  { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', target_id: null, percentage: 20.0, icon: '📈', is_active: 1 },
+  { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', target_id: null, percentage: 20.0, icon: '🔒', is_active: 1 },
+  { id: 'rule-3', bucket_name: 'Savings Goals', target_type: 'GOAL', target_id: null, percentage: 15.0, icon: '🎯', is_active: 1 },
+  { id: 'rule-4', bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', target_id: null, percentage: 15.0, icon: '⚡', is_active: 1 },
+  { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', target_id: null, percentage: 30.0, icon: '💵', is_active: 1 }
+];
+
+export const SPLIT_RATIO_PRESETS: Record<string, { label: string; rules: any[] }> = {
+  PAY_YOURSELF_FLEET: {
+    label: '30-20-15-10-25 Pay Yourself First + Fleet Formula',
+    rules: [
+      { id: 'rule-pyf-1', bucket_name: 'Pay Yourself #1: Ziidi / Britam MMF', target_type: 'ACCOUNT', target_id: null, percentage: 15.0, icon: '👑', is_active: 1 },
+      { id: 'rule-pyf-2', bucket_name: 'Pay Yourself #2: Lock / Sacco Savings', target_type: 'ACCOUNT', target_id: null, percentage: 15.0, icon: '🔒', is_active: 1 },
+      { id: 'rule-pyf-3', bucket_name: 'Savings Goals (Malindi & Home)', target_type: 'GOAL', target_id: null, percentage: 20.0, icon: '🎯', is_active: 1 },
+      { id: 'rule-pyf-4', bucket_name: 'Recurring Bills & Rent Reserve', target_type: 'BILL', target_id: null, percentage: 15.0, icon: '⚡', is_active: 1 },
+      { id: 'rule-pyf-5', bucket_name: 'Fleet Service & Docs Reserve', target_type: 'ACCOUNT', target_id: null, percentage: 10.0, icon: '🛠️', is_active: 1 },
+      { id: 'rule-pyf-6', bucket_name: 'Daily Living & Personal Pocket', target_type: 'CASH', target_id: null, percentage: 25.0, icon: '💵', is_active: 1 },
+    ],
+  },
+  AGGRESSIVE_WEALTH: {
+    label: '40-20-15-25 Aggressive Wealth Formula',
+    rules: [
+      { id: 'rule-agg-1', bucket_name: 'Pay Yourself #1: Ziidi / Britam MMF', target_type: 'ACCOUNT', target_id: null, percentage: 25.0, icon: '👑', is_active: 1 },
+      { id: 'rule-agg-2', bucket_name: 'Pay Yourself #2: Lock / Sacco Savings', target_type: 'ACCOUNT', target_id: null, percentage: 15.0, icon: '🔒', is_active: 1 },
+      { id: 'rule-agg-3', bucket_name: 'Savings Goals (Malindi & Home)', target_type: 'GOAL', target_id: null, percentage: 20.0, icon: '🎯', is_active: 1 },
+      { id: 'rule-agg-4', bucket_name: 'Bills & Fleet Maintenance Reserve', target_type: 'ACCOUNT', target_id: null, percentage: 15.0, icon: '⚡', is_active: 1 },
+      { id: 'rule-agg-5', bucket_name: 'Daily Living & Personal Pocket', target_type: 'CASH', target_id: null, percentage: 25.0, icon: '💵', is_active: 1 },
+    ],
+  },
+  DEBT_CRUSHER: {
+    label: '20-20-15-15-30 Debt Crusher Formula',
+    rules: [
+      { id: 'rule-dc-1', bucket_name: 'Pay Yourself First (MMF / Sacco)', target_type: 'ACCOUNT', target_id: null, percentage: 20.0, icon: '👑', is_active: 1 },
+      { id: 'rule-dc-2', bucket_name: 'Loan / Debt Crusher Payoff', target_type: 'DEBT', target_id: null, percentage: 20.0, icon: '💳', is_active: 1 },
+      { id: 'rule-dc-3', bucket_name: 'Savings Goals (Malindi & Home)', target_type: 'GOAL', target_id: null, percentage: 15.0, icon: '🎯', is_active: 1 },
+      { id: 'rule-dc-4', bucket_name: 'Bills & Fleet Maintenance Reserve', target_type: 'ACCOUNT', target_id: null, percentage: 15.0, icon: '⚡', is_active: 1 },
+      { id: 'rule-dc-5', bucket_name: 'Daily Living & Personal Pocket', target_type: 'CASH', target_id: null, percentage: 30.0, icon: '💵', is_active: 1 },
+    ],
+  },
+  DEFAULT_5: {
+    label: '20-20-15-15-30 Classic 5 Buckets',
+    rules: DEFAULT_ALLOCATION_RULES,
+  },
+};
+
+export function getSavedAllocationRules(c: any): any[] | null {
+  try {
+    const raw = getCookie(c, 'finatrack_allocation_rules');
+    if (raw) {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    const cookieHeader = c.req?.header('cookie') || '';
+    const match = cookieHeader.match(/finatrack_allocation_rules=([^;]+)/);
+    if (match) {
+      const parsed = JSON.parse(decodeURIComponent(match[1]));
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+export function saveAllocationRulesCookie(c: any, rules: any[]) {
+  try {
+    const clean = (rules || []).map((r: any, idx: number) => ({
+      id: String(r.id || `rule-${idx + 1}`),
+      bucket_name: String(r.bucket_name || 'Custom Option').trim(),
+      icon: String(r.icon || '💰').trim() || '💰',
+      percentage: Number(r.percentage ?? 0),
+      target_type: String(r.target_type || 'CASH').trim(),
+      target_id: r.target_id ? String(r.target_id).trim() : null,
+      is_active: 1,
+    }));
+    setCookie(c, 'finatrack_allocation_rules', encodeURIComponent(JSON.stringify(clean)), {
+      path: '/',
+      maxAge: 31536000,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+export function resolveEffectiveAllocationRules(c: any, dbRules: any[] | null | undefined): any[] {
+  const cookieRules = getSavedAllocationRules(c);
+  if (cookieRules && cookieRules.length > 0) {
+    if (dbRules && dbRules.length > 0) {
+      const dbByName = new Map(dbRules.map((d: any) => [String(d.bucket_name || '').toLowerCase(), d]));
+      const dbById = new Map(dbRules.map((d: any) => [String(d.id), d]));
+      return cookieRules.map((cr: any) => {
+        const matched = dbById.get(String(cr.id)) || dbByName.get(String(cr.bucket_name || '').toLowerCase());
+        return {
+          ...cr,
+          id: matched?.id ? String(matched.id) : String(cr.id),
+          target_id: cr.target_id || matched?.target_id || null,
+        };
+      });
+    }
+    return cookieRules;
+  }
+  if (dbRules && dbRules.length > 0) {
+    return dbRules;
+  }
+  return DEFAULT_ALLOCATION_RULES.map(r => ({ ...r }));
+}
+
+function isValidUuid(val: string | null | undefined): boolean {
+  return Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val).trim()));
+}
+
 const DEFAULT_USD_KES_RATE = 129.0;
 
 function getExchangeRate(): number {
@@ -973,28 +1082,29 @@ financeRoutes.post('/split/distribute', async (c) => {
 
   if (rawAmt <= 0) return c.redirect('/?toast=Please+enter+a+valid+amount', 303);
 
-  let query = supabase.from('allocation_rules').select('*').eq('is_active', 1);
-  if (userId) query = query.eq('user_id', userId);
-  let { data: rules } = await query;
-
-  if (!rules || rules.length === 0) {
-    // Default fallback rules
-    rules = [
-      { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
-      { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
-      { id: 'rule-3', bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
-      { id: 'rule-4', bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
-      { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
-    ];
+  let dbRules: any[] = [];
+  try {
+    let query = supabase.from('allocation_rules').select('*').eq('is_active', 1);
+    if (userId) query = query.eq('user_id', userId);
+    const { data } = await query;
+    dbRules = data || [];
+  } catch (e) {
+    dbRules = [];
   }
 
-  // Get user accounts & goals for smart destination matching if target_id is not set
-  const [accRes, goalRes] = await Promise.all([
+  const rules = resolveEffectiveAllocationRules(c, dbRules);
+
+  // Get user accounts, goals, debts & bills for smart destination matching
+  const [accRes, goalRes, debtRes, billRes] = await Promise.all([
     userId ? supabase.from('accounts').select('*').eq('user_id', userId) : supabase.from('accounts').select('*'),
     userId ? supabase.from('goals').select('*').eq('user_id', userId) : supabase.from('goals').select('*'),
+    userId ? supabase.from('debts').select('*').eq('user_id', userId) : supabase.from('debts').select('*'),
+    userId ? supabase.from('bills').select('*').eq('user_id', userId) : supabase.from('bills').select('*'),
   ]);
   const userAccounts = accRes.data || [];
   let userGoals = goalRes.data || [];
+  const userDebts = debtRes.data || [];
+  const userBills = billRes.data || [];
 
   if (userGoals.length === 0) {
     userGoals = [
@@ -1022,7 +1132,7 @@ financeRoutes.post('/split/distribute', async (c) => {
 
   // If a source account was chosen, deduct the total amount from source wallet
   if (sourceAccountId) {
-    const srcAcc = userAccounts.find(a => a.id === sourceAccountId);
+    const srcAcc = userAccounts.find(a => String(a.id) === String(sourceAccountId));
     if (srcAcc) {
       const newSrcBal = toDecimal(srcAcc.balance).minus(rawAmt).toNumber();
       await supabase.from('accounts').update({ balance: newSrcBal }).eq('id', sourceAccountId);
@@ -1055,22 +1165,29 @@ financeRoutes.post('/split/distribute', async (c) => {
     const splitAmt = parseFloat(res.allocated_amount);
     if (splitAmt <= 0) continue;
 
-    if (res.target_type === 'ACCOUNT') {
-      let targetAcc = userAccounts.find(a => a.id === res.target_id);
+    if (res.target_type === 'ACCOUNT' || res.target_type === 'BILL') {
+      let targetAcc = userAccounts.find(a => String(a.id) === String(res.target_id));
+      if (!targetAcc && res.target_type === 'BILL' && res.target_id) {
+        const matchedBill = userBills.find(b => String(b.id) === String(res.target_id));
+        if (matchedBill && matchedBill.payment_account_id) {
+          targetAcc = userAccounts.find(a => String(a.id) === String(matchedBill.payment_account_id));
+        }
+      }
       if (!targetAcc) {
         // Smart match by bucket name or account type
         const bName = res.bucket_name.toLowerCase();
-        if (bName.includes('mmf') || bName.includes('ziidi') || bName.includes('yield')) {
+        if (bName.includes('mmf') || bName.includes('ziidi') || bName.includes('yield') || bName.includes('invest')) {
           targetAcc = userAccounts.find(a => a.account_type === 'MMF' || a.name.toLowerCase().includes('mmf'));
-        } else if (bName.includes('lock') || bName.includes('sacco') || bName.includes('save')) {
+        } else if (bName.includes('lock') || bName.includes('sacco') || bName.includes('save') || bName.includes('emergenc') || bName.includes('chama')) {
           targetAcc = userAccounts.find(a => a.account_type === 'SAVINGS' || a.name.toLowerCase().includes('sacco') || a.name.toLowerCase().includes('lock'));
-        } else if (bName.includes('bill') || bName.includes('utilit')) {
-          targetAcc = userAccounts.find(a => a.name.toLowerCase().includes('bill') || a.account_type === 'BANK');
+        } else if (bName.includes('bill') || bName.includes('utilit') || bName.includes('rent')) {
+          targetAcc = userAccounts.find(a => a.name.toLowerCase().includes('bill') || a.account_type === 'BANK' || a.account_type === 'MOBILE');
         }
       }
 
       if (targetAcc) {
         const newBal = toDecimal(targetAcc.balance).plus(splitAmt).toNumber();
+        targetAcc.balance = newBal;
         await supabase.from('accounts').update({ balance: newBal }).eq('id', targetAcc.id);
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
@@ -1083,12 +1200,18 @@ financeRoutes.post('/split/distribute', async (c) => {
         });
       }
     } else if (res.target_type === 'GOAL') {
+      // Check if target_id points to a specific goal
+      const specificGoal = res.target_id ? userGoals.find(g => String(g.id) === String(res.target_id)) : null;
+
       // 1. Find the linked Master Holding Vault account for goals
-      let vaultAcc = userAccounts.find(a => a.id === res.target_id);
+      let vaultAcc = userAccounts.find(a => String(a.id) === String(res.target_id));
+      if (!vaultAcc && specificGoal && specificGoal.account_id) {
+        vaultAcc = userAccounts.find(a => String(a.id) === String(specificGoal.account_id));
+      }
       if (!vaultAcc) {
         const goalWithAcc = userGoals.find(g => g.account_id);
         if (goalWithAcc) {
-          vaultAcc = userAccounts.find(a => a.id === goalWithAcc.account_id);
+          vaultAcc = userAccounts.find(a => String(a.id) === String(goalWithAcc.account_id));
         }
       }
       if (!vaultAcc) {
@@ -1101,9 +1224,10 @@ financeRoutes.post('/split/distribute', async (c) => {
         ) || userAccounts.find(a => a.account_type === 'MMF' || a.account_type === 'BANK');
       }
 
-      // 2. Deposit full split bucket amount into the single Master Holding Vault account
+      // 2. Deposit full split bucket amount into the Master Holding Vault account
       if (vaultAcc) {
         const newBal = toDecimal(vaultAcc.balance).plus(splitAmt).toNumber();
+        vaultAcc.balance = newBal;
         await supabase.from('accounts').update({ balance: newBal }).eq('id', vaultAcc.id);
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
@@ -1111,39 +1235,89 @@ financeRoutes.post('/split/distribute', async (c) => {
           transaction_type: 'TRANSFER',
           category: 'Waterfall Split',
           amount: splitAmt,
-          description: `Auto-Split Goal Vault Deposit: Ksh ${splitAmt.toLocaleString()} (${res.percentage}% into ${vaultAcc.name})`,
+          description: `Auto-Split Goal Vault Deposit: Ksh ${splitAmt.toLocaleString()} (${res.bucket_name} - ${res.percentage}% into ${vaultAcc.name})`,
           date: today,
         });
       }
 
-      // 3. Sub-allocate exact zero-cent portions across active goals based on sub-split %
-      if (userGoals.length > 0) {
+      // 3. Allocate to specific goal if chosen, otherwise sub-allocate across all active goals
+      if (specificGoal) {
+        const newGoalAmt = toDecimal(specificGoal.current_amount).plus(splitAmt).toNumber();
+        specificGoal.current_amount = newGoalAmt;
+        try {
+          await supabase.from('goals').update({ current_amount: newGoalAmt }).eq('id', specificGoal.id);
+        } catch (e) {}
+      } else if (userGoals.length > 0) {
         const subAllocations = allocateGoalSubSplits(splitAmt, userGoals);
         for (const sub of subAllocations) {
           if (sub.allocated_amount > 0) {
-            const currentGoal = userGoals.find(g => g.id === sub.goal_id);
+            const currentGoal = userGoals.find(g => String(g.id) === String(sub.goal_id));
             if (currentGoal) {
               const newGoalAmt = toDecimal(currentGoal.current_amount).plus(sub.allocated_amount).toNumber();
-              await supabase.from('goals').update({ current_amount: newGoalAmt }).eq('id', sub.goal_id);
+              currentGoal.current_amount = newGoalAmt;
+              try {
+                await supabase.from('goals').update({ current_amount: newGoalAmt }).eq('id', sub.goal_id);
+              } catch (e) {}
             }
           }
         }
       }
-    } else if (res.target_type === 'CASH') {
-      // Find cash or mobile wallet to record living cash transaction
-      const cashAcc = userAccounts.find(a => a.account_type === 'CASH' || a.account_type === 'MOBILE_MONEY');
-      if (cashAcc && !sourceAccountId) {
-        const newBal = toDecimal(cashAcc.balance).plus(splitAmt).toNumber();
-        await supabase.from('accounts').update({ balance: newBal }).eq('id', cashAcc.id);
+    } else if (res.target_type === 'DEBT') {
+      const targetDebt = (res.target_id && userDebts.find(d => String(d.id) === String(res.target_id))) ||
+        userDebts.find(d => d.debt_type === 'I_OWE' && d.status !== 'PAID');
+      if (targetDebt) {
+        const newPaid = toDecimal(targetDebt.paid_amount || 0).plus(splitAmt).toNumber();
+        const totalAmt = Number(targetDebt.total_amount || 0);
+        const newStatus = newPaid >= totalAmt && totalAmt > 0 ? 'PAID' : (targetDebt.status || 'ACTIVE');
+        try {
+          await supabase.from('debts').update({ paid_amount: newPaid, status: newStatus }).eq('id', targetDebt.id);
+        } catch (e) {}
+      }
+      const payAcc = (res.target_id && userAccounts.find(a => String(a.id) === String(res.target_id))) ||
+        userAccounts.find(a => a.account_type === 'MOBILE' || a.account_type === 'BANK' || a.account_type === 'CASH');
+      if (payAcc) {
         await supabase.from('transactions').insert({
           ...(userId ? { user_id: userId } : {}),
-          account_id: cashAcc.id,
-          transaction_type: 'INCOME',
-          category: 'Living Expenses',
+          account_id: payAcc.id,
+          transaction_type: 'EXPENSE',
+          category: 'Debt Repayment',
           amount: splitAmt,
-          description: `Daily Living Cash: ${res.bucket_name} (${res.percentage}%)`,
+          description: `Auto-Split Debt Allocation: ${res.bucket_name} (${res.percentage}%)`,
           date: today,
         });
+      }
+    } else {
+      // 'CASH' or 'CUSTOM' or any custom user-defined bucket type
+      const explicitAcc = res.target_id ? userAccounts.find(a => String(a.id) === String(res.target_id)) : null;
+      if (explicitAcc) {
+        const newBal = toDecimal(explicitAcc.balance).plus(splitAmt).toNumber();
+        explicitAcc.balance = newBal;
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', explicitAcc.id);
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: explicitAcc.id,
+          transaction_type: 'TRANSFER',
+          category: 'Waterfall Split',
+          amount: splitAmt,
+          description: `Auto-Split Allocation: ${res.bucket_name} (${res.percentage}%)`,
+          date: today,
+        });
+      } else {
+        const cashAcc = userAccounts.find(a => a.account_type === 'CASH' || a.account_type === 'MOBILE' || a.account_type === 'MOBILE_MONEY');
+        if (cashAcc && !sourceAccountId) {
+          const newBal = toDecimal(cashAcc.balance).plus(splitAmt).toNumber();
+          cashAcc.balance = newBal;
+          await supabase.from('accounts').update({ balance: newBal }).eq('id', cashAcc.id);
+          await supabase.from('transactions').insert({
+            ...(userId ? { user_id: userId } : {}),
+            account_id: cashAcc.id,
+            transaction_type: 'INCOME',
+            category: 'Living Expenses',
+            amount: splitAmt,
+            description: `Daily Allocation: ${res.bucket_name} (${res.percentage}%)`,
+            date: today,
+          });
+        }
       }
     }
   }
@@ -1152,52 +1326,137 @@ financeRoutes.post('/split/distribute', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// ALLOCATION RULES UPDATE (FULL BUCKET EDITING)
+// ALLOCATION RULES UPDATE (FULL BUCKET EDITING + DYNAMIC CUSTOM OPTIONS)
 // ------------------------------------------------------------------------------
 financeRoutes.post('/rules/update', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
 
-  const ruleIds = new Set<string>();
-  for (const key of Object.keys(body)) {
-    if (key.startsWith('percentage_')) {
-      ruleIds.add(key.replace('percentage_', ''));
+  const deletedIds = new Set<string>(
+    String(body['deleted_rule_ids'] || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+  );
+
+  const orderedIds: string[] = [];
+  const rawOrdered = String(body['ordered_rule_ids'] || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  for (const id of rawOrdered) {
+    if (!deletedIds.has(id) && !orderedIds.includes(id)) {
+      orderedIds.push(id);
     }
   }
 
-  let query = supabase.from('allocation_rules').select('*');
-  if (userId) query = query.eq('user_id', userId);
-  const { data: existingRules } = await query;
-  const existingMap = new Map((existingRules || []).map((r: any) => [r.id, r]));
+  for (const key of Object.keys(body)) {
+    if (key.startsWith('percentage_')) {
+      const id = key.replace('percentage_', '');
+      if (id && !deletedIds.has(id) && !orderedIds.includes(id)) {
+        orderedIds.push(id);
+      }
+    } else if (key.startsWith('bucket_name_')) {
+      const id = key.replace('bucket_name_', '');
+      if (id && !deletedIds.has(id) && !orderedIds.includes(id)) {
+        orderedIds.push(id);
+      }
+    }
+  }
 
-  for (const id of ruleIds) {
-    const pct = parseFloat(String(body[`percentage_${id}`])) || 0.0;
-    const bucketName = body[`bucket_name_${id}`] ? String(body[`bucket_name_${id}`]).trim() : undefined;
-    const icon = body[`icon_${id}`] ? String(body[`icon_${id}`]).trim() : undefined;
-    const targetType = body[`target_type_${id}`] ? String(body[`target_type_${id}`]).trim() : undefined;
+  const updatedRulesList: any[] = [];
+  for (const id of orderedIds) {
+    if (body[`bucket_name_${id}`] === undefined && body[`percentage_${id}`] === undefined) continue;
+    const pct = parseFloat(String(body[`percentage_${id}`] ?? '0')) || 0.0;
+    const bucketName = String(body[`bucket_name_${id}`] || 'Custom Option').trim() || 'Custom Option';
+    const icon = String(body[`icon_${id}`] || '💰').trim() || '💰';
+    const targetType = String(body[`target_type_${id}`] || 'CASH').trim() || 'CASH';
     const rawTargetId = body[`target_id_${id}`] ? String(body[`target_id_${id}`]).trim() : null;
     const targetId = rawTargetId && rawTargetId !== '' ? rawTargetId : null;
 
-    if (existingMap.has(id)) {
-      await supabase.from('allocation_rules').update({
-        percentage: pct,
-        ...(bucketName ? { bucket_name: bucketName } : {}),
-        ...(icon ? { icon } : {}),
-        ...(targetType ? { target_type: targetType } : {}),
-        target_id: targetId,
-        is_active: 1,
-      }).eq('id', id);
-    } else {
-      await supabase.from('allocation_rules').insert({
-        ...(userId ? { user_id: userId } : {}),
-        bucket_name: bucketName || 'Custom Bucket',
-        icon: icon || '💰',
-        percentage: pct,
-        target_type: targetType || 'CASH',
-        target_id: targetId,
-        is_active: 1,
-      });
+    updatedRulesList.push({
+      id: String(id),
+      bucket_name: bucketName,
+      icon,
+      percentage: pct,
+      target_type: targetType,
+      target_id: targetId,
+      is_active: 1,
+    });
+  }
+
+  // Also check if user typed a new option into the inline quick-add fields before hitting Save
+  const inlineNewName = String(body['new_bucket_name'] || '').trim();
+  if (inlineNewName) {
+    const inlinePct = parseFloat(String(body['new_percentage'] || '10')) || 10.0;
+    const inlineIcon = String(body['new_icon'] || '✨').trim() || '✨';
+    const inlineType = String(body['new_target_type'] || 'CASH').trim() || 'CASH';
+    const rawInlineTarget = body['new_target_id'] ? String(body['new_target_id']).trim() : null;
+    updatedRulesList.push({
+      id: `custom-${Date.now()}`,
+      bucket_name: inlineNewName,
+      icon: inlineIcon,
+      percentage: inlinePct,
+      target_type: inlineType,
+      target_id: rawInlineTarget && rawInlineTarget !== '' ? rawInlineTarget : null,
+      is_active: 1,
+    });
+  }
+
+  // Sync with Supabase DB (resilient to schema cache or non-UUID target_ids)
+  try {
+    let query = supabase.from('allocation_rules').select('*');
+    if (userId) query = query.eq('user_id', userId);
+    const { data: existingRules } = await query;
+    const existingMap = new Map((existingRules || []).map((r: any) => [String(r.id), r]));
+
+    const activeIdSet = new Set(updatedRulesList.map(r => String(r.id)));
+    for (const [existingId] of existingMap.entries()) {
+      if (!activeIdSet.has(existingId) || deletedIds.has(existingId)) {
+        try {
+          await supabase.from('allocation_rules').delete().eq('id', existingId);
+        } catch (e) {}
+      }
     }
+
+    for (let i = 0; i < updatedRulesList.length; i++) {
+      const r = updatedRulesList[i];
+      const dbTargetId = isValidUuid(r.target_id) ? r.target_id : null;
+      if (existingMap.has(String(r.id))) {
+        try {
+          await supabase.from('allocation_rules').update({
+            percentage: r.percentage,
+            bucket_name: r.bucket_name,
+            icon: r.icon,
+            target_type: r.target_type,
+            target_id: dbTargetId,
+            is_active: 1,
+          }).eq('id', r.id);
+        } catch (e) {}
+      } else {
+        try {
+          const { data: inserted } = await supabase.from('allocation_rules').insert({
+            ...(userId ? { user_id: userId } : {}),
+            bucket_name: r.bucket_name,
+            icon: r.icon,
+            percentage: r.percentage,
+            target_type: r.target_type,
+            target_id: dbTargetId,
+            is_active: 1,
+          }).select().single();
+          if (inserted && inserted.id) {
+            r.id = String(inserted.id);
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {
+    console.warn('Allocation rules DB sync notice:', e);
+  }
+
+  if (updatedRulesList.length > 0) {
+    saveAllocationRulesCookie(c, updatedRulesList);
   }
 
   return c.redirect('/?toast=Waterfall+split+rules+updated+successfully!', 303);
@@ -1211,21 +1470,49 @@ financeRoutes.post('/rules/create', async (c) => {
   const body = await c.req.parseBody();
 
   const bucketName = String(body['bucket_name'] || 'New Allocation Bucket').trim();
-  const icon = String(body['icon'] || '💰').trim();
+  const icon = String(body['icon'] || '💰').trim() || '💰';
   const percentage = parseFloat(String(body['percentage'] || '10')) || 10.0;
-  const targetType = String(body['target_type'] || 'CASH');
+  const targetType = String(body['target_type'] || 'CASH').trim() || 'CASH';
   const rawTargetId = body['target_id'] ? String(body['target_id']).trim() : null;
   const targetId = rawTargetId && rawTargetId !== '' ? rawTargetId : null;
 
-  await supabase.from('allocation_rules').insert({
-    ...(userId ? { user_id: userId } : {}),
+  let existingDbRules: any[] = [];
+  try {
+    let query = supabase.from('allocation_rules').select('*');
+    if (userId) query = query.eq('user_id', userId);
+    const { data } = await query;
+    existingDbRules = data || [];
+  } catch (e) {}
+
+  const currentRules = resolveEffectiveAllocationRules(c, existingDbRules);
+
+  let newRuleId = `custom-${Date.now()}`;
+  try {
+    const { data: inserted } = await supabase.from('allocation_rules').insert({
+      ...(userId ? { user_id: userId } : {}),
+      bucket_name: bucketName,
+      icon: icon,
+      percentage: percentage,
+      target_type: targetType,
+      target_id: isValidUuid(targetId) ? targetId : null,
+      is_active: 1,
+    }).select().single();
+    if (inserted && inserted.id) {
+      newRuleId = String(inserted.id);
+    }
+  } catch (e) {}
+
+  currentRules.push({
+    id: newRuleId,
     bucket_name: bucketName,
-    icon: icon,
-    percentage: percentage,
+    icon,
+    percentage,
     target_type: targetType,
     target_id: targetId,
     is_active: 1,
   });
+
+  saveAllocationRulesCookie(c, currentRules);
 
   return c.redirect('/?toast=New+allocation+bucket+added+successfully!', 303);
 });
@@ -1234,12 +1521,81 @@ financeRoutes.post('/rules/create', async (c) => {
 // ALLOCATION RULE DELETE (REMOVE BUCKET)
 // ------------------------------------------------------------------------------
 financeRoutes.post('/rules/delete/:id', async (c) => {
-  const { supabase } = await getRequestContext(c);
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
+
+  let existingDbRules: any[] = [];
+  try {
+    let query = supabase.from('allocation_rules').select('*');
+    if (userId) query = query.eq('user_id', userId);
+    const { data } = await query;
+    existingDbRules = data || [];
+  } catch (e) {}
+
+  const currentRules = resolveEffectiveAllocationRules(c, existingDbRules);
+  const remainingRules = currentRules.filter((r: any) => String(r.id) !== String(id));
+
   if (id) {
-    await supabase.from('allocation_rules').delete().eq('id', id);
+    try {
+      await supabase.from('allocation_rules').delete().eq('id', id);
+    } catch (e) {}
   }
+
+  if (remainingRules.length > 0) {
+    saveAllocationRulesCookie(c, remainingRules);
+  }
+
   return c.redirect('/?toast=Allocation+bucket+removed', 303);
+});
+
+// ------------------------------------------------------------------------------
+// ALLOCATION RULES RESET TO DEFAULT 5
+// ------------------------------------------------------------------------------
+financeRoutes.post('/rules/reset', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  try {
+    if (userId) {
+      await supabase.from('allocation_rules').delete().eq('user_id', userId);
+    } else {
+      await supabase.from('allocation_rules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+  } catch (e) {}
+
+  saveAllocationRulesCookie(c, DEFAULT_ALLOCATION_RULES);
+  return c.redirect('/?toast=Split+rules+reset+to+default+5+buckets!', 303);
+});
+
+financeRoutes.post('/rules/preset', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const presetKey = String(body['preset_key'] || 'PAY_YOURSELF_FLEET').trim();
+  const preset = SPLIT_RATIO_PRESETS[presetKey] || SPLIT_RATIO_PRESETS.PAY_YOURSELF_FLEET;
+  const targetRules = preset.rules.map(r => ({ ...r }));
+
+  try {
+    if (userId) {
+      await supabase.from('allocation_rules').delete().eq('user_id', userId);
+      const toInsert = targetRules.map(r => ({
+        user_id: userId,
+        bucket_name: r.bucket_name,
+        target_type: r.target_type,
+        target_id: null,
+        percentage: r.percentage,
+        icon: r.icon,
+        is_active: 1,
+      }));
+      const { data: inserted } = await supabase.from('allocation_rules').insert(toInsert).select();
+      if (inserted && inserted.length > 0) {
+        saveAllocationRulesCookie(c, inserted);
+        return c.redirect(`/?toast=${encodeURIComponent(`Applied ${preset.label}!`)}`, 303);
+      }
+    } else {
+      await supabase.from('allocation_rules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+  } catch (e) {}
+
+  saveAllocationRulesCookie(c, targetRules);
+  return c.redirect(`/?toast=${encodeURIComponent(`Applied ${preset.label}!`)}`, 303);
 });
 
 // ------------------------------------------------------------------------------
@@ -1275,6 +1631,10 @@ financeRoutes.post('/system/reset-data', async (c) => {
     await supabase.from('bikes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('accounts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   }
+
+  try {
+    setCookie(c, 'finatrack_allocation_rules', '', { path: '/', maxAge: 0 });
+  } catch (e) {}
 
   return c.redirect('/?toast=All+data+cleared!+Ready+for+real+data.', 303);
 });

@@ -3,6 +3,7 @@ export function renderRiderDashboard(data: any): string {
     active_bike = null,
     bikes = [],
     rider_logs = [],
+    odometer_config = null,
     time_intelligence = {},
     maintenance_schedules = [],
     compliance_deadlines = [],
@@ -37,10 +38,30 @@ export function renderRiderDashboard(data: any): string {
   const lastShiftTotalExp = lastShift ? (Number(lastShift.fuel_cost || 0) + Number(lastShift.food_spent || 0) + Number(lastShift.airtime_spent || 0) + Number(lastShift.misc_expenses || 0) + Number(lastShift.maintenance_cost || 0)) : 0;
   const lastShiftNet = lastShift ? (Number(lastShift.total_earned || 0) - lastShiftTotalExp) : 0;
 
-  // CPK (Cost Per Kilometer) across all shifts
-  const totalKmCovered = (rider_logs || []).reduce((acc: number, l: any) => acc + Number(l.kilometers || 0), 0);
+  // CPK (Cost Per Kilometer) & Odometer synchronization across all shifts
+  const totalKmCovered = Number(((rider_logs || []).reduce((acc: number, l: any) => acc + Number(l.kilometers || 0), 0)).toFixed(1));
   const totalFuelExp = (rider_logs || []).reduce((acc: number, l: any) => acc + Number(l.fuel_cost || 0), 0);
-  const overallCpk = totalKmCovered > 0 ? (totalFuelExp / totalKmCovered).toFixed(2) : (activePowerType === 'ELECTRIC' ? '1.80' : '4.50');
+  const totalShiftMaintExp = (rider_logs || []).reduce((acc: number, l: any) => acc + Number(l.maintenance_cost || 0), 0);
+  const totalScheduleMaintExp = (maintenance_schedules || []).reduce((acc: number, m: any) => acc + Number(m.cost_kes || 0), 0);
+  const totalMaintExp = totalShiftMaintExp + totalScheduleMaintExp;
+  const shiftsWithKmCount = (rider_logs || []).filter((l: any) => Number(l.kilometers || 0) > 0).length;
+
+  const lastServiceOdo = Number(odometer_config?.last_service_odo ?? 10000);
+  const baseOdometer = Number(odometer_config?.base_odometer ?? (totalKmCovered > 0 ? lastServiceOdo : 12450));
+  const currentOdometer = Number(odometer_config?.current_odometer ?? Number((baseOdometer + totalKmCovered).toFixed(1)));
+  const serviceIntervalKm = Number(odometer_config?.service_interval_km ?? 3000);
+  const nextServiceOdo = Number((lastServiceOdo + serviceIntervalKm).toFixed(1));
+  const remainingServiceKm = Number((nextServiceOdo - currentOdometer).toFixed(1));
+  const kmSinceLastService = Math.max(0, Number((currentOdometer - lastServiceOdo).toFixed(1)));
+
+  const effectiveCpkDistance = totalKmCovered > 0 ? totalKmCovered : kmSinceLastService;
+  const defaultCpkFallback = activePowerType === 'ELECTRIC' ? '1.80' : '4.50';
+  const overallCpk = effectiveCpkDistance > 0 && totalFuelExp > 0
+    ? (totalFuelExp / effectiveCpkDistance).toFixed(2)
+    : (totalKmCovered > 0 ? (totalFuelExp / totalKmCovered).toFixed(2) : defaultCpkFallback);
+  const allInCpk = effectiveCpkDistance > 0 && (totalFuelExp + totalMaintExp) > 0
+    ? ((totalFuelExp + totalMaintExp) / effectiveCpkDistance).toFixed(2)
+    : overallCpk;
 
   // Remittance & Kodi calculations for today
   const todayShifts = (rider_logs || []).filter((l: any) => l.date === today);
@@ -48,6 +69,11 @@ export function renderRiderDashboard(data: any): string {
     const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
     return acc + (Number(l.total_earned || 0) - exp);
   }, 0);
+  const latestShiftLog = (rider_logs || [])[0];
+  const latestShiftNet = latestShiftLog
+    ? Math.max(0, Number(latestShiftLog.total_earned || 0) - (Number(latestShiftLog.fuel_cost || 0) + Number(latestShiftLog.food_spent || 0) + Number(latestShiftLog.airtime_spent || 0) + Number(latestShiftLog.misc_expenses || 0) + Number(latestShiftLog.maintenance_cost || 0)))
+    : 0;
+  const closeoutSplitAmount = todayNetEarned > 0 ? todayNetEarned : (latestShiftNet > 0 ? latestShiftNet : 2000);
   const dailyTarget = Number(active_bike?.daily_target || 2500);
   const dailyTargetMetPct = Math.min(100, Math.round((todayNetEarned / (dailyTarget || 1)) * 100));
 
@@ -563,9 +589,15 @@ export function renderRiderDashboard(data: any): string {
             }
         }
 
+        const SHIFT_TOTAL_KM = ${totalKmCovered};
+        const SHIFT_TOTAL_FUEL = ${totalFuelExp};
+        const SHIFT_TOTAL_MAINT = ${totalMaintExp};
+        let BASE_ODOMETER = ${baseOdometer};
+
         window.addEventListener('DOMContentLoaded', () => {
             recalcStintsSummary();
             applyShiftDisplay();
+            calcOdometerServiceStatus(false);
         });
 
         function calcSimStintYield() {
@@ -624,15 +656,72 @@ export function renderRiderDashboard(data: any): string {
             window.open(waUrl, '_blank');
         }
 
-        function calcOdometerServiceStatus() {
-            const cur = parseFloat(document.getElementById('current_odometer_input')?.value) || 0;
+        function syncOdoFromLastService() {
+            const lastEl = document.getElementById('last_service_odo_input');
+            const curEl = document.getElementById('current_odometer_input');
+            const liveKm = parseFloat(document.getElementById('shift_km_input')?.value) || 0;
+            const last = parseFloat(lastEl?.value) || 0;
+            const syncedCur = Number((last + SHIFT_TOTAL_KM + liveKm).toFixed(1));
+            BASE_ODOMETER = last;
+            if (curEl) curEl.value = String(syncedCur);
+            calcOdometerServiceStatus(true);
+        }
+
+        function onShiftKmOrFuelInput() {
+            const liveKm = Math.max(0, parseFloat(document.getElementById('shift_km_input')?.value) || 0);
+            const liveFuel = Math.max(0, parseFloat(document.getElementById('shift_fuel_cost_input')?.value) || 0);
+            const curEl = document.getElementById('current_odometer_input');
             const last = parseFloat(document.getElementById('last_service_odo_input')?.value) || 0;
             const interval = parseFloat(document.getElementById('service_interval_km_select')?.value) || 3000;
-            const nextOdo = last + interval;
-            const remaining = nextOdo - cur;
+            const projectedOdo = Number((BASE_ODOMETER + SHIFT_TOTAL_KM + liveKm).toFixed(1));
+
+            if (curEl && (liveKm > 0 || document.activeElement?.id === 'shift_km_input')) {
+                curEl.value = String(projectedOdo);
+            }
+
+            const previewEl = document.getElementById('shift-live-cpk-odo-preview');
+            if (previewEl) {
+                if (liveKm > 0 || liveFuel > 0) {
+                    previewEl.classList.remove('hidden');
+                    const shiftCpk = liveKm > 0 ? (liveFuel / liveKm).toFixed(2) : '0.00';
+                    const nextDue = last + interval;
+                    const rem = Number((nextDue - projectedOdo).toFixed(1));
+                    previewEl.innerText = '⚡ Shift CPK: Ksh ' + shiftCpk + '/km • New Odo: ' + projectedOdo.toLocaleString() + ' km (' + (rem > 0 ? rem.toLocaleString() + ' km to service' : 'Service Due!') + ')';
+                } else {
+                    previewEl.classList.add('hidden');
+                }
+            }
+
+            calcOdometerServiceStatus(false);
+        }
+
+        function calcOdometerServiceStatus(fromUserEdit) {
+            const curInput = document.getElementById('current_odometer_input');
+            const lastInput = document.getElementById('last_service_odo_input');
+            const intervalSelect = document.getElementById('service_interval_km_select');
+            const cur = parseFloat(curInput?.value) || 0;
+            const last = parseFloat(lastInput?.value) || 0;
+            const interval = parseFloat(intervalSelect?.value) || 3000;
+            const liveKm = Math.max(0, parseFloat(document.getElementById('shift_km_input')?.value) || 0);
+            const liveFuel = Math.max(0, parseFloat(document.getElementById('shift_fuel_cost_input')?.value) || 0);
+
+            if (fromUserEdit) {
+                BASE_ODOMETER = Math.max(0, Number((cur - SHIFT_TOTAL_KM - liveKm).toFixed(1)));
+            }
+
+            const nextOdo = Number((last + interval).toFixed(1));
+            const remaining = Number((nextOdo - cur).toFixed(1));
+            const drivenSinceService = Math.max(0, Number((cur - last).toFixed(1)));
+
             const nextEl = document.getElementById('next_service_odo_display');
             const badgeEl = document.getElementById('odo_service_badge');
+            const drivenEl = document.getElementById('km_since_service_display');
+            const svcOdoInput = document.getElementById('service_odometer_form_input');
+
             if (nextEl) nextEl.innerText = nextOdo.toLocaleString() + ' km';
+            if (drivenEl) drivenEl.innerText = drivenSinceService.toLocaleString() + ' km';
+            if (svcOdoInput && !svcOdoInput.dataset.touched) svcOdoInput.value = String(cur);
+
             if (badgeEl) {
                 if (remaining <= 0) {
                     badgeEl.className = 'px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 animate-pulse';
@@ -642,13 +731,46 @@ export function renderRiderDashboard(data: any): string {
                     badgeEl.innerText = '⚠️ Service Soon (' + remaining.toLocaleString() + ' km left)';
                 } else {
                     badgeEl.className = 'px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300';
-                    badgeEl.innerText = '✅ Good (' + remaining.toLocaleString() + ' km left)';
+                    badgeEl.innerText = '✅ In Good Standing (' + remaining.toLocaleString() + ' km left)';
                 }
             }
+
+            // Calculate Real CPK from shift logs (plus live shift inputs) or odometer delta fallback
+            const totalKmWithLive = Number((SHIFT_TOTAL_KM + liveKm).toFixed(1));
+            const totalFuelWithLive = SHIFT_TOTAL_FUEL + liveFuel;
+            const cpkDist = totalKmWithLive > 0 ? totalKmWithLive : drivenSinceService;
+            const defaultCpk = currentPowerType === 'ELECTRIC' ? 1.80 : 4.50;
+            const realFuelCpk = (cpkDist > 0 && totalFuelWithLive > 0)
+                ? (totalFuelWithLive / cpkDist).toFixed(2)
+                : (totalKmWithLive > 0 ? (totalFuelWithLive / totalKmWithLive).toFixed(2) : defaultCpk.toFixed(2));
+            const realAllInCpk = (cpkDist > 0 && (totalFuelWithLive + SHIFT_TOTAL_MAINT) > 0)
+                ? ((totalFuelWithLive + SHIFT_TOTAL_MAINT) / cpkDist).toFixed(2)
+                : realFuelCpk;
+
+            const cpkEl = document.getElementById('real_cpk_display');
+            if (cpkEl) {
+                cpkEl.innerHTML = 'Ksh ' + realFuelCpk + ' <span class="text-[10px] text-gray-400 font-normal">/ km</span>';
+            }
+            const cpkAllInEl = document.getElementById('real_all_in_cpk_display');
+            if (cpkAllInEl) {
+                cpkAllInEl.innerText = 'All-in (Fuel+Maint): Ksh ' + realAllInCpk + '/km';
+            }
+            const shiftKmBadgeEl = document.getElementById('odo_shift_km_total_badge');
+            if (shiftKmBadgeEl) {
+                shiftKmBadgeEl.innerText = totalKmWithLive.toLocaleString() + ' km logged in shifts';
+            }
+
             try {
-                localStorage.setItem('finatrack_current_odo', cur);
-                localStorage.setItem('finatrack_last_service_odo', last);
-                localStorage.setItem('finatrack_interval_km', interval);
+                localStorage.setItem('finatrack_current_odo', String(cur));
+                localStorage.setItem('finatrack_last_service_odo', String(last));
+                localStorage.setItem('finatrack_interval_km', String(interval));
+                const cfgObj = {
+                    base_odometer: BASE_ODOMETER,
+                    last_service_odo: last,
+                    service_interval_km: interval,
+                    updated_at: new Date().toISOString()
+                };
+                document.cookie = "finatrack_odometer_config=" + encodeURIComponent(JSON.stringify(cfgObj)) + ";path=/;max-age=31536000;SameSite=Lax";
             } catch(e) {}
         }
 
@@ -688,43 +810,121 @@ export function renderRiderDashboard(data: any): string {
             if (drawer) drawer.classList.toggle('hidden');
         }
 
+        function computeDefaultExpiryDate(monthsAhead) {
+            const d = new Date();
+            d.setMonth(d.getMonth() + (parseInt(monthsAhead, 10) || 12));
+            return d.toISOString().slice(0, 10);
+        }
+
+        function onDocIntervalChanged(monthsVal) {
+            const expiryInput = document.getElementById('new-doc-expiry-input');
+            if (expiryInput) {
+                expiryInput.value = computeDefaultExpiryDate(monthsVal);
+            }
+        }
+
         function onDocTypePresetChanged(typeVal) {
             const titleInput = document.getElementById('new-doc-title-input');
             const intervalSelect = document.getElementById('new-doc-interval-select');
+            const expiryInput = document.getElementById('new-doc-expiry-input');
+            const notesInput = document.getElementById('new-doc-notes-input');
+            const selectEl = document.getElementById('new-doc-category-select');
+            if (selectEl && selectEl.value !== typeVal) {
+                selectEl.value = typeVal;
+            }
             if (!titleInput) return;
-            if (typeVal === 'UBER_INSPECT') {
-                titleInput.value = 'Uber / Bolt Vehicle Inspection';
-                if (intervalSelect) intervalSelect.value = '12';
-            } else if (typeVal === 'INSURANCE_PSV') {
-                titleInput.value = 'Commercial PSV / Ride-Hail Insurance';
-                if (intervalSelect) intervalSelect.value = '12';
-            } else if (typeVal === 'SPEED_GOVERNOR') {
-                titleInput.value = 'NTSA Speed Governor & Limiter Certificate';
-                if (intervalSelect) intervalSelect.value = '12';
+
+            let months = '12';
+            let placeholderNotes = 'e.g. Reference / Policy number, issuing authority, or renewal notes...';
+
+            if (typeVal === 'GOOD_CONDUCT') {
+                titleInput.value = 'Certificate of Good Conduct (DCI Police Clearance)';
+                months = '12';
+                placeholderNotes = 'e.g. eCitizen Ref #PCC-..., DCI / Huduma Centre (Required by Uber, Bolt & SACCOs)';
+            } else if (typeVal === 'DL') {
+                titleInput.value = 'NTSA Driving License (Smart DL)';
+                months = '36';
+                placeholderNotes = 'e.g. DL #..., Class A2 / B / C endorsement';
             } else if (typeVal === 'PSV_BADGE') {
                 titleInput.value = 'NTSA PSV Driver Badge';
-                if (intervalSelect) intervalSelect.value = '12';
+                months = '12';
+                placeholderNotes = 'e.g. NTSA TIMS Badge #..., Ride-Hailing / PSV Endorsement';
+            } else if (typeVal === 'FOOD_HANDLER') {
+                titleInput.value = 'County Food Handler Medical Certificate';
+                months = '6';
+                placeholderNotes = 'e.g. Nairobi County Health Cert #... (Bolt Food / Glovo / Uber Eats)';
+            } else if (typeVal === 'KRA_TCC') {
+                titleInput.value = 'KRA Tax Compliance Certificate (TCC)';
+                months = '12';
+                placeholderNotes = 'e.g. KRA PIN A0..., iTax TCC Serial #...';
+            } else if (typeVal === 'HEALTH_COVER') {
+                titleInput.value = 'SHA / NHIF & Rider Personal Accident Cover';
+                months = '12';
+                placeholderNotes = 'e.g. SHA / NHIF Member #..., Personal Accident Policy';
+            } else if (typeVal === 'SACCO_ID') {
+                titleInput.value = 'SACCO / Stage Membership Permit';
+                months = '12';
+                placeholderNotes = 'e.g. SACCO Member #..., Stage / Welfare Sticker';
+            } else if (typeVal === 'NATIONAL_ID') {
+                titleInput.value = 'National ID / Passport';
+                months = '60';
+                placeholderNotes = 'e.g. ID / Passport #...';
+            } else if (typeVal === 'UBER_INSPECT') {
+                titleInput.value = 'Uber / Bolt Vehicle Inspection Report';
+                months = '12';
+                placeholderNotes = 'e.g. Partner Inspection Centre, Sticker / Pass Ref #...';
+            } else if (typeVal === 'INSURANCE_PSV') {
+                titleInput.value = 'Commercial PSV / Ride-Hail Insurance';
+                months = '12';
+                placeholderNotes = 'e.g. Policy #POL-..., Directline / Heritage / Britam';
+            } else if (typeVal === 'SPEED_GOVERNOR') {
+                titleInput.value = 'NTSA Speed Governor & Limiter Certificate';
+                months = '12';
+                placeholderNotes = 'e.g. Governor Serial #..., Vendor & Sim Expiry';
             } else if (typeVal === 'INSPECTION') {
                 titleInput.value = 'NTSA Motor Vehicle Inspection Certificate';
-                if (intervalSelect) intervalSelect.value = '12';
+                months = '12';
+                placeholderNotes = 'e.g. NTSA Booking Ref #..., Likoni Rd / Industrial Area';
             } else if (typeVal === 'INSURANCE_COMP') {
-                titleInput.value = 'Comprehensive Vehicle Insurance';
-                if (intervalSelect) intervalSelect.value = '12';
+                titleInput.value = 'Comprehensive Vehicle / Motorbike Insurance';
+                months = '12';
+                placeholderNotes = 'e.g. Policy #..., Underwriter & Agent Contact';
             } else if (typeVal === 'INSURANCE_TP') {
-                titleInput.value = 'Third-Party Vehicle Insurance';
-                if (intervalSelect) intervalSelect.value = '12';
-            } else if (typeVal === 'DL') {
-                titleInput.value = 'NTSA Driving License (DL)';
-                if (intervalSelect) intervalSelect.value = '36';
+                titleInput.value = 'Third-Party Vehicle / Motorbike Insurance';
+                months = '12';
+                placeholderNotes = 'e.g. Policy #..., Monthly or Annual Third-Party Cover';
             } else if (typeVal === 'PSV') {
-                titleInput.value = 'County PSV Permit / Sticker';
-                if (intervalSelect) intervalSelect.value = '12';
+                titleInput.value = 'County PSV Sticker / Parking Permit';
+                months = '12';
+                placeholderNotes = 'e.g. County Receipt #..., Zone / Stage Permit';
             } else if (typeVal === 'LOGBOOK') {
-                titleInput.value = 'Vehicle Logbook';
-                if (intervalSelect) intervalSelect.value = '36';
+                titleInput.value = 'Vehicle Logbook / Asset Registration';
+                months = '36';
+                placeholderNotes = 'e.g. Logbook #..., NTSA TIMS Registered Owner';
             } else if (typeVal === 'CUSTOM') {
                 titleInput.value = '';
+                months = '12';
+                placeholderNotes = 'Enter any reference number, issuer, or notes for your custom document...';
                 titleInput.focus();
+            }
+
+            if (intervalSelect) intervalSelect.value = months;
+            if (expiryInput && !expiryInput.value) {
+                expiryInput.value = computeDefaultExpiryDate(months);
+            } else if (expiryInput) {
+                expiryInput.value = computeDefaultExpiryDate(months);
+            }
+            if (notesInput) notesInput.placeholder = placeholderNotes;
+        }
+
+        function selectDocPresetQuick(presetKey) {
+            const container = document.getElementById('new-comp-form-container');
+            if (container) {
+                container.classList.remove('hidden');
+            }
+            onDocTypePresetChanged(presetKey);
+            if (container) {
+                container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
 
@@ -1538,7 +1738,7 @@ export function renderRiderDashboard(data: any): string {
                     <label id="energy-cost-label" class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
                         ${activePowerType === 'ELECTRIC' ? '🔋 Battery Swap Cost (<span class="curr-symbol-label">Ksh</span>)' : '⛽ Fuel & Petrol Cost (<span class="curr-symbol-label">Ksh</span>)'}
                     </label>
-                    <input type="number" step="any" inputmode="decimal" name="fuel_cost" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                    <input type="number" step="any" inputmode="decimal" id="shift_fuel_cost_input" name="fuel_cost" oninput="onShiftKmOrFuelInput()" placeholder="0.00" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
                 </div>
 
                 <!-- Dynamic Metric (Litres vs Swaps Count) -->
@@ -1573,8 +1773,12 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🚗 / 🛵 Kilometers Covered (KM)</label>
-                    <input type="number" step="any" inputmode="decimal" name="kilometers" placeholder="e.g. 85.5 km" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm">
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 flex items-center justify-between">
+                        <span>🚗 / 🛵 Kilometers Covered (KM)</span>
+                        <span class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Syncs Odo & CPK</span>
+                    </label>
+                    <input type="number" step="any" inputmode="decimal" id="shift_km_input" name="kilometers" oninput="onShiftKmOrFuelInput()" placeholder="e.g. 85.5 km" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold text-indigo-600 dark:text-indigo-300">
+                    <p id="shift-live-cpk-odo-preview" class="hidden mt-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400"></p>
                 </div>
 
                 <div>
@@ -1654,7 +1858,7 @@ export function renderRiderDashboard(data: any): string {
                         </div>
                         <div>
                             <label class="block font-bold text-gray-300 mb-1">Notes / Terms</label>
-                            <input type="text" name="notes" placeholder="e.g. Due every evening by 9pm via M-Pesa" value="Daily kodi due by 9pm to vehicle owner" class="w-full p-2 bg-slate-900 border border-indigo-800 rounded-xl font-medium text-white">
+                            <input type="text" name="notes" placeholder="e.g. Due every night by 23:50 via M-Pesa" value="Daily kodi due by 23:50 to vehicle owner" class="w-full p-2 bg-slate-900 border border-indigo-800 rounded-xl font-medium text-white">
                         </div>
                     </div>
                     <div class="flex justify-end gap-2 pt-1">
@@ -1690,6 +1894,12 @@ export function renderRiderDashboard(data: any): string {
                     <p class="text-[11px] text-gray-400">
                         ${todayNetEarned >= dailyTarget ? '🎉 You have covered your daily owner lease and generated profit!' : `Ksh ${(Math.max(0, dailyTarget - todayNetEarned)).toLocaleString(undefined, {minimumFractionDigits: 2})} remaining to clear owner remittance.`}
                     </p>
+                    <div class="pt-2 border-t border-indigo-900/50 flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-[10px] font-bold text-amber-300">👑 23:50 Shift Closeout: Don't sleep with unsplit cash in M-Pesa</span>
+                        <a href="/?pay_yourself_amount=${closeoutSplitAmount.toFixed(2)}#waterfall-card" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-400 hover:to-emerald-500 text-slate-950 font-black rounded-xl text-[11px] transition shadow-sm active:scale-95">
+                            🌊 Pay Yourself First (Split Ksh ${closeoutSplitAmount.toLocaleString()}) →
+                        </a>
+                    </div>
                 </div>
 
                 <!-- Hire-Purchase / Financing Cards List -->
@@ -1758,46 +1968,73 @@ export function renderRiderDashboard(data: any): string {
                 </div>
             </div>
 
-            <!-- 🚗 Odometer, CPK & Service Interval Tracker Box -->
-            <div class="p-4 bg-slate-900 text-white rounded-2xl border border-indigo-900/60 space-y-3">
+            <!-- 🚗 Odometer, CPK & Service Interval Tracker Box (Synced with Daily Shift Logger) -->
+            <form action="/rider/odometer/update" method="POST" class="p-4 bg-slate-900 text-white rounded-2xl border border-indigo-900/60 space-y-3">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div class="flex items-center space-x-2">
                         <span class="text-xl">🚗</span>
                         <div>
-                            <h3 class="font-bold text-sm text-indigo-200">Odometer, Service Countdown & Real CPK</h3>
-                            <p class="text-[11px] text-gray-400">Track oil change intervals and cost per kilometer for cars & bikes</p>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h3 class="font-bold text-sm text-indigo-200">Odometer, Service Countdown & Real CPK</h3>
+                                <span id="odo_shift_km_total_badge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                                    +${totalKmCovered.toLocaleString()} km logged in ${shiftsWithKmCount} shift${shiftsWithKmCount === 1 ? '' : 's'}
+                                </span>
+                            </div>
+                            <p class="text-[11px] text-gray-400">Auto-increments from Daily Shift <strong class="text-indigo-300">Kilometers Covered (KM)</strong> & calculates real fuel + maintenance CPK</p>
                         </div>
                     </div>
-                    <span id="odo_service_badge" class="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300">
-                        ✅ In Good Standing
-                    </span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span id="odo_service_badge" class="px-2.5 py-1 rounded-full text-xs font-black ${remainingServiceKm <= 0 ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 animate-pulse' : remainingServiceKm <= 500 ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300'}">
+                            ${remainingServiceKm <= 0 ? `🚨 Overdue by ${Math.abs(remainingServiceKm).toLocaleString()} km!` : remainingServiceKm <= 500 ? `⚠️ Service Soon (${remainingServiceKm.toLocaleString()} km left)` : `✅ In Good Standing (${remainingServiceKm.toLocaleString()} km left)`}
+                        </span>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
-                        <label class="block text-[10px] text-gray-400 mb-0.5">Current Odometer (km)</label>
-                        <input type="number" id="current_odometer_input" value="12450" oninput="calcOdometerServiceStatus()" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-emerald-400 text-sm">
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950 space-y-1">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-[10px] text-gray-400">Current Odometer (km)</label>
+                            <span class="text-[9px] text-emerald-400 font-bold">Base ${baseOdometer.toLocaleString()} + ${totalKmCovered.toLocaleString()} km</span>
+                        </div>
+                        <input type="number" step="any" name="current_odometer" id="current_odometer_input" value="${currentOdometer}" oninput="calcOdometerServiceStatus(true)" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-emerald-400 text-sm">
+                        <p class="text-[9px] text-gray-400">Driven since service: <strong id="km_since_service_display" class="text-emerald-300">${kmSinceLastService.toLocaleString()} km</strong></p>
                     </div>
-                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
-                        <label class="block text-[10px] text-gray-400 mb-0.5">Last Service Odometer (km)</label>
-                        <input type="number" id="last_service_odo_input" value="10000" oninput="calcOdometerServiceStatus()" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-white text-sm">
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950 space-y-1">
+                        <label class="block text-[10px] text-gray-400">Last Service Odometer (km)</label>
+                        <input type="number" step="any" name="last_service_odo" id="last_service_odo_input" value="${lastServiceOdo}" oninput="calcOdometerServiceStatus(false)" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-white text-sm">
+                        <button type="button" onclick="syncOdoFromLastService()" class="text-[9px] text-indigo-300 hover:text-indigo-200 underline font-semibold text-left">
+                            🔄 Set Current = Last Service + Shift KM
+                        </button>
                     </div>
-                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
-                        <label class="block text-[10px] text-gray-400 mb-0.5">Service Interval</label>
-                        <select id="service_interval_km_select" onchange="calcOdometerServiceStatus()" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-bold text-white text-xs">
-                            <option value="2500">2,500 km (Boda / Heavy Delivery)</option>
-                            <option value="3000" selected>3,000 km (Motorbike Standard)</option>
-                            <option value="5000">5,000 km (Uber / Bolt Petrol Car)</option>
-                            <option value="10000">10,000 km (Synthetic Oil / Major Service)</option>
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950 space-y-1">
+                        <label class="block text-[10px] text-gray-400">Service Interval</label>
+                        <select name="service_interval_km" id="service_interval_km_select" onchange="calcOdometerServiceStatus(false)" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-bold text-white text-xs">
+                            <option value="2000" ${serviceIntervalKm === 2000 ? 'selected' : ''}>2,000 km (Heavy Boda / Boxer)</option>
+                            <option value="2500" ${serviceIntervalKm === 2500 ? 'selected' : ''}>2,500 km (Boda / Heavy Delivery)</option>
+                            <option value="3000" ${serviceIntervalKm === 3000 ? 'selected' : ''}>3,000 km (Motorbike Standard)</option>
+                            <option value="5000" ${serviceIntervalKm === 5000 ? 'selected' : ''}>5,000 km (Uber / Bolt Petrol Car)</option>
+                            <option value="10000" ${serviceIntervalKm === 10000 ? 'selected' : ''}>10,000 km (Synthetic Oil / Major Service)</option>
                         </select>
+                        <p class="text-[9px] text-gray-400">Next due at: <strong id="next_service_odo_display" class="text-indigo-200">${nextServiceOdo.toLocaleString()} km</strong></p>
                     </div>
-                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950">
-                        <p class="text-[10px] text-indigo-300 font-bold uppercase">⛽ Real CPK</p>
-                        <p class="text-base font-black text-cyan-400 mt-1">Ksh ${overallCpk} <span class="text-[10px] text-gray-400 font-normal">/ km</span></p>
-                        <p class="text-[9px] text-gray-400">Next due at: <strong id="next_service_odo_display" class="text-indigo-200">13,000 km</strong></p>
+                    <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <p class="text-[10px] text-indigo-300 font-bold uppercase">⛽ Real CPK</p>
+                                <span class="text-[9px] text-cyan-300 font-semibold">${totalKmCovered > 0 ? `${totalKmCovered.toLocaleString()} km shifts` : 'Shift-synced'}</span>
+                            </div>
+                            <p id="real_cpk_display" class="text-base font-black text-cyan-400 mt-0.5">Ksh ${overallCpk} <span class="text-[10px] text-gray-400 font-normal">/ km</span></p>
+                            <p id="real_all_in_cpk_display" class="text-[9px] text-gray-400">All-in (Fuel+Maint): Ksh ${allInCpk}/km</p>
+                        </div>
+                        <div class="pt-1.5 flex items-center justify-between gap-1.5">
+                            <span class="text-[9px] text-gray-400">Fuel: Ksh ${totalFuelExp.toLocaleString()}</span>
+                            <button type="submit" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold rounded-lg text-[10px] transition shadow-xs">
+                                💾 Save Odometer
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </form>
 
             <!-- ➕ Log Service & Repair Collapsible Form -->
             <div id="maint-log-form-container" class="hidden bg-indigo-50/40 dark:bg-indigo-950/30 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-md space-y-4">
@@ -1809,7 +2046,7 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <form action="/rider/maintenance/log" method="POST" class="space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                         <div>
                             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Date</label>
                             <input type="date" name="service_date" value="${today}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-semibold" required>
@@ -1819,6 +2056,10 @@ export function renderRiderDashboard(data: any): string {
                             <select name="bike_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400">
                                 ${bikes.length > 0 ? bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'})</option>`).join('') : '<option value="">-- No Vehicle Selected --</option>'}
                             </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Odometer at Service (km)</label>
+                            <input type="number" step="any" id="service_odometer_form_input" name="service_odometer" value="${currentOdometer}" oninput="this.dataset.touched='1'" placeholder="e.g. 12450" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-black text-emerald-600 dark:text-emerald-400">
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Summary Title</label>
@@ -1945,78 +2186,148 @@ export function renderRiderDashboard(data: any): string {
             </div>
         </div>
 
-        <!-- 📜 Statutory Documents & Vehicle Permits Card -->
-        <div id="compliance-card" class="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent dark:from-amber-950/30 rounded-3xl p-6 shadow-sm border border-amber-200 dark:border-amber-900/50 space-y-5">
+        <!-- 📜 Driver, Personal & Vehicle Compliance Documents Card -->
+        <div id="compliance-card" class="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent dark:from-amber-950/30 rounded-3xl p-6 shadow-sm border border-amber-200 dark:border-amber-900/50 space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-amber-100 dark:border-amber-900/40 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-xl shadow-xs">
                         📜
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span>Statutory Documents & Vehicle Permits</span>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                            <span>Driver, Personal &amp; Vehicle Documents</span>
                             <span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">${compliance_deadlines.length} Documents Registered</span>
                         </h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Keep your boda road-legal with automated countdowns for Insurance, Driving License (DL), County PSV permits, and NTSA Inspections.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Track Certificate of Good Conduct (DCI), Driving License (DL), PSV Badge, Food Handler Cert, KRA TCC, Insurance, Inspections, or any custom document.</p>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="selectDocPresetQuick('GOOD_CONDUCT')" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95">
+                        <span>👮 + Good Conduct</span>
+                    </button>
+                    <button type="button" onclick="selectDocPresetQuick('CUSTOM')" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95">
+                        <span>✨ + Custom Doc</span>
+                    </button>
                     <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5">
                         <span>➕ Add Document</span>
                     </button>
                 </div>
             </div>
 
-            <!-- ➕ Add New Statutory Document Form -->
+            <!-- ⚡ 1-Tap Quick-Add Document Chips -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300 shrink-0 mr-1">⚡ Quick Add:</span>
+                <button type="button" onclick="selectDocPresetQuick('GOOD_CONDUCT')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-800 dark:text-gray-200 shrink-0 transition active:scale-95">
+                    👮 Good Conduct (DCI)
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('DL')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🪪 Driving License (DL)
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('PSV_BADGE')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🪪 PSV Driver Badge
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('INSURANCE_PSV')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🛡️ Vehicle / PSV Insurance
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('UBER_INSPECT')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🚗 Uber / Bolt Inspection
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('FOOD_HANDLER')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🏥 Food Handler Cert
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('KRA_TCC')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🏛️ KRA Tax Compliance
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('HEALTH_COVER')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🏥 SHA / NHIF Cover
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('SACCO_ID')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-amber-200 dark:border-gray-700 rounded-xl text-[11px] font-semibold text-gray-700 dark:text-gray-300 shrink-0 transition active:scale-95">
+                    🏍️ SACCO / Stage Permit
+                </button>
+                <button type="button" onclick="selectDocPresetQuick('CUSTOM')" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 rounded-xl text-[11px] font-bold text-emerald-700 dark:text-emerald-300 shrink-0 transition active:scale-95">
+                    ✨ Custom Document
+                </button>
+            </div>
+
+            <!-- ➕ Add New Statutory / Personal Document Form -->
             <div id="new-comp-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-amber-200 dark:border-amber-900 shadow-md space-y-3">
                 <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
                     <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <span>➕ Register Statutory Document / Permit</span>
+                        <span>➕ Register Driver, Personal or Vehicle Document</span>
                     </h3>
                     <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
                 <form action="/rider/compliance/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div class="sm:col-span-2 lg:col-span-1">
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Category</label>
-                        <select onchange="onDocTypePresetChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold cursor-pointer">
-                            <option value="UBER_INSPECT">🚗 Uber / Bolt Vehicle Inspection Report</option>
-                            <option value="INSURANCE_PSV">🛡️ Commercial PSV / Ride-Hail Insurance</option>
-                            <option value="SPEED_GOVERNOR">⏱️ NTSA Speed Governor & Limiter Certificate</option>
-                            <option value="PSV_BADGE">🪪 NTSA PSV Driver Badge / DL Endorsement</option>
-                            <option value="INSPECTION">🔍 NTSA Motor Vehicle Inspection Certificate</option>
-                            <option value="INSURANCE_COMP">🛡️ Comprehensive Vehicle Insurance</option>
-                            <option value="INSURANCE_TP">🛡️ Third-Party Vehicle Insurance</option>
-                            <option value="DL">🪪 NTSA Driving License (DL)</option>
-                            <option value="PSV">🎫 County PSV Sticker / Permit</option>
-                            <option value="LOGBOOK">📖 Vehicle Logbook</option>
-                            <option value="CUSTOM">📋 Custom Document Name...</option>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Preset / Category</label>
+                        <select id="new-doc-category-select" onchange="onDocTypePresetChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold cursor-pointer">
+                            <optgroup label="👤 Driver &amp; Personal Documents">
+                                <option value="GOOD_CONDUCT" selected>👮 Certificate of Good Conduct (DCI)</option>
+                                <option value="DL">🪪 NTSA Driving License (Smart DL)</option>
+                                <option value="PSV_BADGE">🪪 NTSA PSV Driver Badge / Endorsement</option>
+                                <option value="FOOD_HANDLER">🏥 County Food Handler Medical Cert</option>
+                                <option value="KRA_TCC">🏛️ KRA Tax Compliance Certificate (TCC)</option>
+                                <option value="HEALTH_COVER">🏥 SHA / NHIF &amp; Personal Accident Cover</option>
+                                <option value="SACCO_ID">🏍️ SACCO / Stage Membership Permit</option>
+                                <option value="NATIONAL_ID">🪪 National ID / Passport</option>
+                            </optgroup>
+                            <optgroup label="🚗 Vehicle, Insurance &amp; Permits">
+                                <option value="UBER_INSPECT">🚗 Uber / Bolt Vehicle Inspection Report</option>
+                                <option value="INSURANCE_PSV">🛡️ Commercial PSV / Ride-Hail Insurance</option>
+                                <option value="INSURANCE_COMP">🛡️ Comprehensive Vehicle / Bike Insurance</option>
+                                <option value="INSURANCE_TP">🛡️ Third-Party Vehicle / Bike Insurance</option>
+                                <option value="INSPECTION">🔍 NTSA Motor Vehicle Inspection Cert</option>
+                                <option value="SPEED_GOVERNOR">⏱️ NTSA Speed Governor &amp; Limiter Cert</option>
+                                <option value="PSV">🎫 County PSV Sticker / Parking Permit</option>
+                                <option value="LOGBOOK">📖 Vehicle Logbook / Asset Registration</option>
+                            </optgroup>
+                            <optgroup label="✨ Custom Option">
+                                <option value="CUSTOM">📋 Type Any Custom Document Name...</option>
+                            </optgroup>
                         </select>
                     </div>
                     <div class="sm:col-span-2 lg:col-span-1">
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Title / Number</label>
-                        <input type="text" id="new-doc-title-input" name="title" value="Uber / Bolt Vehicle Inspection" placeholder="e.g. Uber / Bolt Inspection, Commercial PSV Insurance" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold" required>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Name (Editable)</label>
+                        <input type="text" id="new-doc-title-input" name="title" value="Certificate of Good Conduct (DCI Police Clearance)" placeholder="e.g. Certificate of Good Conduct, Driving License, Insurance..." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold" required>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Expiry Date</label>
-                        <input type="date" name="expiry_date" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-bold" required>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Expiry / Renewal Date</label>
+                        <input type="date" id="new-doc-expiry-input" name="expiry_date" value="${(() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10); })()}" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-bold" required>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Renewal Cycle</label>
-                        <select id="new-doc-interval-select" name="interval_months" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold">
-                            <option value="12" selected>12 Months (Annual)</option>
+                        <select id="new-doc-interval-select" name="interval_months" onchange="onDocIntervalChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold">
+                            <option value="1">1 Month (Monthly Cover / Sticker)</option>
                             <option value="3">3 Months (Quarterly)</option>
-                            <option value="6">6 Months (Semi-Annual)</option>
-                            <option value="36">36 Months (3 Years - DL)</option>
+                            <option value="6">6 Months (Semi-Annual / Food Handler)</option>
+                            <option value="12" selected>12 Months (Annual - Good Conduct / Insurance)</option>
+                            <option value="24">24 Months (2 Years)</option>
+                            <option value="36">36 Months (3 Years - Smart DL)</option>
+                            <option value="60">60 Months (5 Years)</option>
                         </select>
                     </div>
-                    <div class="sm:col-span-2 lg:col-span-3">
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Policy Number / Provider Notes (Optional)</label>
-                        <input type="text" name="notes" placeholder="e.g. Policy #POL-8900-X, Directline Insurance, Agent contact 07..." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs">
+                    <div class="sm:col-span-2 lg:col-span-2">
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Ref / Policy Number / Notes (Optional)</label>
+                        <input type="text" id="new-doc-notes-input" name="notes" placeholder="e.g. eCitizen Ref #PCC-..., DCI / Huduma Centre, or Policy #..." class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs">
                     </div>
-                    <div class="flex items-end sm:col-span-2 lg:col-span-1">
-                        <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs active:scale-95">
-                            Save Document
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Fee Paid (<span class="curr-symbol-label">Ksh</span>, Optional)</label>
+                        <input type="number" step="any" inputmode="decimal" name="renewal_cost" placeholder="e.g. 1050 (0 if already paid)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Deduct Account (If Fee Paid)</label>
+                        <select name="account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold">
+                            <option value="">-- Don't Deduct Account --</option>
+                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 pt-1">
+                        <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.add('hidden')" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition shadow-xs active:scale-95">
+                            💾 Save Document to Tracker
                         </button>
                     </div>
                 </form>
@@ -2031,23 +2342,47 @@ export function renderRiderDashboard(data: any): string {
                     const badgeColor = isUrgent ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-black animate-pulse' : (isSoon ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold');
                     
                     const titleLower = (c.title || '').toLowerCase();
-                    let docTypeLabel = 'Statutory Permit';
+                    let docTypeLabel = 'Personal / Vehicle Doc';
                     let icon = '📋';
                     let typeBadgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
-                    if (titleLower.includes('insurance')) {
-                        docTypeLabel = 'Motorbike Insurance';
+                    if (titleLower.includes('good conduct') || titleLower.includes('police') || titleLower.includes('dci') || titleLower.includes('clearance')) {
+                        docTypeLabel = 'Good Conduct (DCI)';
+                        icon = '👮';
+                        typeBadgeClass = 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300';
+                    } else if (titleLower.includes('food') || titleLower.includes('medical') || titleLower.includes('health') || titleLower.includes('sha') || titleLower.includes('nhif')) {
+                        docTypeLabel = 'Health & Medical';
+                        icon = '🏥';
+                        typeBadgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+                    } else if (titleLower.includes('kra') || titleLower.includes('tax') || titleLower.includes('tcc')) {
+                        docTypeLabel = 'KRA Tax Compliance';
+                        icon = '🏛️';
+                        typeBadgeClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+                    } else if (titleLower.includes('badge')) {
+                        docTypeLabel = 'PSV Driver Badge';
+                        icon = '🪪';
+                        typeBadgeClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
+                    } else if (titleLower.includes('insurance')) {
+                        docTypeLabel = 'Vehicle Insurance';
                         icon = '🛡️';
                         typeBadgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300';
                     } else if (titleLower.includes('license') || titleLower.includes('dl')) {
                         docTypeLabel = 'Driving License (DL)';
                         icon = '🪪';
                         typeBadgeClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
+                    } else if (titleLower.includes('sacco') || titleLower.includes('stage')) {
+                        docTypeLabel = 'SACCO / Stage Permit';
+                        icon = '🏍️';
+                        typeBadgeClass = 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300';
                     } else if (titleLower.includes('psv') || titleLower.includes('permit') || titleLower.includes('sticker') || titleLower.includes('county')) {
                         docTypeLabel = 'County PSV Permit';
                         icon = '🎫';
                         typeBadgeClass = 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300';
-                    } else if (titleLower.includes('inspection') || titleLower.includes('ntsa')) {
-                        docTypeLabel = 'NTSA Inspection';
+                    } else if (titleLower.includes('governor') || titleLower.includes('limiter')) {
+                        docTypeLabel = 'Speed Governor';
+                        icon = '⏱️';
+                        typeBadgeClass = 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300';
+                    } else if (titleLower.includes('inspection') || titleLower.includes('ntsa') || titleLower.includes('uber') || titleLower.includes('bolt')) {
+                        docTypeLabel = 'Vehicle Inspection';
                         icon = '🔍';
                         typeBadgeClass = 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300';
                     } else if (titleLower.includes('logbook')) {
@@ -2096,13 +2431,17 @@ export function renderRiderDashboard(data: any): string {
                         <div class="space-y-2 pt-1 border-t dark:border-gray-800">
                             <div class="flex gap-2">
                                 <button type="button" onclick="toggleComplianceDrawer('${c.id}')" class="flex-1 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 text-xs font-bold rounded-lg border border-amber-200 dark:border-amber-800 transition active:scale-95 flex items-center justify-center gap-1">
-                                    <span>👁️ View Policy & Renew</span>
+                                    <span>👁️ Edit / Renew Document</span>
                                 </button>
                             </div>
 
                             <!-- Inline Renew Drawer -->
                             <div id="comp-drawer-${c.id}" class="hidden p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl space-y-2 text-xs">
                                 <form action="/rider/compliance/update/${c.id}" method="POST" class="space-y-2">
+                                    <div>
+                                        <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">Document Name</label>
+                                        <input type="text" name="title" value="${c.title || ''}" class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg font-bold" required>
+                                    </div>
                                     <div>
                                         <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">New Expiry Date</label>
                                         <input type="date" name="expiry_date" value="${c.expiry_date || ''}" class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg font-bold" required>
@@ -2119,8 +2458,8 @@ export function renderRiderDashboard(data: any): string {
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">Policy / Notes</label>
-                                        <input type="text" name="notes" value="${c.notes || ''}" placeholder="Policy number, provider details..." class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg font-medium">
+                                        <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">Ref / Policy / Notes</label>
+                                        <input type="text" name="notes" value="${c.notes || ''}" placeholder="Reference number, provider details..." class="w-full p-1.5 border border-amber-300 dark:border-amber-700 dark:bg-gray-900 rounded-lg font-medium">
                                     </div>
                                     <div class="flex gap-2 pt-1">
                                         <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 rounded-lg transition shadow-2xs active:scale-95">Save Update</button>
@@ -2131,8 +2470,8 @@ export function renderRiderDashboard(data: any): string {
                         </div>
                     </div>`;
                 }).join('') : `
-                <div class="col-span-full p-4 text-center rounded-xl bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700">
-                    <p class="text-xs text-gray-500">No statutory documents registered yet. Click "➕ Add Document" above to register your Insurance or Driving License!</p>
+                <div class="col-span-full p-5 text-center rounded-xl bg-white dark:bg-gray-900 border border-dashed border-amber-300 dark:border-gray-700 space-y-2">
+                    <p class="text-xs text-gray-600 dark:text-gray-400 font-medium">No documents registered yet. Tap <strong>👮 Good Conduct (DCI)</strong>, <strong>🪪 Driving License</strong>, or <strong>➕ Add Document</strong> above to track your expiry dates!</p>
                 </div>`}
             </div>
         </div>

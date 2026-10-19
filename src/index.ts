@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from './db/supabase';
-import { financeRoutes } from './routes/finance';
-import { riderRoutes, classifyShiftWindow } from './routes/rider';
+import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules } from './routes/finance';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveRiderLogs, getOdometerConfig } from './routes/rider';
 import { exportRoutes } from './routes/export';
 import { authRoutes } from './routes/auth';
 import { renderFinanceDashboard } from './views/financeView';
@@ -182,7 +182,8 @@ app.get('/', async (c) => {
       }
     }
 
-    if (allocationRules.length === 0) {
+    const savedCookieRules = getSavedAllocationRules(c);
+    if (allocationRules.length === 0 && (!savedCookieRules || savedCookieRules.length === 0)) {
       const defaultRulesToInsert = [
         { user_id: userId, bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
         { user_id: userId, bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
@@ -192,14 +193,18 @@ app.get('/', async (c) => {
       ];
       try {
         const { data: insertedRules } = await supabase.from('allocation_rules').insert(defaultRulesToInsert).select();
-        allocationRules = (insertedRules && insertedRules.length > 0) ? insertedRules : defaultRulesToInsert.map((r, idx) => ({ id: `default-rule-${idx + 1}`, ...r }));
+        allocationRules = (insertedRules && insertedRules.length > 0) ? insertedRules : [];
       } catch (e) {
-        allocationRules = defaultRulesToInsert.map((r, idx) => ({ id: `default-rule-${idx + 1}`, ...r }));
+        allocationRules = [];
       }
     }
   } else {
-    const { data: guestRules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
-    allocationRules = guestRules || [];
+    try {
+      const { data: guestRules } = await supabase.from('allocation_rules').select('*').eq('is_active', 1);
+      allocationRules = guestRules || [];
+    } catch (e) {
+      allocationRules = [];
+    }
 
     // Parse deleted goals cookie for guests
     let deletedGoalIds: string[] = [];
@@ -295,17 +300,9 @@ app.get('/', async (c) => {
     });
   }
 
-  const DEFAULT_RULES = [
-    { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
-    { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
-    { id: 'rule-3', bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
-    { id: 'rule-4', bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
-    { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
-  ];
-
   const accs = accounts;
   const txs = transactions;
-  const rules = (allocationRules && allocationRules.length > 0) ? allocationRules : DEFAULT_RULES;
+  const rules = resolveEffectiveAllocationRules(c, allocationRules);
 
   // Aggregations
   const totalBalance = accs.reduce((sum, a) => sum + Number(a.balance || 0), 0);
@@ -469,11 +466,25 @@ app.get('/', async (c) => {
     runwayMonths: runwayStatus.months,
   });
 
-  // EV vs Petrol ROI Intelligence
-  const evRoiStats = calculateEvRoiSavings(riderLogs || []);
+  // EV vs Petrol ROI Intelligence & Shift Net Take-Home for Pay Yourself First
+  const effectiveRiderLogs = resolveEffectiveRiderLogs(c, riderLogs);
+  const evRoiStats = calculateEvRoiSavings(effectiveRiderLogs || []);
+  const todayIsoStr = today.toISOString().slice(0, 10);
+  const todayShiftNet = (effectiveRiderLogs || [])
+    .filter((l: any) => l.date === todayIsoStr)
+    .reduce((acc: number, l: any) => {
+      const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
+      return acc + (Number(l.total_earned || 0) - exp);
+    }, 0);
+  const latestShiftObj = effectiveRiderLogs && effectiveRiderLogs.length > 0 ? effectiveRiderLogs[0] : null;
+  const lastShiftNet = latestShiftObj
+    ? (Number(latestShiftObj.total_earned || 0) - (Number(latestShiftObj.fuel_cost || 0) + Number(latestShiftObj.food_spent || 0) + Number(latestShiftObj.airtime_spent || 0) + Number(latestShiftObj.misc_expenses || 0) + Number(latestShiftObj.maintenance_cost || 0)))
+    : 0;
+  const payYourselfQueryAmt = parseFloat(c.req.query('pay_yourself_amount') || '0') || 0;
 
   // Unified Deadlines & Renewals Timeline
-  const complianceItems = (complianceDeadlines || []).map((c: any) => ({
+  const effectiveCompliance = resolveEffectiveComplianceDeadlines(c, complianceDeadlines);
+  const complianceItems = (effectiveCompliance || []).map((c: any) => ({
     id: c.id,
     name: c.title || c.item_type || c.name || 'Vehicle Document',
     title: c.title || c.item_type || c.name || 'Vehicle Document',
@@ -529,6 +540,9 @@ app.get('/', async (c) => {
     runway_status: runwayStatus,
     health_score: healthScore,
     ev_roi_stats: evRoiStats,
+    today_shift_net: todayShiftNet,
+    last_shift_net: lastShiftNet,
+    pay_yourself_amount: payYourselfQueryAmt,
     unified_timeline: unifiedTimeline,
     usd_to_kes: USD_TO_KES,
     current_currency: userCurrency,
@@ -576,11 +590,22 @@ app.get('/rider', async (c) => {
     allocationRules = ruleRes.data || [];
   } else {
     maintenance = [];
-    compliance = [];
+    try {
+      const [guestCompRes, guestLogsRes] = await Promise.all([
+        supabase.from('compliance_deadlines').select('*').is('user_id', null),
+        supabase.from('rider_logs').select('*').is('user_id', null).order('date', { ascending: false }),
+      ]);
+      compliance = guestCompRes.data || [];
+      logs = guestLogsRes.data || [];
+    } catch (e) {
+      compliance = [];
+      logs = [];
+    }
   }
 
   const activeBikes = bikes;
-  const shiftLogs = logs;
+  const shiftLogs = resolveEffectiveRiderLogs(c, logs);
+  const odometerConfig = getOdometerConfig(c, shiftLogs);
 
   // Shift & Time Intelligence Engine (in KES)
   let totalHours = 0;
@@ -688,18 +713,13 @@ app.get('/rider', async (c) => {
     active_bike: (activeBikes || []).find((b: any) => b.is_active === 1) || activeBikes[0] || null,
     bikes: activeBikes,
     rider_logs: shiftLogs,
+    odometer_config: odometerConfig,
     time_intelligence: timeIntelligence,
     maintenance_schedules: maintenance || [],
-    compliance_deadlines: compliance || [],
+    compliance_deadlines: resolveEffectiveComplianceDeadlines(c, compliance),
     bike_financings: financing || [],
     ev_roi_stats: calculateEvRoiSavings(shiftLogs || []),
-    allocation_rules: (allocationRules && allocationRules.length > 0) ? allocationRules : [
-      { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', percentage: 20.0, icon: '📈', is_active: 1 },
-      { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', percentage: 20.0, icon: '🔒', is_active: 1 },
-      { id: 'rule-3', bucket_name: 'Savings Goals', target_type: 'GOAL', percentage: 15.0, icon: '🎯', is_active: 1 },
-      { id: 'rule-4', bucket_name: 'Recurring Bills Reserve', target_type: 'ACCOUNT', percentage: 15.0, icon: '⚡', is_active: 1 },
-      { id: 'rule-5', bucket_name: 'Daily Living Expenses', target_type: 'CASH', percentage: 30.0, icon: '💵', is_active: 1 }
-    ],
+    allocation_rules: resolveEffectiveAllocationRules(c, allocationRules),
     accounts: accounts || [],
     toast,
     usd_to_kes: USD_TO_KES,

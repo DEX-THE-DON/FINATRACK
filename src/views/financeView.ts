@@ -68,6 +68,9 @@ export function renderFinanceDashboard(data: any): string {
       co2SavedKg: 0,
       savingsPercentage: 0,
     },
+    today_shift_net = 0,
+    last_shift_net = 0,
+    pay_yourself_amount = 0,
     unified_timeline = [],
     category_breakdown = [],
     usd_to_kes = 129.0,
@@ -79,6 +82,10 @@ export function renderFinanceDashboard(data: any): string {
     username = 'Dennis',
     is_logged_in = false,
   } = data;
+
+  const defaultSplitInputAmt = pay_yourself_amount > 0
+    ? Number(pay_yourself_amount.toFixed(2))
+    : (today_shift_net > 0 ? Number(today_shift_net.toFixed(2)) : (last_shift_net > 0 ? Number(last_shift_net.toFixed(2)) : 2000));
 
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -115,6 +122,7 @@ export function renderFinanceDashboard(data: any): string {
 
   const getGoalIcon = (title: string): string => {
     const t = (title || '').toLowerCase();
+    if (t.includes('malindi') || t.includes('coast') || t.includes('beach') || t.includes('watamu') || t.includes('diani') || t.includes('mombasa')) return '🏖️';
     if (t.includes('tv') || t.includes('television') || t.includes('screen')) return '📺';
     if (t.includes('cooker') || t.includes('gas') || t.includes('oven') || t.includes('kitchen') || t.includes('stove')) return '🍳';
     if (t.includes('seat') || t.includes('sofa') || t.includes('couch') || t.includes('furniture') || t.includes('chair') || t.includes('table')) return '🛋️';
@@ -122,7 +130,7 @@ export function renderFinanceDashboard(data: any): string {
     if (t.includes('bike') || t.includes('boda') || t.includes('motorcycle') || t.includes('car')) return '🛵';
     if (t.includes('laptop') || t.includes('macbook') || t.includes('computer') || t.includes('phone') || t.includes('iphone')) return '💻';
     if (t.includes('house') || t.includes('rent') || t.includes('plot') || t.includes('land')) return '🏠';
-    if (t.includes('emergency') || t.includes('fund')) return '🛡️';
+    if (t.includes('emergency') || t.includes('fund') || t.includes('shield')) return '🛡️';
     if (t.includes('vacation') || t.includes('trip') || t.includes('holiday')) return '✈️';
     return '🎯';
   };
@@ -1079,26 +1087,50 @@ export function renderFinanceDashboard(data: any): string {
             }
         });
 
-        function openRulesModal() {
-            const m = document.getElementById('rules-modal');
+        function openRulesModal(focusAdd) {
+            var m = document.getElementById('rules-modal');
             if (m) {
                 m.classList.remove('hidden');
                 updateRulesModalTotal();
+                if (focusAdd) {
+                    addCustomRuleRow('', '✨', 10, 'CASH', '');
+                }
             }
         }
 
+        function syncOrderedRuleIds() {
+            var container = document.getElementById('rules-list-container');
+            var ids = [];
+            if (container) {
+                container.querySelectorAll('.rule-row-card').forEach(function(row) {
+                    var rid = row.getAttribute('data-rule-id');
+                    if (rid) ids.push(rid);
+                });
+            }
+            var orderedInput = document.getElementById('ordered-rule-ids');
+            if (orderedInput) orderedInput.value = ids.join(',');
+            var countBadge = document.getElementById('rules-count-badge');
+            if (countBadge) countBadge.innerText = ids.length + (ids.length === 1 ? ' Option' : ' Options');
+            return ids;
+        }
+
         function updateRulesModalTotal() {
-            let total = 0;
-            document.querySelectorAll('.rule-pct-input').forEach(input => {
-                total += parseFloat(input.value) || 0;
-            });
-            const totalEl = document.getElementById('rules-modal-total');
-            const barEl = document.getElementById('rules-modal-bar');
-            const badgeEl = document.getElementById('rules-modal-badge');
-            if (totalEl) totalEl.innerText = total.toFixed(0) + '%';
+            var total = 0;
+            var container = document.getElementById('rules-list-container');
+            if (container) {
+                container.querySelectorAll('.rule-pct-input').forEach(function(input) {
+                    total += parseFloat(input.value) || 0;
+                });
+            }
+            total = Math.round(total * 10) / 10;
+            var totalEl = document.getElementById('rules-modal-total');
+            var barEl = document.getElementById('rules-modal-bar');
+            var badgeEl = document.getElementById('rules-modal-badge');
+            var pctText = (total % 1 === 0) ? total.toFixed(0) : total.toFixed(1);
+            if (totalEl) totalEl.innerText = pctText + '%';
             if (barEl) {
                 barEl.style.width = Math.min(100, Math.max(0, total)) + '%';
-                if (total === 100) {
+                if (Math.abs(total - 100) < 0.05) {
                     barEl.className = 'h-full rounded-full transition-all duration-300 bg-emerald-500';
                 } else if (total < 100) {
                     barEl.className = 'h-full rounded-full transition-all duration-300 bg-amber-500';
@@ -1107,18 +1139,317 @@ export function renderFinanceDashboard(data: any): string {
                 }
             }
             if (badgeEl) {
-                if (total === 100) {
+                if (Math.abs(total - 100) < 0.05) {
                     badgeEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800';
                     badgeEl.innerText = '✅ 100% (Balanced)';
                 } else if (total < 100) {
-                    const diff = 100 - total;
+                    var diff = Math.round((100 - total) * 10) / 10;
                     badgeEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800';
-                    badgeEl.innerText = '⚠️ ' + diff.toFixed(0) + '% unallocated';
+                    badgeEl.innerText = '⚠️ ' + diff + '% unallocated';
                 } else {
-                    const diff = total - 100;
+                    var over = Math.round((total - 100) * 10) / 10;
                     badgeEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800';
-                    badgeEl.innerText = '🚨 Exceeds by ' + diff.toFixed(0) + '%';
+                    badgeEl.innerText = '🚨 Exceeds by ' + over + '%';
                 }
+            }
+            syncOrderedRuleIds();
+        }
+
+        function addCustomRuleRow(presetName, presetIcon, presetPct, presetType, presetTargetId) {
+            var container = document.getElementById('rules-list-container');
+            if (!container) return;
+
+            var currentTotal = 0;
+            container.querySelectorAll('.rule-pct-input').forEach(function(input) {
+                currentTotal += parseFloat(input.value) || 0;
+            });
+            var defaultPct = presetPct !== undefined && presetPct !== null ? presetPct : 10;
+            if (currentTotal < 100 && (!presetPct || presetName === '')) {
+                defaultPct = Math.max(1, Math.round((100 - currentTotal) * 10) / 10);
+            }
+
+            var newId = 'custom_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            var iconVal = presetIcon || '✨';
+            var nameVal = presetName || '';
+            var typeVal = presetType || 'CASH';
+            var targetIdVal = presetTargetId || '';
+
+            var targetOptionsHtml = '<option value="">-- Smart Auto-Match / Any --</option>';
+            var tpl = document.getElementById('rule-target-options-template');
+            if (tpl) {
+                targetOptionsHtml = tpl.innerHTML;
+            }
+
+            var rowDiv = document.createElement('div');
+            rowDiv.className = 'rule-row-card p-3 bg-indigo-50/40 dark:bg-indigo-950/30 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/50 rounded-2xl border border-indigo-200 dark:border-indigo-800/70 space-y-2.5 transition';
+            rowDiv.setAttribute('data-rule-id', newId);
+
+            rowDiv.innerHTML =
+                '<div class="flex items-center gap-2">' +
+                    '<input type="text" name="icon_' + newId + '" value="' + iconVal + '" class="w-10 p-2 text-center text-base bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold shrink-0">' +
+                    '<input type="text" name="bucket_name_' + newId + '" value="' + nameVal.replace(/"/g, '&quot;') + '" placeholder="Enter your custom option name (e.g. Emergency Fund, Tithe, Chama)" class="rule-name-input flex-1 p-2 text-xs font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500" required>' +
+                    '<div class="flex items-center space-x-1 shrink-0">' +
+                        '<input type="number" step="any" min="0" max="100" inputmode="decimal" name="percentage_' + newId + '" value="' + defaultPct + '" oninput="updateRulesModalTotal()" class="rule-pct-input w-16 p-2 text-xs font-black text-center bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl text-indigo-600 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500" required>' +
+                        '<span class="text-xs font-bold text-gray-500">%</span>' +
+                    '</div>' +
+                    '<button type="button" data-remove-id="' + newId + '" onclick="removeRuleRow(this.getAttribute(&quot;data-remove-id&quot;))" title="Remove Option" class="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition shrink-0 cursor-pointer">🗑️</button>' +
+                '</div>' +
+                '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-indigo-200/60 dark:border-indigo-800/50">' +
+                    '<div>' +
+                        '<label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Option / Bucket Type</label>' +
+                        '<select name="target_type_' + newId + '" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300">' +
+                            '<option value="ACCOUNT"' + (typeVal === 'ACCOUNT' ? ' selected' : '') + '>🏦 Bank / MMF / Sacco / Wallet</option>' +
+                            '<option value="GOAL"' + (typeVal === 'GOAL' ? ' selected' : '') + '>🎯 Savings Goal</option>' +
+                            '<option value="DEBT"' + (typeVal === 'DEBT' ? ' selected' : '') + '>💳 Loan / Debt Repayment</option>' +
+                            '<option value="BILL"' + (typeVal === 'BILL' ? ' selected' : '') + '>⚡ Recurring Bill / Utility</option>' +
+                            '<option value="CASH"' + (typeVal === 'CASH' ? ' selected' : '') + '>💵 Daily Cash / Living / Float</option>' +
+                            '<option value="CUSTOM"' + (typeVal === 'CUSTOM' ? ' selected' : '') + '>✨ Custom / Independent Option</option>' +
+                        '</select>' +
+                    '</div>' +
+                    '<div>' +
+                        '<label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Destination Account / Goal / Loan</label>' +
+                        '<select name="target_id_' + newId + '" class="rule-target-select w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300">' +
+                            targetOptionsHtml +
+                        '</select>' +
+                    '</div>' +
+                '</div>';
+
+            container.appendChild(rowDiv);
+            if (targetIdVal) {
+                var sel = rowDiv.querySelector('.rule-target-select');
+                if (sel) sel.value = targetIdVal;
+            }
+            updateRulesModalTotal();
+            rowDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            var nameInput = rowDiv.querySelector('.rule-name-input');
+            if (nameInput) nameInput.focus();
+        }
+
+        function addInlineNewRuleToList() {
+            var nameEl = document.getElementById('inline-new-bucket-name');
+            var pctEl = document.getElementById('inline-new-percentage');
+            var iconEl = document.getElementById('inline-new-icon');
+            var typeEl = document.getElementById('inline-new-target-type');
+            var targetEl = document.getElementById('inline-new-target-id');
+
+            var name = nameEl ? nameEl.value.trim() : '';
+            if (!name) {
+                if (nameEl) nameEl.focus();
+                return;
+            }
+            var pct = pctEl ? (parseFloat(pctEl.value) || 10) : 10;
+            var icon = iconEl ? (iconEl.value.trim() || '✨') : '✨';
+            var type = typeEl ? typeEl.value : 'CASH';
+            var targetId = targetEl ? targetEl.value : '';
+
+            addCustomRuleRow(name, icon, pct, type, targetId);
+            if (nameEl) nameEl.value = '';
+            if (pctEl) pctEl.value = '10';
+            var drawer = document.getElementById('add-rule-form-container');
+            if (drawer) drawer.classList.add('hidden');
+        }
+
+        function removeRuleRow(ruleId) {
+            var container = document.getElementById('rules-list-container');
+            if (!container) return;
+            var rows = container.querySelectorAll('.rule-row-card');
+            if (rows.length <= 1) {
+                alert('You must keep at least 1 split rule option.');
+                return;
+            }
+            var targetRow = null;
+            rows.forEach(function(r) {
+                if (r.getAttribute('data-rule-id') === String(ruleId)) targetRow = r;
+            });
+            if (targetRow) {
+                targetRow.remove();
+                var delInput = document.getElementById('deleted-rule-ids');
+                if (delInput) {
+                    var existing = delInput.value ? delInput.value.split(',').filter(Boolean) : [];
+                    if (existing.indexOf(String(ruleId)) === -1) existing.push(String(ruleId));
+                    delInput.value = existing.join(',');
+                }
+                updateRulesModalTotal();
+            }
+        }
+
+        function balanceRulesTo100() {
+            var container = document.getElementById('rules-list-container');
+            if (!container) return;
+            var inputs = Array.from(container.querySelectorAll('.rule-pct-input'));
+            if (inputs.length === 0) return;
+
+            var currentSum = 0;
+            inputs.forEach(function(inp) {
+                currentSum += Math.max(0, parseFloat(inp.value) || 0);
+            });
+
+            if (currentSum <= 0) {
+                distributeRulesEvenly();
+                return;
+            }
+
+            var runningSum = 0;
+            inputs.forEach(function(inp, idx) {
+                if (idx === inputs.length - 1) {
+                    var rem = Math.max(0, Math.round((100 - runningSum) * 10) / 10);
+                    inp.value = String(rem);
+                } else {
+                    var raw = Math.max(0, parseFloat(inp.value) || 0);
+                    var scaled = Math.round(((raw / currentSum) * 100) * 10) / 10;
+                    inp.value = String(scaled);
+                    runningSum = Math.round((runningSum + scaled) * 10) / 10;
+                }
+            });
+            updateRulesModalTotal();
+        }
+
+        function distributeRulesEvenly() {
+            var container = document.getElementById('rules-list-container');
+            if (!container) return;
+            var inputs = Array.from(container.querySelectorAll('.rule-pct-input'));
+            if (inputs.length === 0) return;
+
+            var baseShare = Math.floor((100 / inputs.length) * 10) / 10;
+            var sum = 0;
+            inputs.forEach(function(inp, idx) {
+                if (idx === inputs.length - 1) {
+                    var rem = Math.max(0, Math.round((100 - sum) * 10) / 10);
+                    inp.value = String(rem);
+                } else {
+                    inp.value = String(baseShare);
+                    sum = Math.round((sum + baseShare) * 10) / 10;
+                }
+            });
+            updateRulesModalTotal();
+        }
+
+        function saveRulesLocally(e) {
+            try {
+                syncOrderedRuleIds();
+                var container = document.getElementById('rules-list-container');
+                if (!container) return;
+                var savedList = [];
+                container.querySelectorAll('.rule-row-card').forEach(function(row) {
+                    var id = row.getAttribute('data-rule-id');
+                    if (!id) return;
+                    var iconInp = row.querySelector('input[name="icon_' + id + '"]');
+                    var nameInp = row.querySelector('input[name="bucket_name_' + id + '"]');
+                    var pctInp = row.querySelector('input[name="percentage_' + id + '"]');
+                    var typeSel = row.querySelector('select[name="target_type_' + id + '"]');
+                    var targetSel = row.querySelector('select[name="target_id_' + id + '"]');
+                    savedList.push({
+                        id: String(id),
+                        bucket_name: nameInp && nameInp.value ? nameInp.value.trim() : 'Custom Option',
+                        icon: iconInp && iconInp.value ? iconInp.value.trim() : '💰',
+                        percentage: pctInp ? (parseFloat(pctInp.value) || 0) : 0,
+                        target_type: typeSel ? typeSel.value : 'CASH',
+                        target_id: targetSel && targetSel.value ? targetSel.value : null,
+                        is_active: 1
+                    });
+                });
+                var inlineNameEl = document.getElementById('inline-new-bucket-name');
+                if (inlineNameEl && inlineNameEl.value && inlineNameEl.value.trim() !== '') {
+                    var inlinePctEl = document.getElementById('inline-new-percentage');
+                    var inlineIconEl = document.getElementById('inline-new-icon');
+                    var inlineTypeEl = document.getElementById('inline-new-target-type');
+                    var inlineTargetEl = document.getElementById('inline-new-target-id');
+                    savedList.push({
+                        id: 'custom_' + Date.now(),
+                        bucket_name: inlineNameEl.value.trim(),
+                        icon: inlineIconEl && inlineIconEl.value ? inlineIconEl.value.trim() : '✨',
+                        percentage: inlinePctEl ? (parseFloat(inlinePctEl.value) || 10) : 10,
+                        target_type: inlineTypeEl ? inlineTypeEl.value : 'CASH',
+                        target_id: inlineTargetEl && inlineTargetEl.value ? inlineTargetEl.value : null,
+                        is_active: 1
+                    });
+                }
+                if (savedList.length > 0) {
+                    document.cookie = 'finatrack_allocation_rules=' + encodeURIComponent(JSON.stringify(savedList)) + '; path=/; max-age=31536000; SameSite=Lax';
+                }
+            } catch (err) {
+                console.warn('Could not pre-save rules cookie locally:', err);
+            }
+        }
+
+        function setSplitAmountPreset(amt) {
+            var inputEl = document.getElementById('split-amount-input');
+            if (inputEl) {
+                inputEl.value = String(amt);
+                updateSplitBreakdown();
+                inputEl.focus();
+            }
+        }
+
+        function applySplitRatioPresetClient(presetKey) {
+            var presets = {
+                PAY_YOURSELF_FLEET: [
+                    { bucket_name: 'Pay Yourself #1: Ziidi / Britam MMF', icon: '👑', percentage: 15, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Pay Yourself #2: Lock / Sacco Savings', icon: '🔒', percentage: 15, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Savings Goals (Malindi & Home)', icon: '🎯', percentage: 20, target_type: 'GOAL' },
+                    { bucket_name: 'Recurring Bills & Rent Reserve', icon: '⚡', percentage: 15, target_type: 'BILL' },
+                    { bucket_name: 'Fleet Service & Docs Reserve', icon: '🛠️', percentage: 10, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Daily Living & Personal Pocket', icon: '💵', percentage: 25, target_type: 'CASH' }
+                ],
+                AGGRESSIVE_WEALTH: [
+                    { bucket_name: 'Pay Yourself #1: Ziidi / Britam MMF', icon: '👑', percentage: 25, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Pay Yourself #2: Lock / Sacco Savings', icon: '🔒', percentage: 15, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Savings Goals (Malindi & Home)', icon: '🎯', percentage: 20, target_type: 'GOAL' },
+                    { bucket_name: 'Bills & Fleet Maintenance Reserve', icon: '⚡', percentage: 15, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Daily Living & Personal Pocket', icon: '💵', percentage: 25, target_type: 'CASH' }
+                ],
+                DEBT_CRUSHER: [
+                    { bucket_name: 'Pay Yourself First (MMF / Sacco)', icon: '👑', percentage: 20, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Loan / Debt Crusher Payoff', icon: '💳', percentage: 20, target_type: 'DEBT' },
+                    { bucket_name: 'Savings Goals (Malindi & Home)', icon: '🎯', percentage: 15, target_type: 'GOAL' },
+                    { bucket_name: 'Bills & Fleet Maintenance Reserve', icon: '⚡', percentage: 15, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Daily Living & Personal Pocket', icon: '💵', percentage: 30, target_type: 'CASH' }
+                ],
+                DEFAULT_5: [
+                    { bucket_name: 'Ziidi MMF (Safaricom)', icon: '📈', percentage: 20, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Lock / Sacco Savings', icon: '🔒', percentage: 20, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Savings Goals', icon: '🎯', percentage: 15, target_type: 'GOAL' },
+                    { bucket_name: 'Recurring Bills Reserve', icon: '⚡', percentage: 15, target_type: 'ACCOUNT' },
+                    { bucket_name: 'Daily Living Expenses', icon: '💵', percentage: 30, target_type: 'CASH' }
+                ]
+            };
+
+            var list = presets[presetKey] || presets.PAY_YOURSELF_FLEET;
+            var container = document.getElementById('rules-list-container');
+            if (!container) return;
+
+            var delInput = document.getElementById('deleted-rule-ids');
+            var existingDeleted = (delInput && delInput.value) ? delInput.value.split(',').filter(Boolean) : [];
+            container.querySelectorAll('.rule-row-card').forEach(function(row) {
+                var rid = row.getAttribute('data-rule-id');
+                if (rid && existingDeleted.indexOf(rid) === -1) existingDeleted.push(rid);
+            });
+            if (delInput) delInput.value = existingDeleted.join(',');
+
+            container.innerHTML = '';
+            list.forEach(function(item) {
+                addCustomRuleRow(item.bucket_name, item.icon, item.percentage, item.target_type, '');
+            });
+            updateRulesModalTotal();
+        }
+
+        function applyGoalPreset(title, targetKes, splitPct, monthsAhead) {
+            var drawer = document.getElementById('new-goal-form-container');
+            if (drawer) {
+                drawer.classList.remove('hidden');
+                var titleInp = drawer.querySelector('input[name="title"]');
+                var amtInp = drawer.querySelector('input[name="target_amount"]');
+                var splitInp = drawer.querySelector('input[name="split_percentage"]');
+                var dateInp = drawer.querySelector('input[name="target_date"]');
+                if (titleInp) titleInp.value = title;
+                if (amtInp) amtInp.value = String(targetKes);
+                if (splitInp) splitInp.value = String(splitPct || 35);
+                if (dateInp && monthsAhead) {
+                    var d = new Date();
+                    d.setMonth(d.getMonth() + Number(monthsAhead));
+                    dateInp.value = d.toISOString().slice(0, 10);
+                }
+                drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
 
@@ -1127,6 +1458,12 @@ export function renderFinanceDashboard(data: any): string {
             const inputEl = document.getElementById('split-amount-input');
             const total = parseFloat(inputEl ? inputEl.value : 0) || 0;
             const rules = ${JSON.stringify(allocation_rules)};
+            let payYourselfKes = 0;
+            let payYourselfPct = 0;
+            let obligationsKes = 0;
+            let obligationsPct = 0;
+            let pocketKes = 0;
+            let pocketPct = 0;
             
             rules.forEach(r => {
                 const pct = parseFloat(r.percentage) || 0;
@@ -1139,7 +1476,31 @@ export function renderFinanceDashboard(data: any): string {
                         spanEl.innerText = '$' + (kesAmt / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                     }
                 }
+
+                const bName = String(r.bucket_name || '').toLowerCase();
+                const tType = String(r.target_type || '').toUpperCase();
+                if (tType === 'GOAL' || bName.includes('pay yourself') || bName.includes('mmf') || bName.includes('ziidi') || bName.includes('britam') || bName.includes('sacco') || bName.includes('lock') || bName.includes('goal') || bName.includes('invest') || bName.includes('chama') || bName.includes('emergenc')) {
+                    payYourselfKes += kesAmt;
+                    payYourselfPct += pct;
+                } else if (tType === 'BILL' || tType === 'DEBT' || bName.includes('bill') || bName.includes('rent') || bName.includes('fleet') || bName.includes('service') || bName.includes('maint') || bName.includes('loan') || bName.includes('debt')) {
+                    obligationsKes += kesAmt;
+                    obligationsPct += pct;
+                } else {
+                    pocketKes += kesAmt;
+                    pocketPct += pct;
+                }
             });
+
+            const fmtAmt = (val) => curr === 'Ksh'
+                ? ('Ksh ' + val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}))
+                : ('$' + (val / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+
+            const pyfEl = document.getElementById('pyf-summary-wealth');
+            if (pyfEl) pyfEl.innerText = fmtAmt(payYourselfKes) + ' (' + Math.round(payYourselfPct) + '%)';
+            const obEl = document.getElementById('pyf-summary-reserves');
+            if (obEl) obEl.innerText = fmtAmt(obligationsKes) + ' (' + Math.round(obligationsPct) + '%)';
+            const pkEl = document.getElementById('pyf-summary-pocket');
+            if (pkEl) pkEl.innerText = fmtAmt(pocketKes) + ' (' + Math.round(pocketPct) + '%)';
         }
 
         function onTxCategoryChange(val) {
@@ -2253,42 +2614,95 @@ export function renderFinanceDashboard(data: any): string {
                         <span class="text-2xl">🌊</span>
                         <h2 class="text-lg font-bold text-gray-900 dark:text-white">Dynamic Waterfall Income Auto-Split (Zero Cent Leakage)</h2>
                     </div>
-                    <p class="text-xs text-gray-600 dark:text-indigo-200/80">Automatically calculate and distribute daily earnings across Ziidi MMF (10% auto-save), Lock Savings, Goals, and Living expenses.</p>
+                    <p class="text-xs text-gray-600 dark:text-indigo-200/80">Automatically calculate and distribute daily earnings across MMF, Savings, Goals, Loans/Debts, Bills, or any custom options you create.</p>
                 </div>
-                <button type="button" onclick="openRulesModal()" class="text-xs bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-xl font-bold transition active:scale-95 shadow-2xs">
-                    ⚙️ Edit Split Rules
-                </button>
+                <div class="flex flex-wrap items-center gap-2">
+                    <form action="/rules/preset" method="POST" class="inline">
+                        <input type="hidden" name="preset_key" value="PAY_YOURSELF_FLEET">
+                        <button type="submit" title="Apply the 30-20-15-10-25 Pay Yourself First &amp; Fleet Ratio Blueprint" class="text-xs bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 px-3 py-1.5 rounded-xl font-extrabold transition active:scale-95 shadow-2xs">
+                            👑 30-20-15-10-25 Pay Yourself Ratio
+                        </button>
+                    </form>
+                    <button type="button" onclick="openRulesModal(true)" class="text-xs bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-xl font-bold transition active:scale-95 shadow-2xs">
+                        ➕ Add Custom Option
+                    </button>
+                    <button type="button" onclick="openRulesModal(false)" class="text-xs bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-xl font-bold transition active:scale-95 shadow-2xs">
+                        ⚙️ Edit Split Rules (${allocation_rules.length})
+                    </button>
+                </div>
             </div>
 
-            <form action="/split/distribute" method="POST" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-700 dark:text-indigo-300 mb-1">Enter Today's Income (<span class="curr-symbol-label">Ksh</span>)</label>
-                    <input type="number" step="any" name="amount" id="split-amount-input" value="500" oninput="updateSplitBreakdown()" class="w-full px-3 py-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-xl text-lg font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400" required>
+            <form action="/split/distribute" method="POST" class="space-y-3">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 dark:text-indigo-300 mb-1">Enter Today's Net Take-Home (<span class="curr-symbol-label">Ksh</span>)</label>
+                        <input type="number" step="any" name="amount" id="split-amount-input" value="${defaultSplitInputAmt}" oninput="updateSplitBreakdown()" class="w-full px-3 py-2 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-xl text-lg font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 dark:text-indigo-300 mb-1">Source / Wallet Account</label>
+                        <select name="source_account_id" class="w-full px-3 py-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-900 dark:text-white">
+                            <option value="">-- Direct External Income --</option>
+                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition shadow-md">
+                            🚀 Pay Yourself First &amp; Distribute Now
+                        </button>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-700 dark:text-indigo-300 mb-1">Source / Wallet Account</label>
-                    <select name="source_account_id" class="w-full px-3 py-2.5 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-900 dark:text-white">
-                        <option value="">-- Direct External Income --</option>
-                        ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
-                    </select>
-                </div>
-                <div class="flex items-end">
-                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition shadow-md">
-                        🚀 Distribute Funds Now
-                    </button>
+
+                <!-- Quick-Fill Shift Net & Preset Amount Chips -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-300 mr-1">⚡ 23:50 Shift Closeout Fill:</span>
+                    ${Number(today_shift_net || 0) > 0 ? `
+                    <button type="button" onclick="setSplitAmountPreset(${Number(today_shift_net).toFixed(2)})" class="px-2.5 py-1 bg-cyan-50 dark:bg-cyan-950/70 hover:bg-cyan-100 dark:hover:bg-cyan-900 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 rounded-lg text-[11px] font-extrabold transition active:scale-95">
+                        🛵 Today's Shift Net (Ksh ${Number(today_shift_net).toLocaleString()})
+                    </button>` : Number(last_shift_net || 0) > 0 ? `
+                    <button type="button" onclick="setSplitAmountPreset(${Number(last_shift_net).toFixed(2)})" class="px-2.5 py-1 bg-cyan-50 dark:bg-cyan-950/70 hover:bg-cyan-100 dark:hover:bg-cyan-900 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 rounded-lg text-[11px] font-extrabold transition active:scale-95">
+                        🛵 Latest Shift Net (Ksh ${Number(last_shift_net).toLocaleString()})
+                    </button>` : ''}
+                    <button type="button" onclick="setSplitAmountPreset(1500)" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">Ksh 1,500</button>
+                    <button type="button" onclick="setSplitAmountPreset(2000)" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">Ksh 2,000</button>
+                    <button type="button" onclick="setSplitAmountPreset(2500)" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">Ksh 2,500</button>
+                    <button type="button" onclick="setSplitAmountPreset(3500)" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">Ksh 3,500</button>
                 </div>
             </form>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2">
+            <!-- 👑 Live Pay Yourself First Discipline Summary Bar -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 bg-indigo-50/60 dark:bg-slate-950/80 border border-indigo-200/70 dark:border-indigo-900/60 rounded-xl">
+                <div class="flex items-center justify-between sm:block px-2 py-1 border-b sm:border-b-0 sm:border-r border-indigo-200/60 dark:border-indigo-900/50">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">👑 1. Pay Yourself First (Wealth + Goals)</span>
+                    <span id="pyf-summary-wealth" class="text-sm font-black text-emerald-600 dark:text-emerald-400">Ksh 0.00 (50%)</span>
+                </div>
+                <div class="flex items-center justify-between sm:block px-2 py-1 border-b sm:border-b-0 sm:border-r border-indigo-200/60 dark:border-indigo-900/50">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">🛡️ 2. Bills, Debt &amp; Fleet Shield</span>
+                    <span id="pyf-summary-reserves" class="text-sm font-black text-indigo-600 dark:text-indigo-300">Ksh 0.00 (25%)</span>
+                </div>
+                <div class="flex items-center justify-between sm:block px-2 py-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400 block">💵 3. Guilt-Free Daily Pocket</span>
+                    <span id="pyf-summary-pocket" class="text-sm font-black text-amber-600 dark:text-amber-400">Ksh 0.00 (25%)</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-1">
                 ${allocation_rules.map((r: any) => `
                 <div class="p-3 bg-white dark:bg-gray-950/70 border border-gray-200 dark:border-indigo-900/60 rounded-xl shadow-2xs">
                     <div class="flex items-center space-x-1.5 text-xs text-gray-700 dark:text-indigo-300 font-bold">
                         <span>${r.icon || '💰'}</span>
-                        <span class="truncate">${r.bucket_name}</span>
+                        <span class="truncate" title="${r.bucket_name}">${r.bucket_name}</span>
                     </div>
                     <p class="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1" id="rule-calc-${r.id}">Ksh 0.00</p>
-                    <p class="text-[10px] text-gray-500 dark:text-gray-400 font-medium">${r.percentage}% Allocation</p>
+                    <div class="flex items-center justify-between mt-0.5">
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 font-medium">${r.percentage}% Allocation</p>
+                        <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 font-bold uppercase">${r.target_type || 'CUSTOM'}</span>
+                    </div>
                 </div>`).join('')}
+                <button type="button" onclick="openRulesModal(true)" class="p-3 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/40 border border-dashed border-indigo-300 dark:border-indigo-800 rounded-xl flex flex-col items-center justify-center text-indigo-600 dark:text-indigo-300 transition active:scale-95 group min-h-[76px]">
+                    <span class="text-base group-hover:scale-110 transition-transform">➕</span>
+                    <span class="text-[11px] font-bold mt-0.5">Add Your Option</span>
+                    <span class="text-[9px] text-gray-500 dark:text-gray-400">Custom Bucket / Goal / Loan</span>
+                </button>
             </div>
         </div>
 
@@ -2600,10 +3014,30 @@ export function renderFinanceDashboard(data: any): string {
                     </h3>
                     <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
+
+                <!-- 🏖️ 1-Tap Goal Blueprints (Malindi Vacation & Wealth Shields) -->
+                <div class="space-y-1.5 bg-indigo-50/50 dark:bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">⚡ 1-Tap Goal Blueprints (Auto-fill Target, Sub-Split % &amp; Deadline):</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button type="button" onclick="applyGoalPreset('Malindi Vacation 2027 (Mid-Range)', 45000, 40, 10)" class="px-2.5 py-1 bg-cyan-50 dark:bg-cyan-950/70 hover:bg-cyan-100 dark:hover:bg-cyan-900 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 rounded-lg text-[11px] font-extrabold transition active:scale-95">
+                            🏖️ Malindi Vacation (Ksh 45k • ~Ksh 150/day)
+                        </button>
+                        <button type="button" onclick="applyGoalPreset('Malindi Solo Getaway 2027', 36000, 35, 10)" class="px-2.5 py-1 bg-teal-50 dark:bg-teal-950/70 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-300 dark:border-teal-800 text-teal-800 dark:text-teal-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                            🏖️ Malindi Solo Comfort (Ksh 36k)
+                        </button>
+                        <button type="button" onclick="applyGoalPreset('Malindi Couple Resort Trip 2027', 65000, 45, 12)" class="px-2.5 py-1 bg-purple-50 dark:bg-purple-950/70 hover:bg-purple-100 dark:hover:bg-purple-900 border border-purple-300 dark:border-purple-800 text-purple-800 dark:text-purple-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                            🌴 Malindi Couple Luxury (Ksh 65k)
+                        </button>
+                        <button type="button" onclick="applyGoalPreset('6-Month Emergency Shield', 75000, 35, 12)" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                            🛡️ Emergency Shield (Ksh 75k)
+                        </button>
+                    </div>
+                </div>
+
                 <form action="/goals/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div class="sm:col-span-2 lg:col-span-1">
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Goal Title</label>
-                        <input type="text" name="title" placeholder="e.g. 55&quot; 4K Smart TV, Sofa Seat, Gas Cooker" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold" required>
+                        <input type="text" name="title" placeholder="e.g. Malindi Vacation 2027, 55&quot; Smart TV" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold" required>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Amount (<span class="curr-symbol-label">Ksh</span>)</label>
@@ -2611,7 +3045,7 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Sub-Split Share % (Optional)</label>
-                        <input type="number" step="0.1" name="split_percentage" placeholder="30" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold">
+                        <input type="number" step="0.1" name="split_percentage" placeholder="40" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Deadline (Optional)</label>
@@ -3664,40 +4098,146 @@ export function renderFinanceDashboard(data: any): string {
 
     <!-- ⚙️ Waterfall Split Rules Settings Modal -->
     <div id="rules-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-        <div class="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 max-w-xl w-full shadow-2xl border border-gray-100 dark:border-gray-800 space-y-5 my-8">
-            <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
+        <div class="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 max-w-2xl w-full shadow-2xl border border-gray-100 dark:border-gray-800 space-y-4 my-8">
+            <div class="flex justify-between items-start sm:items-center border-b dark:border-gray-800 pb-3 gap-2">
                 <div class="flex items-center space-x-2.5">
                     <span class="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl shrink-0">⚙️</span>
                     <div>
-                        <h3 class="font-extrabold text-gray-900 dark:text-white text-base">Waterfall Split Allocation Rules</h3>
-                        <p class="text-[11px] text-gray-500 dark:text-gray-400">Configure bucket names, % splits, and target accounts</p>
+                        <h3 class="font-extrabold text-gray-900 dark:text-white text-base">Flexible Waterfall Split Rules</h3>
+                        <p class="text-[11px] text-gray-500 dark:text-gray-400">Customize existing buckets or add as many of your own split options as you need</p>
                     </div>
                 </div>
-                <button type="button" onclick="document.getElementById('rules-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center text-gray-500 hover:text-gray-900 dark:hover:text-white text-sm transition">✕</button>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <form action="/rules/reset" method="POST" onsubmit="return confirm('Reset split rules back to the 5 default buckets?');">
+                        <button type="submit" title="Reset to Default 5 Rules" class="px-2.5 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-[11px] font-bold text-gray-600 dark:text-gray-300 transition">
+                            🔄 Reset Default 5
+                        </button>
+                    </form>
+                    <button type="button" onclick="document.getElementById('rules-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center text-gray-500 hover:text-gray-900 dark:hover:text-white text-sm transition">✕</button>
+                </div>
             </div>
 
-            <!-- Live Total % Indicator & Progress Bar -->
-            <div class="p-3.5 bg-gray-50 dark:bg-gray-800/80 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2">
-                <div class="flex justify-between items-center text-xs">
+            <!-- Hidden template for dynamic target destination options -->
+            <select id="rule-target-options-template" class="hidden" aria-hidden="true">
+                <option value="">-- Smart Auto-Match / General --</option>
+                <optgroup label="Connected Accounts (Bank / MMF / Sacco)">
+                    ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (${a.account_type || 'Account'})</option>`).join('')}
+                </optgroup>
+                <optgroup label="Active Savings Goals">
+                    ${goals.map((g: any) => `<option value="${g.id}">🎯 ${g.title}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Loans &amp; Debts">
+                    ${debts.map((d: any) => `<option value="${d.id}">💳 ${d.lender_name || d.title || 'Loan'}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Recurring Bills">
+                    ${bills.map((b: any) => `<option value="${b.id}">🧾 ${b.name || b.title || 'Bill'}</option>`).join('')}
+                </optgroup>
+            </select>
+
+            <!-- Live Total % Indicator, Progress Bar & Quick Balance Helpers -->
+            <div class="p-3.5 bg-gray-50 dark:bg-gray-800/80 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2.5">
+                <div class="flex flex-wrap justify-between items-center gap-2 text-xs">
                     <span class="font-bold text-gray-700 dark:text-gray-300">Total Allocation: <strong id="rules-modal-total" class="text-sm font-black text-indigo-600 dark:text-indigo-400">100%</strong></span>
                     <span id="rules-modal-badge" class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">✅ 100% (Balanced)</span>
                 </div>
                 <div class="w-full h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div id="rules-modal-bar" class="h-full rounded-full transition-all duration-300 bg-emerald-500" style="width: 100%"></div>
                 </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <span class="text-[11px] text-gray-500 dark:text-gray-400">Tip: Add any custom option below, then click <strong>Auto-Balance 100%</strong>.</span>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="balanceRulesTo100()" class="px-2.5 py-1 bg-indigo-100 dark:bg-indigo-950/80 hover:bg-indigo-200 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                            ⚖️ Auto-Balance 100%
+                        </button>
+                        <button type="button" onclick="distributeRulesEvenly()" class="px-2.5 py-1 bg-gray-200/80 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-[11px] font-bold transition active:scale-95">
+                            🟰 Split Evenly
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <!-- Main Rules Update Form -->
-            <form action="/rules/update" method="POST" class="space-y-3.5">
-                <div class="space-y-2.5 max-h-[50vh] overflow-y-auto no-scrollbar pr-1">
+            <!-- 🏆 1-Tap "Pay Yourself First" Ratio Blueprints -->
+            <div class="p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-900/60 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">👑 1-Tap "Pay Yourself First" Ratio Blueprints</span>
+                    <span class="text-[10px] font-semibold text-amber-700 dark:text-amber-400">Preview &amp; customize before saving</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <button type="button" onclick="applySplitRatioPresetClient('PAY_YOURSELF_FLEET')" class="p-2 text-left bg-white dark:bg-gray-900 hover:bg-amber-100/70 dark:hover:bg-amber-900/40 border border-amber-300 dark:border-amber-800 rounded-xl transition active:scale-95">
+                        <div class="text-xs font-black text-amber-900 dark:text-amber-200">🏆 30-20-15-10-25 (Pay Yourself + Fleet)</div>
+                        <div class="text-[10px] text-gray-600 dark:text-gray-400">30% MMF/Sacco • 20% Goals • 15% Bills • 10% Fleet • 25% Living</div>
+                    </button>
+                    <button type="button" onclick="applySplitRatioPresetClient('AGGRESSIVE_WEALTH')" class="p-2 text-left bg-white dark:bg-gray-900 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-800 rounded-xl transition active:scale-95">
+                        <div class="text-xs font-black text-emerald-900 dark:text-emerald-200">🚀 40-20-15-25 (Aggressive Wealth)</div>
+                        <div class="text-[10px] text-gray-600 dark:text-gray-400">40% MMF+Sacco • 20% Goals • 15% Bills/Fleet • 25% Living</div>
+                    </button>
+                    <button type="button" onclick="applySplitRatioPresetClient('DEBT_CRUSHER')" class="p-2 text-left bg-white dark:bg-gray-900 hover:bg-rose-100/70 dark:hover:bg-rose-900/40 border border-rose-300 dark:border-rose-800 rounded-xl transition active:scale-95">
+                        <div class="text-xs font-black text-rose-900 dark:text-rose-200">💳 20-20-15-15-30 (Debt Crusher)</div>
+                        <div class="text-[10px] text-gray-600 dark:text-gray-400">20% Loans • 20% Pay Yourself • 15% Goals • 15% Bills • 30% Living</div>
+                    </button>
+                    <button type="button" onclick="applySplitRatioPresetClient('DEFAULT_5')" class="p-2 text-left bg-white dark:bg-gray-900 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-xl transition active:scale-95">
+                        <div class="text-xs font-black text-indigo-900 dark:text-indigo-200">🔄 20-20-15-15-30 (Classic 5-Bucket)</div>
+                        <div class="text-[10px] text-gray-600 dark:text-gray-400">20% MMF • 20% Goals • 15% Sacco • 15% Bills • 30% Living</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick-Add Custom & Preset Option Chips -->
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 dark:text-gray-400">⚡ Instant Add Split Option (1-Tap or Custom)</span>
+                    <button type="button" onclick="addCustomRuleRow('', '✨', 10, 'CUSTOM', '')" class="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1">
+                        <span>➕ Add Blank Custom Option</span>
+                    </button>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" onclick="addCustomRuleRow('', '✨', 10, 'CUSTOM', '')" class="px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-[11px] font-bold transition active:scale-95">
+                        ✨ + Custom Option
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Pay Yourself First (MMF + Sacco)', '👑', 30, 'ACCOUNT', '')" class="px-2.5 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-[11px] font-bold transition active:scale-95">
+                        👑 Pay Yourself First (30%)
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Fleet Service &amp; Docs Reserve', '🛠️', 10, 'CUSTOM', '')" class="px-2.5 py-1.5 bg-cyan-50 dark:bg-cyan-950/60 hover:bg-cyan-100 dark:hover:bg-cyan-900 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 rounded-xl text-[11px] font-bold transition active:scale-95">
+                        🛠️ Fleet Service &amp; Docs (10%)
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Emergency Fund', '🛡️', 10, 'ACCOUNT', '')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-[11px] font-semibold transition active:scale-95">
+                        🛡️ Emergency Fund
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Tithe &amp; Giving', '🙏', 10, 'CUSTOM', '')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-[11px] font-semibold transition active:scale-95">
+                        🙏 Tithe &amp; Giving
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Loan / Debt Payoff', '💳', 15, 'DEBT', '')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-[11px] font-semibold transition active:scale-95">
+                        💳 Loan Repayment
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Fuel &amp; Rider Float', '⛽', 10, 'CASH', '')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-[11px] font-semibold transition active:scale-95">
+                        ⛽ Fuel &amp; Float
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Chama / Stock Investment', '📈', 10, 'ACCOUNT', '')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-[11px] font-semibold transition active:scale-95">
+                        📈 Chama / Invest
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Rent &amp; House Bills', '🏠', 15, 'BILL', '')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-[11px] font-semibold transition active:scale-95">
+                        🏠 Rent &amp; Housing
+                    </button>
+                    <button type="button" onclick="addCustomRuleRow('Family / Black Tax Support', '🤝', 5, 'CUSTOM', '')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-[11px] font-semibold transition active:scale-95">
+                        🤝 Family Support
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Unified Rules Update Form -->
+            <form action="/rules/update" method="POST" id="rules-update-form" onsubmit="saveRulesLocally(event)" class="space-y-3.5">
+                <input type="hidden" name="ordered_rule_ids" id="ordered-rule-ids" value="${allocation_rules.map((r: any) => r.id).join(',')}">
+                <input type="hidden" name="deleted_rule_ids" id="deleted-rule-ids" value="">
+
+                <div id="rules-list-container" class="space-y-2.5 max-h-[46vh] overflow-y-auto no-scrollbar pr-1">
                     ${allocation_rules.map((r: any) => `
-                    <div class="p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2.5 transition">
+                    <div class="rule-row-card p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2.5 transition" data-rule-id="${r.id}">
                         <div class="flex items-center gap-2">
                             <!-- Emoji Icon -->
                             <input type="text" name="icon_${r.id}" value="${r.icon || '💰'}" class="w-10 p-2 text-center text-base bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold shrink-0">
                             
                             <!-- Bucket Name -->
-                            <input type="text" name="bucket_name_${r.id}" value="${r.bucket_name}" placeholder="Bucket Name" class="flex-1 p-2 text-xs font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white" required>
+                            <input type="text" name="bucket_name_${r.id}" value="${r.bucket_name}" placeholder="Enter custom option name..." class="flex-1 p-2 text-xs font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white" required>
                             
                             <!-- Percentage -->
                             <div class="flex items-center space-x-1 shrink-0">
@@ -3706,7 +4246,7 @@ export function renderFinanceDashboard(data: any): string {
                             </div>
 
                             <!-- Delete Button -->
-                            <button type="submit" formaction="/rules/delete/${r.id}" onclick="return confirm('Delete bucket &quot;${r.bucket_name}&quot;?');" title="Delete Bucket" class="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition shrink-0">
+                            <button type="button" onclick="removeRuleRow('${r.id}')" title="Remove Option" class="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition shrink-0">
                                 🗑️
                             </button>
                         </div>
@@ -3714,22 +4254,31 @@ export function renderFinanceDashboard(data: any): string {
                         <!-- Target Destination Selector -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-gray-200 dark:border-gray-700/60">
                             <div>
-                                <label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Bucket Type</label>
+                                <label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Option Category / Type</label>
                                 <select name="target_type_${r.id}" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300">
                                     <option value="ACCOUNT" ${r.target_type === 'ACCOUNT' ? 'selected' : ''}>🏦 Bank / MMF / Sacco Account</option>
                                     <option value="GOAL" ${r.target_type === 'GOAL' ? 'selected' : ''}>🎯 Savings Goal</option>
-                                    <option value="CASH" ${r.target_type === 'CASH' ? 'selected' : ''}>💵 Daily Cash / Living</option>
+                                    <option value="DEBT" ${r.target_type === 'DEBT' ? 'selected' : ''}>💳 Loan / Debt Repayment</option>
+                                    <option value="BILL" ${r.target_type === 'BILL' ? 'selected' : ''}>🧾 Recurring Bill Reserve</option>
+                                    <option value="CASH" ${r.target_type === 'CASH' ? 'selected' : ''}>💵 Daily Cash / Pocket Wallet</option>
+                                    <option value="CUSTOM" ${r.target_type === 'CUSTOM' ? 'selected' : ''}>✨ Custom Personal Option</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Destination Account / Goal</label>
+                                <label class="block text-[10px] font-semibold text-gray-400 mb-0.5">Linked Account / Goal / Loan (Optional)</label>
                                 <select name="target_id_${r.id}" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300">
-                                    <option value="">-- Smart Auto-Match --</option>
-                                    <optgroup label="Connected Accounts">
+                                    <option value="">-- Smart Auto-Match / General --</option>
+                                    <optgroup label="Connected Accounts (Bank / MMF / Sacco)">
                                         ${accounts.map((a: any) => `<option value="${a.id}" ${r.target_id === a.id ? 'selected' : ''}>${a.name} (${a.account_type || 'Account'})</option>`).join('')}
                                     </optgroup>
-                                    <optgroup label="Active Goals">
-                                        ${goals.map((g: any) => `<option value="${g.id}" ${r.target_id === g.id ? 'selected' : ''}>${g.title}</option>`).join('')}
+                                    <optgroup label="Active Savings Goals">
+                                        ${goals.map((g: any) => `<option value="${g.id}" ${r.target_id === g.id ? 'selected' : ''}>🎯 ${g.title}</option>`).join('')}
+                                    </optgroup>
+                                    <optgroup label="Loans &amp; Debts">
+                                        ${debts.map((d: any) => `<option value="${d.id}" ${r.target_id === d.id ? 'selected' : ''}>💳 ${d.lender_name || d.title || 'Loan'}</option>`).join('')}
+                                    </optgroup>
+                                    <optgroup label="Recurring Bills">
+                                        ${bills.map((b: any) => `<option value="${b.id}" ${r.target_id === b.id ? 'selected' : ''}>🧾 ${b.name || b.title || 'Bill'}</option>`).join('')}
                                     </optgroup>
                                 </select>
                             </div>
@@ -3737,64 +4286,74 @@ export function renderFinanceDashboard(data: any): string {
                     </div>`).join('')}
                 </div>
 
-                <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t dark:border-gray-800">
-                    <button type="submit" id="rules-save-btn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-2xl text-xs transition shadow-md active:scale-95 flex items-center justify-center gap-1.5">
-                        <span>💾 Save Split Rules & Percentages</span>
-                    </button>
-                    <button type="button" onclick="document.getElementById('add-rule-form-container').classList.toggle('hidden')" class="px-4 py-3 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold rounded-2xl text-xs transition active:scale-95 whitespace-nowrap">
-                        <span>➕ Add Bucket</span>
-                    </button>
-                </div>
-            </form>
-
-            <!-- Collapsible Add New Rule Form -->
-            <div id="add-rule-form-container" class="hidden p-4 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 space-y-3">
-                <div class="flex justify-between items-center">
-                    <h4 class="text-xs font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-wider">➕ Create New Allocation Bucket</h4>
-                    <button type="button" onclick="document.getElementById('add-rule-form-container').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-                </div>
-                <form action="/rules/create" method="POST" class="space-y-2.5">
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <!-- Inline Custom Option Builder (works either via "+ Append to List" OR directly when clicking Save) -->
+                <div id="add-rule-form-container" class="hidden p-3.5 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 space-y-2.5">
+                    <div class="flex justify-between items-center">
+                        <h4 class="text-xs font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-wider">➕ Build Your Own Custom Split Option</h4>
+                        <button type="button" onclick="document.getElementById('add-rule-form-container').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
                         <div class="sm:col-span-2">
-                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Bucket Name</label>
-                            <input type="text" name="bucket_name" placeholder="e.g. Emergency Fund or Tithe" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold" required>
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Icon</label>
+                            <input type="text" id="inline-new-icon" name="new_icon" value="✨" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold text-center">
                         </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Percentage %</label>
-                            <input type="number" step="any" min="0" max="100" name="percentage" value="10" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-center text-indigo-600 dark:text-indigo-400" required>
+                        <div class="sm:col-span-7">
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Your Option Name</label>
+                            <input type="text" id="inline-new-bucket-name" name="new_bucket_name" placeholder="e.g. Plot Fund, Mama Mboga, Bike Service, Tithe..." class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Split %</label>
+                            <input type="number" step="any" min="0" max="100" id="inline-new-percentage" name="new_percentage" value="10" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-center text-indigo-600 dark:text-indigo-400">
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
-                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Icon Emoji</label>
-                            <input type="text" name="icon" value="🛡️" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold text-center">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Bucket Type</label>
-                            <select name="target_type" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Option Category / Type</label>
+                            <select id="inline-new-target-type" name="new_target_type" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
+                                <option value="CUSTOM">✨ Custom Personal Option</option>
                                 <option value="ACCOUNT">🏦 Bank / MMF / Sacco</option>
                                 <option value="GOAL">🎯 Savings Goal</option>
+                                <option value="DEBT">💳 Loan / Debt Repayment</option>
+                                <option value="BILL">🧾 Recurring Bill Reserve</option>
                                 <option value="CASH">💵 Daily Living Cash</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Target Destination</label>
-                            <select name="target_id" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
-                                <option value="">-- Smart Auto-Match --</option>
+                            <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Link to Account / Goal / Loan (Optional)</label>
+                            <select id="inline-new-target-id" name="new_target_id" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
+                                <option value="">-- Smart Auto-Match / General --</option>
                                 <optgroup label="Accounts">
                                     ${accounts.map((a: any) => `<option value="${a.id}">${a.name}</option>`).join('')}
                                 </optgroup>
                                 <optgroup label="Goals">
-                                    ${goals.map((g: any) => `<option value="${g.id}">${g.title}</option>`).join('')}
+                                    ${goals.map((g: any) => `<option value="${g.id}">🎯 ${g.title}</option>`).join('')}
+                                </optgroup>
+                                <optgroup label="Loans &amp; Debts">
+                                    ${debts.map((d: any) => `<option value="${d.id}">💳 ${d.lender_name || d.title || 'Loan'}</option>`).join('')}
+                                </optgroup>
+                                <optgroup label="Recurring Bills">
+                                    ${bills.map((b: any) => `<option value="${b.id}">🧾 ${b.name || b.title || 'Bill'}</option>`).join('')}
                                 </optgroup>
                             </select>
                         </div>
                     </div>
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 shadow-xs">
-                        ➕ Add Bucket to Split Rules
+                    <button type="button" onclick="addInlineNewRuleToList()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 shadow-xs">
+                        ➕ Add This Option to List Above
                     </button>
-                </form>
-            </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t dark:border-gray-800">
+                    <button type="button" onclick="addCustomRuleRow('', '✨', 10, 'CUSTOM', '')" class="px-4 py-3 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold rounded-2xl text-xs transition active:scale-95 whitespace-nowrap">
+                        <span>➕ Add Another Option</span>
+                    </button>
+                    <button type="button" onclick="document.getElementById('add-rule-form-container').classList.toggle('hidden')" class="px-3.5 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-700 dark:text-gray-300 font-bold rounded-2xl text-xs transition active:scale-95 whitespace-nowrap">
+                        <span>🛠️ Custom Builder</span>
+                    </button>
+                    <button type="submit" id="rules-save-btn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-2xl text-xs transition shadow-md active:scale-95 flex items-center justify-center gap-1.5">
+                        <span>💾 Save All Split Options &amp; Percentages</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
