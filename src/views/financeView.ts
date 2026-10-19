@@ -1745,6 +1745,254 @@ export function renderFinanceDashboard(data: any): string {
             input.value = samples[type] || samples.single;
             parseMpesaClient();
         }
+
+        var _tesseractLoaded = false;
+        function loadTesseractJs() {
+            if (window.Tesseract) return Promise.resolve(window.Tesseract);
+            if (_tesseractLoaded) {
+                return new Promise(function(resolve, reject) {
+                    var checkInterval = setInterval(function() {
+                        if (window.Tesseract) {
+                            clearInterval(checkInterval);
+                            resolve(window.Tesseract);
+                        }
+                    }, 150);
+                    setTimeout(function() {
+                        clearInterval(checkInterval);
+                        if (window.Tesseract) resolve(window.Tesseract);
+                        else reject(new Error('OCR engine timed out loading'));
+                    }, 20000);
+                });
+            }
+            _tesseractLoaded = true;
+            return new Promise(function(resolve, reject) {
+                var script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+                script.async = true;
+                script.onload = function() {
+                    if (window.Tesseract) resolve(window.Tesseract);
+                    else reject(new Error('Tesseract not available'));
+                };
+                script.onerror = function() {
+                    _tesseractLoaded = false;
+                    reject(new Error('Failed to load OCR library. Check internet connection.'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        function preprocessScreenshotForOcr(file) {
+            return new Promise(function(resolve) {
+                var reader = new FileReader();
+                reader.onload = function(ev) {
+                    var img = new Image();
+                    img.onload = function() {
+                        try {
+                            var maxDim = 1800;
+                            var w = img.width;
+                            var h = img.height;
+                            if (w > maxDim || h > maxDim) {
+                                var scale = maxDim / Math.max(w, h);
+                                w = Math.round(w * scale);
+                                h = Math.round(h * scale);
+                            } else if (w < 800 && h < 800) {
+                                w = Math.round(w * 1.5);
+                                h = Math.round(h * 1.5);
+                            }
+                            var canvas = document.createElement('canvas');
+                            canvas.width = w;
+                            canvas.height = h;
+                            var ctx = canvas.getContext('2d');
+                            if (!ctx) {
+                                resolve({ processedUrl: ev.target.result, previewUrl: ev.target.result });
+                                return;
+                            }
+                            ctx.drawImage(img, 0, 0, w, h);
+                            var imgData = ctx.getImageData(0, 0, w, h);
+                            var d = imgData.data;
+
+                            var totalLum = 0;
+                            var sampleCount = 0;
+                            for (var i = 0; i < d.length; i += 16) {
+                                var lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                                totalLum += lum;
+                                sampleCount++;
+                            }
+                            var avgLum = sampleCount > 0 ? (totalLum / sampleCount) : 180;
+                            var isDarkMode = avgLum < 115;
+
+                            for (var j = 0; j < d.length; j += 4) {
+                                var gray = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+                                if (isDarkMode) {
+                                    gray = 255 - gray;
+                                }
+                                var contrasted = ((gray - 128) * 1.45) + 128;
+                                var finalVal = Math.max(0, Math.min(255, Math.round(contrasted)));
+                                d[j] = finalVal;
+                                d[j + 1] = finalVal;
+                                d[j + 2] = finalVal;
+                            }
+                            ctx.putImageData(imgData, 0, 0);
+                            resolve({
+                                processedUrl: canvas.toDataURL('image/png'),
+                                previewUrl: ev.target.result
+                            });
+                        } catch (err) {
+                            resolve({ processedUrl: ev.target.result, previewUrl: ev.target.result });
+                        }
+                    };
+                    img.onerror = function() {
+                        resolve({ processedUrl: ev.target.result, previewUrl: ev.target.result });
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function cleanOcrSmsText(rawText) {
+            if (!rawText) return '';
+            var text = String(rawText);
+            text = text.replace(/Conflrmed|Confinned|Confi\s*rmed|Confirned/gi, 'Confirmed');
+            text = text.replace(/M-PE5A|M\s*-\s*PESA/gi, 'M-PESA');
+            text = text.replace(/Ksh\s*[lI](\d)/g, 'Ksh1$1');
+            text = text.replace(/KES\s*[lI](\d)/gi, 'KES 1$1');
+            text = text.replace(/Ksh\s*(\d+)\s*,\s*(\d{3})/gi, 'Ksh$1,$2');
+            text = text.replace(/KES\s*(\d+)\s*,\s*(\d{3})/gi, 'KES $1,$2');
+            text = text.replace(/(\d)\s*\.\s*(\d{2})\b/g, '$1.$2');
+            var lines = text.split(/\r?\n/).map(function(l) { return l.trim(); }).filter(function(l) {
+                if (!l) return false;
+                if (/^\d{1,2}:\d{2}\s*(AM|PM)?$/i.test(l)) return false;
+                if (/^(4G|5G|LTE|VoLTE|Safaricom|M-PESA|Messages|Today|Yesterday)$/i.test(l)) return false;
+                return true;
+            });
+            return lines.join(' ').replace(/\s{2,}/g, ' ').trim();
+        }
+
+        function setSmsInputMode(mode) {
+            var tabPaste = document.getElementById('sms-mode-btn-paste');
+            var tabScan = document.getElementById('sms-mode-btn-scan');
+            var scanPanel = document.getElementById('mpesa-screenshot-scanner-panel');
+            if (mode === 'SCAN') {
+                if (scanPanel) scanPanel.classList.remove('hidden');
+                if (tabScan) tabScan.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold transition bg-emerald-600 text-white shadow-xs flex items-center gap-1.5';
+                if (tabPaste) tabPaste.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5';
+            } else {
+                if (scanPanel) scanPanel.classList.add('hidden');
+                if (tabPaste) tabPaste.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold transition bg-emerald-600 text-white shadow-xs flex items-center gap-1.5';
+                if (tabScan) tabScan.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5';
+                var textarea = document.getElementById('mpesa-batch-input');
+                if (textarea) textarea.focus();
+            }
+        }
+
+        async function handleMpesaScreenshots(fileList) {
+            if (!fileList || fileList.length === 0) return;
+            var files = Array.from(fileList).filter(function(f) {
+                return f && f.type && f.type.indexOf('image/') === 0;
+            });
+            if (files.length === 0) {
+                alert('Please select or snap a valid screenshot image (PNG, JPG, WebP).');
+                return;
+            }
+
+            setSmsInputMode('SCAN');
+            var statusBox = document.getElementById('mpesa-ocr-status-box');
+            var statusText = document.getElementById('mpesa-ocr-status-text');
+            var progressBar = document.getElementById('mpesa-ocr-progress-bar');
+            var thumbsContainer = document.getElementById('mpesa-ocr-thumbs');
+            var textarea = document.getElementById('mpesa-batch-input');
+
+            if (statusBox) statusBox.classList.remove('hidden');
+            if (thumbsContainer) {
+                thumbsContainer.innerHTML = '';
+                thumbsContainer.classList.remove('hidden');
+            }
+            if (statusText) statusText.innerText = '⏳ Loading smart screenshot OCR scanner...';
+            if (progressBar) progressBar.style.width = '10%';
+
+            try {
+                var Tesseract = await loadTesseractJs();
+                var extractedChunks = [];
+
+                for (var i = 0; i < files.length; i++) {
+                    var f = files[i];
+                    if (statusText) {
+                        statusText.innerText = '📸 Pre-processing screenshot ' + (i + 1) + ' of ' + files.length + ' (' + f.name + ')...';
+                    }
+                    var prep = await preprocessScreenshotForOcr(f);
+
+                    if (thumbsContainer && prep.previewUrl) {
+                        var thumbWrap = document.createElement('div');
+                        thumbWrap.className = 'relative w-14 h-14 rounded-lg overflow-hidden border border-emerald-300 dark:border-emerald-700 shadow-2xs shrink-0 bg-gray-900';
+                        thumbWrap.innerHTML = '<img src="' + prep.previewUrl + '" class="w-full h-full object-cover" alt="SMS Screenshot">';
+                        thumbsContainer.appendChild(thumbWrap);
+                    }
+
+                    var result = await Tesseract.recognize(prep.processedUrl, 'eng', {
+                        logger: function(m) {
+                            if (m && m.status === 'recognizing text' && typeof m.progress === 'number') {
+                                var overallPct = Math.round(((i + m.progress) / files.length) * 100);
+                                if (progressBar) progressBar.style.width = Math.max(15, overallPct) + '%';
+                                if (statusText) {
+                                    statusText.innerText = '🔍 Reading SMS screenshot ' + (i + 1) + ' of ' + files.length + '... (' + Math.round(m.progress * 100) + '%)';
+                                }
+                            }
+                        }
+                    });
+
+                    var rawOcr = (result && result.data && result.data.text) ? result.data.text : '';
+                    var cleaned = cleanOcrSmsText(rawOcr);
+                    if (cleaned) {
+                        extractedChunks.push(cleaned);
+                    }
+                }
+
+                if (progressBar) progressBar.style.width = '100%';
+                if (extractedChunks.length > 0) {
+                    var nl = String.fromCharCode(10);
+                    var combined = extractedChunks.join(nl + nl);
+                    if (textarea) {
+                        var existing = textarea.value.trim();
+                        textarea.value = existing ? (existing + nl + nl + combined) : combined;
+                    }
+                    if (statusText) {
+                        statusText.innerText = '✅ Scanned ' + files.length + ' screenshot' + (files.length === 1 ? '' : 's') + '! Extracted text loaded below — reviewing transactions...';
+                    }
+                    await parseMpesaClient();
+                } else {
+                    if (statusText) {
+                        statusText.innerText = '⚠️ Could not detect clear SMS text in the image. Try cropping closer to the message or paste text below.';
+                    }
+                }
+            } catch (err) {
+                console.warn('Screenshot OCR error:', err);
+                if (statusText) {
+                    statusText.innerText = '⚠️ Scanner could not process screenshot (' + (err && err.message ? err.message : 'OCR error') + '). You can still copy & paste text below.';
+                }
+            }
+        }
+
+        function handleMpesaDrop(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            var dropZone = document.getElementById('mpesa-drop-zone');
+            if (dropZone) dropZone.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-50/80');
+            if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+                handleMpesaScreenshots(ev.dataTransfer.files);
+            }
+        }
+
+        function handleMpesaPasteEvent(ev) {
+            if (!ev.clipboardData || !ev.clipboardData.files || ev.clipboardData.files.length === 0) return;
+            var imgFiles = Array.from(ev.clipboardData.files).filter(function(f) {
+                return f && f.type && f.type.indexOf('image/') === 0;
+            });
+            if (imgFiles.length > 0) {
+                ev.preventDefault();
+                handleMpesaScreenshots(imgFiles);
+            }
+        }
     </script>
 </head>
 <body class="bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 min-h-screen antialiased flex flex-col justify-between font-sans">
@@ -2718,42 +2966,103 @@ export function renderFinanceDashboard(data: any): string {
                         📲
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span>Smart M-Pesa & Bank SMS Auto-Parser</span>
-                            <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">M-Pesa • Equity • KCB • Co-op</span>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                            <span>Smart M-Pesa &amp; Bank SMS Auto-Parser</span>
+                            <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">📋 Copy-Paste + 📸 Screenshot OCR</span>
                         </h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Paste single or multiple M-Pesa or Kenyan Bank SMS messages directly from your clipboard to extract transactions instantly!</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Upload or snap a screenshot of your M-Pesa / Bank SMS (Phone &amp; PC) <strong>OR</strong> copy &amp; paste text directly — win-win!</p>
                     </div>
                 </div>
 
+                <!-- Dual Input Mode Switcher + Quick Samples -->
                 <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex items-center p-1 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                        <button type="button" id="sms-mode-btn-paste" onclick="setSmsInputMode('PASTE')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition bg-emerald-600 text-white shadow-xs flex items-center gap-1.5">
+                            <span>📋 Copy &amp; Paste</span>
+                        </button>
+                        <button type="button" id="sms-mode-btn-scan" onclick="setSmsInputMode('SCAN')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5">
+                            <span>📸 Scan Screenshot</span>
+                        </button>
+                    </div>
                     <button type="button" onclick="pasteSampleMpesa('single')" class="px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-lg transition active:scale-95">
-                        📋 Sample Received
+                        📋 Sample SMS
                     </button>
                     <button type="button" onclick="pasteSampleMpesa('bank')" class="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg transition active:scale-95 border border-indigo-200 dark:border-indigo-800">
-                        🏦 Sample Bank SMS (Equity / KCB)
-                    </button>
-                    <button type="button" onclick="pasteSampleMpesa('ev')" class="px-2.5 py-1.5 bg-cyan-50 dark:bg-cyan-950/50 hover:bg-cyan-100 text-cyan-700 dark:text-cyan-300 text-xs font-semibold rounded-lg transition active:scale-95 border border-cyan-200 dark:border-cyan-800">
-                        ⚡ Sample EV Swap (Spiro)
+                        🏦 Bank SMS
                     </button>
                     <button type="button" onclick="pasteSampleMpesa('batch')" class="px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-lg transition active:scale-95">
-                        📋 Sample Batch (4 SMS)
+                        📋 Batch (4 SMS)
                     </button>
                 </div>
             </div>
 
             <form action="/finance/mpesa/import" method="POST" id="mpesa-import-form" class="space-y-4">
                 <input type="hidden" id="mpesa-reviewed-json" name="reviewed_transactions" value="">
+
+                <!-- Hidden File Inputs for Phone Gallery/PC & Phone Camera -->
+                <input type="file" id="mpesa-screenshot-input" accept="image/*" multiple class="hidden" onchange="handleMpesaScreenshots(this.files)">
+                <input type="file" id="mpesa-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleMpesaScreenshots(this.files)">
+
+                <!-- 📸 Option B: Screenshot Scanner / Drag-and-Drop Box (Phone & PC) -->
+                <div id="mpesa-screenshot-scanner-panel" class="hidden space-y-3">
+                    <div id="mpesa-drop-zone"
+                        ondragover="event.preventDefault(); this.classList.add('ring-2', 'ring-emerald-500', 'bg-emerald-50/80');"
+                        ondragleave="this.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-50/80');"
+                        ondrop="handleMpesaDrop(event)"
+                        class="p-4 sm:p-5 rounded-2xl border-2 border-dashed border-emerald-400/70 dark:border-emerald-700/80 bg-emerald-50/40 dark:bg-emerald-950/20 text-center space-y-3 transition">
+                        <div class="flex flex-col items-center space-y-1">
+                            <span class="text-3xl">📸</span>
+                            <h3 class="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-white">Upload or Snap M-Pesa / Bank SMS Screenshot(s)</h3>
+                            <p class="text-[11px] text-gray-500 dark:text-gray-400 max-w-lg">
+                                Works with <strong>Phone Gallery</strong> (1 or multiple screenshots), <strong>Phone Camera</strong>, <strong>PC Drag &amp; Drop</strong>, or <strong>Ctrl+V</strong> paste. Supports both Dark Mode &amp; Light Mode screenshots!
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                            <button type="button" onclick="document.getElementById('mpesa-screenshot-input')?.click()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                                <span>🖼️ Upload Screenshot(s) (Phone / PC)</span>
+                            </button>
+                            <button type="button" onclick="document.getElementById('mpesa-camera-input')?.click()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                                <span>📷 Snap Photo with Camera</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- OCR Progress & Thumbnail Strip -->
+                    <div id="mpesa-ocr-status-box" class="hidden p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-emerald-200 dark:border-emerald-900/60 space-y-2">
+                        <div class="flex items-center justify-between gap-2 text-xs">
+                            <span id="mpesa-ocr-status-text" class="font-bold text-emerald-700 dark:text-emerald-300">⏳ Preparing screenshot scanner...</span>
+                        </div>
+                        <div class="w-full h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                            <div id="mpesa-ocr-progress-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <div id="mpesa-ocr-thumbs" class="hidden flex items-center gap-2 overflow-x-auto pt-1"></div>
+                    </div>
+                </div>
+
+                <!-- 📋 Option A + Hybrid Editable Textarea (Always Available!) -->
                 <div class="space-y-1.5">
-                    <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">
-                        Paste M-Pesa or Bank SMS text (Single or Multiple messages):
-                    </label>
-                    <textarea id="mpesa-batch-input" name="raw_sms" rows="3" placeholder="QA12345678 Confirmed. Ksh1,500.00 received from JOHN DOE...&#10;Dear Customer, your A/C has been credited with KES 4,500.00 from BOLT...&#10;Confirmed. Ksh 5,000.00 received from UBER..." class="w-full p-3 font-mono text-xs bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500" required></textarea>
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <label for="mpesa-batch-input" class="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                            📋 Paste SMS Text OR Review Scanned Screenshot Text:
+                        </label>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="document.getElementById('mpesa-screenshot-input')?.click()" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg text-[11px] font-extrabold transition flex items-center gap-1 active:scale-95">
+                                <span>📸 Upload Screenshot</span>
+                            </button>
+                            <button type="button" onclick="document.getElementById('mpesa-camera-input')?.click()" class="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 rounded-lg text-[11px] font-bold transition flex items-center gap-1 active:scale-95 sm:hidden">
+                                <span>📷 Camera</span>
+                            </button>
+                            <button type="button" onclick="var el=document.getElementById('mpesa-batch-input'); if(el){el.value='';}" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-500 dark:text-gray-400 rounded-lg text-[10px] font-semibold transition">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="mpesa-batch-input" name="raw_sms" rows="3" onpaste="handleMpesaPasteEvent(event)" placeholder="Option 1: Paste single or multiple M-Pesa / Bank SMS messages here...&#10;Option 2: Tap '📸 Upload Screenshot' above (or press Ctrl+V with a copied screenshot) to auto-read SMS from an image!" class="w-full p-3 font-mono text-xs bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500" required></textarea>
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
                     <button type="button" onclick="parseMpesaClient()" class="w-full sm:w-auto px-4 py-2 bg-gray-900 dark:bg-gray-800 hover:bg-black dark:hover:bg-gray-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs">
-                        <span>🔍 Extract & Review Transactions</span>
+                        <span>🔍 Extract &amp; Review Transactions</span>
                     </button>
 
                     <div class="flex items-center gap-2 w-full sm:w-auto">

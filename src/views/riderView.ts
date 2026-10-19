@@ -1094,6 +1094,363 @@ export function renderRiderDashboard(data: any): string {
         }
 
         // ==========================================
+        // 📄 DIGITAL GLOVEBOX & DOCUMENT SCANNER (PHONE & PC)
+        // ==========================================
+        var _gloveboxTesseractLoaded = false;
+        function loadGloveboxTesseract() {
+            if (window.Tesseract) return Promise.resolve(window.Tesseract);
+            if (_gloveboxTesseractLoaded) {
+                return new Promise(function(resolve, reject) {
+                    var interval = setInterval(function() {
+                        if (window.Tesseract) {
+                            clearInterval(interval);
+                            resolve(window.Tesseract);
+                        }
+                    }, 150);
+                    setTimeout(function() {
+                        clearInterval(interval);
+                        if (window.Tesseract) resolve(window.Tesseract);
+                        else reject(new Error('OCR engine timed out'));
+                    }, 20000);
+                });
+            }
+            _gloveboxTesseractLoaded = true;
+            return new Promise(function(resolve, reject) {
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+                s.async = true;
+                s.onload = function() {
+                    if (window.Tesseract) resolve(window.Tesseract);
+                    else reject(new Error('Tesseract failed'));
+                };
+                s.onerror = function() {
+                    _gloveboxTesseractLoaded = false;
+                    reject(new Error('Network error loading OCR'));
+                };
+                document.head.appendChild(s);
+            });
+        }
+
+        function getDocScansStore() {
+            try {
+                var raw = localStorage.getItem('finatrack_doc_scans_v1');
+                return raw ? JSON.parse(raw) : {};
+            } catch(e) {
+                return {};
+            }
+        }
+
+        function saveDocScansStore(store) {
+            try {
+                localStorage.setItem('finatrack_doc_scans_v1', JSON.stringify(store));
+            } catch(e) {
+                console.warn('Could not save to localStorage:', e);
+            }
+        }
+
+        function normalizeDocKey(title, docId) {
+            var base = (title || '').toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40);
+            return docId ? (docId + '_' + base) : ('doc_' + base);
+        }
+
+        var _pendingNewDocScan = null;
+
+        function compressDocumentFile(file) {
+            return new Promise(function(resolve) {
+                if (file.type === 'application/pdf') {
+                    var r = new FileReader();
+                    r.onload = function(e) {
+                        resolve({
+                            dataUri: e.target.result,
+                            type: 'pdf',
+                            name: file.name,
+                            sizeKb: Math.round(file.size / 1024)
+                        });
+                    };
+                    r.readAsDataURL(file);
+                    return;
+                }
+
+                var reader = new FileReader();
+                reader.onload = function(ev) {
+                    var img = new Image();
+                    img.onload = function() {
+                        try {
+                            var maxW = 1200;
+                            var maxH = 1600;
+                            var w = img.width;
+                            var h = img.height;
+                            if (w > maxW || h > maxH) {
+                                var ratio = Math.min(maxW / w, maxH / h);
+                                w = Math.round(w * ratio);
+                                h = Math.round(h * ratio);
+                            }
+                            var canvas = document.createElement('canvas');
+                            canvas.width = w;
+                            canvas.height = h;
+                            var ctx = canvas.getContext('2d');
+                            if (!ctx) {
+                                resolve({ dataUri: ev.target.result, type: 'image', name: file.name, sizeKb: Math.round(file.size / 1024) });
+                                return;
+                            }
+                            ctx.drawImage(img, 0, 0, w, h);
+                            var compressedUri = canvas.toDataURL('image/jpeg', 0.82);
+                            resolve({
+                                dataUri: compressedUri,
+                                type: 'image',
+                                name: file.name,
+                                sizeKb: Math.round(compressedUri.length * 0.75 / 1024)
+                            });
+                        } catch(e) {
+                            resolve({ dataUri: ev.target.result, type: 'image', name: file.name, sizeKb: Math.round(file.size / 1024) });
+                        }
+                    };
+                    img.onerror = function() {
+                        resolve({ dataUri: ev.target.result, type: 'image', name: file.name, sizeKb: Math.round(file.size / 1024) });
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function handleNewDocScanSelect(file) {
+            if (!file) return;
+            var previewBox = document.getElementById('new-doc-scan-preview-box');
+            var thumbImg = document.getElementById('new-doc-scan-thumb');
+            var metaText = document.getElementById('new-doc-scan-meta');
+            var ocrStatus = document.getElementById('new-doc-scan-ocr-status');
+
+            if (previewBox) previewBox.classList.remove('hidden');
+            if (metaText) metaText.innerText = 'Compressing ' + file.name + '...';
+
+            var res = await compressDocumentFile(file);
+            _pendingNewDocScan = res;
+
+            if (thumbImg) {
+                if (res.type === 'pdf') {
+                    thumbImg.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="%23e11d48" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+                } else {
+                    thumbImg.src = res.dataUri;
+                }
+            }
+            if (metaText) {
+                metaText.innerHTML = '<strong>' + res.name + '</strong> (' + res.sizeKb + ' KB) • Ready to attach';
+            }
+            if (ocrStatus) {
+                ocrStatus.innerHTML = '<button type="button" onclick="runOcrOnPendingDocScan()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs active:scale-95">🔍 Auto-Read Expiry &amp; Ref # from Document</button>';
+            }
+        }
+
+        async function runOcrOnPendingDocScan() {
+            if (!_pendingNewDocScan || _pendingNewDocScan.type === 'pdf') {
+                alert('OCR text extraction works best on photo/image scans. If using PDF, enter details manually.');
+                return;
+            }
+            var ocrStatus = document.getElementById('new-doc-scan-ocr-status');
+            if (ocrStatus) {
+                ocrStatus.innerHTML = '<span class="text-xs font-bold text-amber-600 dark:text-amber-400 animate-pulse">⏳ Scanning document for Expiry Date &amp; Reference #...</span>';
+            }
+            try {
+                var Tesseract = await loadGloveboxTesseract();
+                var result = await Tesseract.recognize(_pendingNewDocScan.dataUri, 'eng');
+                var text = (result && result.data && result.data.text) ? result.data.text : '';
+
+                // Extract dates: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, or DD Month YYYY
+                var datePatterns = [
+                    /\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/,
+                    /\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/,
+                    /\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(20\d{2})\b/i
+                ];
+
+                var foundExpiry = null;
+                var expiryInput = document.getElementById('new-doc-expiry-input');
+                var notesInput = document.getElementById('new-doc-notes-input');
+
+                // Search for expiry date
+                for (var p = 0; p < datePatterns.length; p++) {
+                    var m = text.match(datePatterns[p]);
+                    if (m) {
+                        try {
+                            if (p === 0) {
+                                var day = ('0' + m[1]).slice(-2);
+                                var mo = ('0' + m[2]).slice(-2);
+                                var yr = m[3];
+                                foundExpiry = yr + '-' + mo + '-' + day;
+                            } else if (p === 1) {
+                                foundExpiry = m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+                            } else if (p === 2) {
+                                var dObj = new Date(m[0]);
+                                if (!isNaN(dObj.getTime())) {
+                                    foundExpiry = dObj.toISOString().slice(0, 10);
+                                }
+                            }
+                            if (foundExpiry) break;
+                        } catch(e) {}
+                    }
+                }
+
+                // Reference / Policy # check (e.g. PCC-..., POL-..., DL..., TIMS...)
+                var refMatch = text.match(/\b(PCC[A-Z0-9\-]+|POL[\-0-9A-Z]+|DL[0-9A-Z]+|NTSA[0-9A-Z]+|PIN[A-Z0-9]+)\b/i);
+
+                if (foundExpiry && expiryInput) {
+                    expiryInput.value = foundExpiry;
+                }
+                if (refMatch && notesInput && !notesInput.value) {
+                    notesInput.value = 'Ref: ' + refMatch[0];
+                }
+
+                if (ocrStatus) {
+                    ocrStatus.innerHTML = '<span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">✅ Scanned! ' + (foundExpiry ? 'Found Expiry: ' + foundExpiry : 'Please verify expiry date.') + (refMatch ? ' (' + refMatch[0] + ')' : '') + '</span>';
+                }
+            } catch(err) {
+                console.warn('OCR doc error:', err);
+                if (ocrStatus) {
+                    ocrStatus.innerHTML = '<span class="text-xs text-rose-500 font-semibold">⚠️ Could not auto-read text. Image is still attached!</span>';
+                }
+            }
+        }
+
+        function savePendingDocScanOnCreate() {
+            if (!_pendingNewDocScan) return true;
+            try {
+                var title = document.getElementById('new-doc-title-input')?.value || 'Document';
+                var key = normalizeDocKey(title, null);
+                var store = getDocScansStore();
+                store[key] = {
+                    title: title,
+                    dataUri: _pendingNewDocScan.dataUri,
+                    type: _pendingNewDocScan.type,
+                    name: _pendingNewDocScan.name,
+                    sizeKb: _pendingNewDocScan.sizeKb,
+                    attachedAt: new Date().toISOString()
+                };
+                saveDocScansStore(store);
+            } catch(e) {
+                console.warn('Error saving pending doc scan:', e);
+            }
+            return true;
+        }
+
+        function attachScanToExistingDoc(docId, title, file) {
+            if (!file) return;
+            compressDocumentFile(file).then(function(res) {
+                var store = getDocScansStore();
+                var key = normalizeDocKey(title, docId);
+                store[key] = {
+                    docId: docId,
+                    title: title,
+                    dataUri: res.dataUri,
+                    type: res.type,
+                    name: res.name,
+                    sizeKb: res.sizeKb,
+                    attachedAt: new Date().toISOString()
+                };
+                saveDocScansStore(store);
+                refreshDocCardScanBadges();
+                showGloveboxModal(docId, title);
+            });
+        }
+
+        function refreshDocCardScanBadges() {
+            var store = getDocScansStore();
+            document.querySelectorAll('[data-comp-doc-id]').forEach(function(card) {
+                var id = card.getAttribute('data-comp-doc-id');
+                var title = card.getAttribute('data-comp-doc-title');
+                var keyWithId = normalizeDocKey(title, id);
+                var keyNoId = normalizeDocKey(title, null);
+                var item = store[keyWithId] || store[keyNoId];
+
+                var badgeEl = card.querySelector('.glovebox-status-badge');
+                var viewBtn = card.querySelector('.glovebox-view-btn');
+
+                if (item && item.dataUri) {
+                    if (badgeEl) {
+                        badgeEl.className = 'glovebox-status-badge text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1';
+                        badgeEl.innerHTML = '<span>📎</span> Scanned Copy Ready';
+                    }
+                    if (viewBtn) {
+                        viewBtn.classList.remove('hidden');
+                    }
+                } else {
+                    if (badgeEl) {
+                        badgeEl.className = 'glovebox-status-badge text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+                        badgeEl.innerText = '📷 No Scan Attached';
+                    }
+                    if (viewBtn) {
+                        viewBtn.classList.add('hidden');
+                    }
+                }
+            });
+        }
+
+        function showGloveboxModal(docId, title) {
+            var store = getDocScansStore();
+            var keyWithId = normalizeDocKey(title, docId);
+            var keyNoId = normalizeDocKey(title, null);
+            var item = store[keyWithId] || store[keyNoId];
+
+            var modal = document.getElementById('doc-glovebox-modal');
+            var modalTitle = document.getElementById('glovebox-modal-title');
+            var modalViewer = document.getElementById('glovebox-modal-viewer');
+            var downloadBtn = document.getElementById('glovebox-download-btn');
+            var deleteBtn = document.getElementById('glovebox-delete-scan-btn');
+
+            if (!modal) return;
+            if (modalTitle) modalTitle.innerText = title;
+
+            if (item && item.dataUri) {
+                if (modalViewer) {
+                    if (item.type === 'pdf') {
+                        modalViewer.innerHTML = '<iframe src="' + item.dataUri + '" class="w-full h-[65vh] rounded-xl border border-gray-700" title="' + title + '"></iframe>';
+                    } else {
+                        modalViewer.innerHTML = '<div class="max-h-[68vh] overflow-auto flex items-center justify-center p-2 bg-slate-950 rounded-xl border border-gray-800">' +
+                            '<img src="' + item.dataUri + '" alt="' + title + '" class="max-w-full max-h-[65vh] object-contain rounded-lg shadow-lg">' +
+                            '</div>';
+                    }
+                }
+                if (downloadBtn) {
+                    downloadBtn.href = item.dataUri;
+                    downloadBtn.download = (title.replace(/[^a-z0-9]/gi, '_') || 'document') + (item.type === 'pdf' ? '.pdf' : '.jpg');
+                    downloadBtn.classList.remove('hidden');
+                }
+                if (deleteBtn) {
+                    deleteBtn.onclick = function() {
+                        if (confirm('Remove scanned copy for ' + title + '?')) {
+                            delete store[keyWithId];
+                            delete store[keyNoId];
+                            saveDocScansStore(store);
+                            refreshDocCardScanBadges();
+                            modal.classList.add('hidden');
+                        }
+                    };
+                    deleteBtn.classList.remove('hidden');
+                }
+            } else {
+                if (modalViewer) {
+                    modalViewer.innerHTML = '<div class="p-8 text-center space-y-3 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">' +
+                        '<span class="text-4xl">📷</span>' +
+                        '<h4 class="font-bold text-gray-800 dark:text-gray-200">No Scanned Copy Attached Yet</h4>' +
+                        '<p class="text-xs text-gray-500 dark:text-gray-400">Snap a photo with your phone camera or upload a PDF/Image below.</p>' +
+                        '<div class="flex justify-center gap-2 pt-2">' +
+                        '<button type="button" onclick="document.getElementById(\\'doc-card-file-input-' + docId + '\\')?.click()" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition shadow-xs">📷 Scan / Upload Now</button>' +
+                        '</div>' +
+                        '</div>';
+                }
+                if (downloadBtn) downloadBtn.classList.add('hidden');
+                if (deleteBtn) deleteBtn.classList.add('hidden');
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshDocCardScanBadges();
+        });
+        setTimeout(refreshDocCardScanBadges, 800);
+
+
+        // ==========================================
         // ⚡ DYNAMIC EV VS PETROL ADAPTATION ENGINE
         // ==========================================
         function setPowerType(type) {
@@ -2519,14 +2876,49 @@ export function renderRiderDashboard(data: any): string {
             </div>
 
             <!-- ➕ Add New Statutory / Personal Document Form -->
-            <div id="new-comp-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-amber-200 dark:border-amber-900 shadow-md space-y-3">
+            <div id="new-comp-form-container" class="hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border border-amber-200 dark:border-amber-900 shadow-md space-y-4">
                 <div class="flex justify-between items-center border-b dark:border-gray-800 pb-2">
                     <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <span>➕ Register Driver, Personal or Vehicle Document</span>
                     </h3>
                     <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
-                <form action="/rider/compliance/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+
+                <!-- 📷 Scan or Upload Document Copy (Phone & PC) -->
+                <div class="p-3.5 rounded-xl border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/40 dark:bg-amber-950/20 space-y-2.5">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <span class="text-xs font-black text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                                <span>📄</span> Scan or Upload Document Copy (Digital Glovebox)
+                            </span>
+                            <p class="text-[11px] text-gray-500 dark:text-gray-400">Attach photo (Camera/Gallery) or PDF (e.g. Good Conduct, Insurance, DL) so you can pull it up roadside in 1 tap!</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input type="file" id="new-doc-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleNewDocScanSelect(this.files[0])">
+                            <input type="file" id="new-doc-file-input" accept="image/*,application/pdf" class="hidden" onchange="handleNewDocScanSelect(this.files[0])">
+                            <button type="button" onclick="document.getElementById('new-doc-camera-input')?.click()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1 active:scale-95">
+                                <span>📷 Snap with Camera</span>
+                            </button>
+                            <button type="button" onclick="document.getElementById('new-doc-file-input')?.click()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl text-xs font-bold transition border border-gray-300 dark:border-gray-700 flex items-center gap-1 active:scale-95">
+                                <span>📁 Upload File / PDF</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Attached Scan Thumbnail & OCR Trigger -->
+                    <div id="new-doc-scan-preview-box" class="hidden flex items-center justify-between gap-3 p-2 bg-white dark:bg-gray-900 rounded-lg border border-amber-200 dark:border-amber-900/60 text-xs">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <img id="new-doc-scan-thumb" src="" alt="Scan Thumbnail" class="w-10 h-10 object-cover rounded-md border border-gray-200 dark:border-gray-700 bg-gray-900 shrink-0">
+                            <div class="min-w-0">
+                                <p id="new-doc-scan-meta" class="font-bold text-gray-900 dark:text-white truncate">Attached</p>
+                                <div id="new-doc-scan-ocr-status" class="mt-0.5"></div>
+                            </div>
+                        </div>
+                        <button type="button" onclick="_pendingNewDocScan=null; document.getElementById('new-doc-scan-preview-box')?.classList.add('hidden');" class="text-rose-500 hover:text-rose-700 text-xs font-bold p-1">✕</button>
+                    </div>
+                </div>
+
+                <form action="/rider/compliance/create" method="POST" onsubmit="savePendingDocScanOnCreate()" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div class="sm:col-span-2 lg:col-span-1">
                         <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Document Preset / Category</label>
                         <select id="new-doc-category-select" onchange="onDocTypePresetChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-xs font-semibold cursor-pointer">
@@ -2659,8 +3051,10 @@ export function renderRiderDashboard(data: any): string {
                         typeBadgeClass = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
                     }
 
+                    const safeTitle = (c.title || '').replace(/'/g, "\\'");
+
                     return `
-                    <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border ${isUrgent ? 'border-rose-300 dark:border-rose-900 shadow-sm' : (isSoon ? 'border-amber-300 dark:border-amber-900/60' : 'border-gray-200 dark:border-gray-800')} space-y-3 flex flex-col justify-between shadow-xs">
+                    <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border ${isUrgent ? 'border-rose-300 dark:border-rose-900 shadow-sm' : (isSoon ? 'border-amber-300 dark:border-amber-900/60' : 'border-gray-200 dark:border-gray-800')} space-y-3 flex flex-col justify-between shadow-xs" data-comp-doc-id="${c.id}" data-comp-doc-title="${c.title}">
                         <div class="space-y-2.5">
                             <div class="flex justify-between items-start">
                                 <div class="flex items-center space-x-2.5">
@@ -2689,6 +3083,23 @@ export function renderRiderDashboard(data: any): string {
                                     <span class="inline-block px-2.5 py-1 rounded-lg text-xs ${badgeColor}">
                                         ${diff.label}
                                     </span>
+                                </div>
+                            </div>
+
+                            <!-- 📄 Digital Glovebox Status Bar -->
+                            <div class="flex items-center justify-between p-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 text-xs">
+                                <span class="glovebox-status-badge text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                    📷 No Scan Attached
+                                </span>
+                                <div class="flex items-center gap-1">
+                                    <input type="file" id="doc-card-file-input-${c.id}" accept="image/*,application/pdf" class="hidden" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this.files[0])">
+                                    <input type="file" id="doc-card-cam-input-${c.id}" accept="image/*" capture="environment" class="hidden" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this.files[0])">
+                                    <button type="button" onclick="showGloveboxModal('${c.id}', '${safeTitle}')" class="glovebox-view-btn hidden px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition active:scale-95 shadow-2xs">
+                                        👁️ View Scan
+                                    </button>
+                                    <button type="button" onclick="document.getElementById('doc-card-file-input-${c.id}')?.click()" class="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-800 dark:text-amber-200 rounded-lg text-[10px] font-bold transition active:scale-95">
+                                        📷 Attach
+                                    </button>
                                 </div>
                             </div>
 
@@ -2934,6 +3345,43 @@ export function renderRiderDashboard(data: any): string {
         </div>
 
     </main>
+
+    <!-- 📄 Digital Glovebox Lightbox Modal (Full-Screen Roadside Document Viewer) -->
+    <div id="doc-glovebox-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-5 overflow-y-auto">
+        <div class="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 max-w-2xl w-full shadow-2xl border border-gray-200 dark:border-gray-800 space-y-4 my-auto">
+            <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3 gap-2">
+                <div class="flex items-center space-x-2.5 min-w-0">
+                    <span class="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl shrink-0">📄</span>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">Digital Glovebox</span>
+                        </div>
+                        <h3 id="glovebox-modal-title" class="font-extrabold text-gray-900 dark:text-white text-base truncate">Document Copy</h3>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <a id="glovebox-download-btn" href="#" download="document.jpg" class="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition flex items-center gap-1 active:scale-95 border border-indigo-200 dark:border-indigo-800">
+                        <span>📥 Download</span>
+                    </a>
+                    <button type="button" id="glovebox-delete-scan-btn" class="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950 text-xs transition" title="Remove Scan">
+                        🗑️
+                    </button>
+                    <button type="button" onclick="document.getElementById('doc-glovebox-modal')?.classList.add('hidden')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center text-gray-500 hover:text-gray-900 dark:hover:text-white text-sm transition">✕</button>
+                </div>
+            </div>
+
+            <div id="glovebox-modal-viewer" class="w-full">
+                <!-- Injected dynamically by showGloveboxModal -->
+            </div>
+
+            <div class="flex justify-between items-center pt-2 border-t dark:border-gray-800 text-xs text-gray-500">
+                <span>Finatrack Roadside Digital Glovebox 🇰🇪</span>
+                <button type="button" onclick="document.getElementById('doc-glovebox-modal')?.classList.add('hidden')" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold rounded-xl active:scale-95">
+                    Close Viewer
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Mobile PWA Install Floating Banner -->
     <div id="pwa-bottom-banner" class="pwa-install-trigger hidden fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-50 bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border border-gray-700/60 flex items-center justify-between gap-3 transition-all duration-300">
