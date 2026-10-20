@@ -12,7 +12,7 @@ exportRoutes.get('/finance/export/csv', async (c) => {
     txQuery = txQuery.eq('user_id', userId);
     accQuery = accQuery.eq('user_id', userId);
   } else {
-    return c.text('Please log in to export your financial data.', 401);
+    return c.redirect('/login?toast=Please+log+in+to+export+your+financial+data');
   }
 
   const { data: txs } = await txQuery;
@@ -50,7 +50,7 @@ exportRoutes.get('/rider/export/csv', async (c) => {
     logQuery = logQuery.eq('user_id', userId);
     bikeQuery = bikeQuery.eq('user_id', userId);
   } else {
-    return c.text('Please log in to export your shift logs.', 401);
+    return c.redirect('/login?toast=Please+log+in+to+export+your+shift+logs');
   }
 
   const { data: logs } = await logQuery;

@@ -963,9 +963,11 @@ export function renderFinanceDashboard(data: any): string {
                 if (debtCurrentPage <= 1) {
                     prevBtn.disabled = true;
                     prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                    prevBtn.classList.remove('cursor-pointer', 'active:scale-95');
                 } else {
                     prevBtn.disabled = false;
                     prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                    prevBtn.classList.add('cursor-pointer', 'active:scale-95');
                 }
             }
 
@@ -974,9 +976,11 @@ export function renderFinanceDashboard(data: any): string {
                 if (debtCurrentPage >= totalPages) {
                     nextBtn.disabled = true;
                     nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                    nextBtn.classList.remove('cursor-pointer', 'active:scale-95');
                 } else {
                     nextBtn.disabled = false;
                     nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                    nextBtn.classList.add('cursor-pointer', 'active:scale-95');
                 }
             }
 
@@ -3998,10 +4002,14 @@ export function renderFinanceDashboard(data: any): string {
                         <span>‹</span> Prev
                     </button>
                     <div id="debt-pagination-pages" class="flex items-center gap-1">
-                        <!-- Rendered dynamically by applyDebtDisplay() -->
+                        ${Array.from({ length: Math.ceil(debts.length / 4) }).map((_, i) => {
+                            const pageNum = i + 1;
+                            const isActive = pageNum === 1;
+                            return `<button type="button" onclick="debtGoToPage(${pageNum})" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ${isActive ? 'bg-indigo-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}">${pageNum}</button>`;
+                        }).join('')}
                     </div>
-                    <button type="button" id="debt-next-btn" onclick="debtNextPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 ${debts.length <= 4 ? 'opacity-40 cursor-not-allowed' : ''}">
-                        Next <span>›</span>
+                    <button type="button" id="debt-next-btn" onclick="debtNextPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer ${debts.length <= 4 ? 'opacity-40 cursor-not-allowed' : ''}" ${debts.length <= 4 ? 'disabled' : ''}>
+                        <span>Next ›</span>
                     </button>
                 </div>
             </div>
