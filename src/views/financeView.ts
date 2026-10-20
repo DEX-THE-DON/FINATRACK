@@ -698,6 +698,25 @@ export function renderFinanceDashboard(data: any): string {
         var accPageSize = 5;
         var accCurrentFilter = 'ALL';
 
+        function matchesAccFilter(itemType, filter) {
+            if (!filter || filter === 'ALL') return true;
+            var t = String(itemType || '').toUpperCase().trim();
+            var f = String(filter || '').toUpperCase().trim();
+            if (f === 'SAVINGS_MMF') {
+                return t === 'MMF' || t === 'SAVINGS' || t.indexOf('MMF') !== -1 || t.indexOf('SAVING') !== -1 || t.indexOf('SACCO') !== -1 || t.indexOf('LOCK') !== -1;
+            }
+            if (f === 'CASH') {
+                return t === 'CASH' || t === 'LOOP' || t.indexOf('CASH') !== -1 || t.indexOf('PETTY') !== -1;
+            }
+            if (f === 'MOBILE') {
+                return t === 'MOBILE' || t === 'MPESA' || t === 'M-PESA' || t.indexOf('MOBILE') !== -1;
+            }
+            if (f === 'BANK') {
+                return t === 'BANK' || t.indexOf('BANK') !== -1;
+            }
+            return t === f;
+        }
+
         function setAccFilter(type) {
             accCurrentFilter = type;
             accCurrentPage = 1;
@@ -712,10 +731,14 @@ export function renderFinanceDashboard(data: any): string {
         }
 
         function accGoToPage(p) {
-            accCurrentPage = p;
+            accCurrentPage = Number(p) || 1;
             applyAccDisplay();
             var card = document.getElementById('accounts-card');
-            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (card) {
+                try {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } catch(e) {}
+            }
         }
 
         function accPrevPage() {
@@ -729,7 +752,7 @@ export function renderFinanceDashboard(data: any): string {
             var matchingTotal = 0;
             items.forEach(function(el) {
                 var itemType = el.getAttribute('data-acc-type');
-                if (accCurrentFilter === 'ALL' || itemType === accCurrentFilter || (accCurrentFilter === 'SAVINGS_MMF' && (itemType === 'MMF' || itemType === 'SAVINGS'))) {
+                if (matchesAccFilter(itemType, accCurrentFilter)) {
                     matchingTotal++;
                 }
             });
@@ -745,7 +768,7 @@ export function renderFinanceDashboard(data: any): string {
 
             items.forEach(function(el) {
                 var itemType = el.getAttribute('data-acc-type');
-                if (accCurrentFilter === 'ALL' || itemType === accCurrentFilter || (accCurrentFilter === 'SAVINGS_MMF' && (itemType === 'MMF' || itemType === 'SAVINGS'))) {
+                if (matchesAccFilter(itemType, accCurrentFilter)) {
                     matchingTotal++;
                 }
             });
@@ -760,7 +783,7 @@ export function renderFinanceDashboard(data: any): string {
             var idx = 0;
             items.forEach(function(el) {
                 var itemType = el.getAttribute('data-acc-type');
-                if (accCurrentFilter === 'ALL' || itemType === accCurrentFilter || (accCurrentFilter === 'SAVINGS_MMF' && (itemType === 'MMF' || itemType === 'SAVINGS'))) {
+                if (matchesAccFilter(itemType, accCurrentFilter)) {
                     if (idx >= startIdx && idx < endIdx) {
                         el.classList.remove('hidden');
                     } else {
@@ -789,9 +812,11 @@ export function renderFinanceDashboard(data: any): string {
                 if (accCurrentPage <= 1) {
                     prevBtn.disabled = true;
                     prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                    prevBtn.classList.remove('cursor-pointer', 'active:scale-95');
                 } else {
                     prevBtn.disabled = false;
                     prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                    prevBtn.classList.add('cursor-pointer', 'active:scale-95');
                 }
             }
 
@@ -800,9 +825,11 @@ export function renderFinanceDashboard(data: any): string {
                 if (accCurrentPage >= totalPages) {
                     nextBtn.disabled = true;
                     nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                    nextBtn.classList.remove('cursor-pointer', 'active:scale-95');
                 } else {
                     nextBtn.disabled = false;
                     nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                    nextBtn.classList.add('cursor-pointer', 'active:scale-95');
                 }
             }
 
@@ -978,8 +1005,14 @@ export function renderFinanceDashboard(data: any): string {
         var mmfPageSize = 3;
 
         function mmfGoToPage(p) {
-            mmfCurrentPage = p;
+            mmfCurrentPage = Number(p) || 1;
             applyMmfDisplay();
+            var card = document.getElementById('mmf-card');
+            if (card) {
+                try {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } catch(e) {}
+            }
         }
 
         function mmfPrevPage() {
@@ -1026,9 +1059,11 @@ export function renderFinanceDashboard(data: any): string {
                 if (mmfCurrentPage <= 1) {
                     prevBtn.disabled = true;
                     prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                    prevBtn.classList.remove('cursor-pointer', 'active:scale-95');
                 } else {
                     prevBtn.disabled = false;
                     prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                    prevBtn.classList.add('cursor-pointer', 'active:scale-95');
                 }
             }
 
@@ -1037,9 +1072,11 @@ export function renderFinanceDashboard(data: any): string {
                 if (mmfCurrentPage >= totalPages) {
                     nextBtn.disabled = true;
                     nextBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                    nextBtn.classList.remove('cursor-pointer', 'active:scale-95');
                 } else {
                     nextBtn.disabled = false;
                     nextBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                    nextBtn.classList.add('cursor-pointer', 'active:scale-95');
                 }
             }
 
@@ -1050,6 +1087,17 @@ export function renderFinanceDashboard(data: any): string {
                 } else {
                     paginationContainer.classList.remove('hidden');
                 }
+            }
+
+            var pagesContainer = document.getElementById('mmf-pagination-pages');
+            if (pagesContainer) {
+                var html = '';
+                for (var p = 1; p <= totalPages; p++) {
+                    var isActive = p === mmfCurrentPage;
+                    html += '<button type="button" onclick="mmfGoToPage(' + p + ')" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ' +
+                        (isActive ? 'bg-amber-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700') + '">' + p + '</button>';
+                }
+                pagesContainer.innerHTML = html;
             }
         }
 
@@ -1068,24 +1116,56 @@ export function renderFinanceDashboard(data: any): string {
             updateThemeIcon();
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const theme = localStorage.getItem('theme');
-            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
-            updateThemeIcon();
-            applyConversion();
-            updateSplitBreakdown();
-            updateRulesModalTotal();
-            applyAccDisplay();
-            applyDebtDisplay();
-            applyMmfDisplay();
-            if (!isRunningStandalone()) {
-                showInstallUi();
-            }
-        });
+        // Expose pagination & filter functions globally to guarantee inline button clicks always work
+        window.accNextPage = accNextPage;
+        window.accPrevPage = accPrevPage;
+        window.accGoToPage = accGoToPage;
+        window.setAccFilter = setAccFilter;
+        window.applyAccDisplay = applyAccDisplay;
+
+        window.mmfNextPage = mmfNextPage;
+        window.mmfPrevPage = mmfPrevPage;
+        window.mmfGoToPage = mmfGoToPage;
+        window.applyMmfDisplay = applyMmfDisplay;
+
+        window.debtNextPage = debtNextPage;
+        window.debtPrevPage = debtPrevPage;
+        window.debtGoToPage = debtGoToPage;
+        window.applyDebtDisplay = applyDebtDisplay;
+
+        window.txNextPage = txNextPage;
+        window.txPrevPage = txPrevPage;
+        window.txGoToPage = txGoToPage;
+        window.applyTxDisplay = applyTxDisplay;
+
+        function initFinanceDashboard() {
+            try {
+                const theme = localStorage.getItem('theme');
+                if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                updateThemeIcon();
+            } catch(e) {}
+            try { applyConversion(); } catch(e) { console.warn('applyConversion error', e); }
+            try { updateSplitBreakdown(); } catch(e) { console.warn('updateSplitBreakdown error', e); }
+            try { updateRulesModalTotal(); } catch(e) { console.warn('updateRulesModalTotal error', e); }
+            try { applyAccDisplay(); } catch(e) { console.warn('applyAccDisplay error', e); }
+            try { applyDebtDisplay(); } catch(e) { console.warn('applyDebtDisplay error', e); }
+            try { applyMmfDisplay(); } catch(e) { console.warn('applyMmfDisplay error', e); }
+            try {
+                if (!isRunningStandalone()) {
+                    showInstallUi();
+                }
+            } catch(e) {}
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initFinanceDashboard);
+        } else {
+            initFinanceDashboard();
+        }
 
         function openRulesModal(focusAdd) {
             var m = document.getElementById('rules-modal');
@@ -3985,10 +4065,14 @@ export function renderFinanceDashboard(data: any): string {
                         <span>‹</span> Prev
                     </button>
                     <div id="mmf-pagination-pages" class="flex items-center gap-1">
-                        <!-- Rendered dynamically by applyMmfDisplay() -->
+                        ${Array.from({ length: Math.ceil(mmf_accounts.length / 3) }).map((_, i) => {
+                            const pageNum = i + 1;
+                            const isActive = pageNum === 1;
+                            return `<button type="button" onclick="mmfGoToPage(${pageNum})" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ${isActive ? 'bg-amber-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-950'}">${pageNum}</button>`;
+                        }).join('')}
                     </div>
-                    <button type="button" id="mmf-next-btn" onclick="mmfNextPage()" class="px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-950 font-bold transition flex items-center gap-1 ${mmf_accounts.length <= 3 ? 'opacity-40 cursor-not-allowed' : ''}">
-                        Next <span>›</span>
+                    <button type="button" id="mmf-next-btn" onclick="mmfNextPage()" class="px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-950 font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer ${mmf_accounts.length <= 3 ? 'opacity-40 cursor-not-allowed' : ''}" ${mmf_accounts.length <= 3 ? 'disabled' : ''}>
+                        <span>Next ›</span>
                     </button>
                 </div>
             </div>
@@ -4022,16 +4106,16 @@ export function renderFinanceDashboard(data: any): string {
                         All (${accounts.length})
                     </button>
                     <button type="button" id="acc-filter-btn-MOBILE" onclick="setAccFilter('MOBILE')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
-                        📱 Mobile (${accounts.filter((a: any) => a.account_type === 'MOBILE').length})
+                        📱 Mobile (${accounts.filter((a: any) => String(a.account_type || '').toUpperCase() === 'MOBILE').length})
                     </button>
                     <button type="button" id="acc-filter-btn-BANK" onclick="setAccFilter('BANK')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
-                        🏦 Banks (${accounts.filter((a: any) => a.account_type === 'BANK').length})
+                        🏦 Banks (${accounts.filter((a: any) => String(a.account_type || '').toUpperCase() === 'BANK').length})
                     </button>
                     <button type="button" id="acc-filter-btn-SAVINGS_MMF" onclick="setAccFilter('SAVINGS_MMF')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
-                        📈 MMF & Savings (${accounts.filter((a: any) => a.account_type === 'MMF' || a.account_type === 'SAVINGS').length})
+                        📈 MMF & Savings (${accounts.filter((a: any) => ['MMF', 'SAVINGS'].includes(String(a.account_type || '').toUpperCase())).length})
                     </button>
                     <button type="button" id="acc-filter-btn-CASH" onclick="setAccFilter('CASH')" class="acc-filter-btn px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition cursor-pointer">
-                        💵 Cash (${accounts.filter((a: any) => a.account_type === 'CASH' || a.account_type === 'LOOP').length})
+                        💵 Cash (${accounts.filter((a: any) => ['CASH', 'LOOP'].includes(String(a.account_type || '').toUpperCase())).length})
                     </button>
                 </div>
 
@@ -4079,7 +4163,7 @@ export function renderFinanceDashboard(data: any): string {
                             'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
 
                         return `
-                        <div class="account-row-item ${idx >= 5 ? 'hidden ' : ''}p-3.5 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100/80 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl transition-all" data-acc-type="${acc.account_type}">
+                        <div class="account-row-item ${idx >= 5 ? 'hidden ' : ''}p-3.5 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100/80 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl transition-all" data-acc-type="${String(acc.account_type || '').toUpperCase()}">
                             <div id="acc-display-${acc.id}" class="flex items-center justify-between gap-3">
                                 <div class="flex items-center gap-3 min-w-0">
                                     <div class="w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center text-lg shrink-0">
@@ -4165,10 +4249,14 @@ export function renderFinanceDashboard(data: any): string {
                             <span>‹</span> Prev
                         </button>
                         <div id="acc-pagination-pages" class="flex items-center gap-1">
-                            <!-- Rendered dynamically by applyAccDisplay() -->
+                            ${Array.from({ length: Math.ceil(accounts.length / 5) }).map((_, i) => {
+                                const pageNum = i + 1;
+                                const isActive = pageNum === 1;
+                                return `<button type="button" onclick="accGoToPage(${pageNum})" class="w-8 h-8 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ${isActive ? 'bg-emerald-600 text-white shadow-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}">${pageNum}</button>`;
+                            }).join('')}
                         </div>
-                        <button type="button" id="acc-next-btn" onclick="accNextPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 ${accounts.length <= 5 ? 'opacity-40 cursor-not-allowed' : ''}">
-                            Next <span>›</span>
+                        <button type="button" id="acc-next-btn" onclick="accNextPage()" class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer ${accounts.length <= 5 ? 'opacity-40 cursor-not-allowed' : ''}" ${accounts.length <= 5 ? 'disabled' : ''}>
+                            <span>Next ›</span>
                         </button>
                     </div>
                 </div>
