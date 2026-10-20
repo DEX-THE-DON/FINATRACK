@@ -1279,9 +1279,9 @@ export function renderRiderDashboard(data: any): string {
 
                 // Extract dates: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, or DD Month YYYY
                 var datePatterns = [
-                    /\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/,
-                    /\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/,
-                    /\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(20\d{2})\b/i
+                    /\\b(\\d{1,2})[\\/\\-\\.](\\d{1,2})[\\/\\-\\.](\\d{4})\\b/,
+                    /\\b(20\\d{2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{1,2})\\b/,
+                    /\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+(20\\d{2})\\b/i
                 ];
 
                 var foundExpiry = null;
@@ -1312,7 +1312,7 @@ export function renderRiderDashboard(data: any): string {
                 }
 
                 // Reference / Policy # check (e.g. PCC-..., POL-..., DL..., TIMS...)
-                var refMatch = text.match(/\b(PCC[A-Z0-9\-]+|POL[\-0-9A-Z]+|DL[0-9A-Z]+|NTSA[0-9A-Z]+|PIN[A-Z0-9]+)\b/i);
+                var refMatch = text.match(/\\b(PCC[A-Z0-9\\-]+|POL[\\-0-9A-Z]+|DL[0-9A-Z]+|NTSA[0-9A-Z]+|PIN[A-Z0-9]+)\\b/i);
 
                 if (foundExpiry && expiryInput) {
                     expiryInput.value = foundExpiry;

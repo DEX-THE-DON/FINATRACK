@@ -1933,20 +1933,20 @@ export function renderFinanceDashboard(data: any): string {
         function cleanOcrSmsText(rawText) {
             if (!rawText) return '';
             var text = String(rawText);
-            text = text.replace(/Conflrmed|Confinned|Confi\s*rmed|Confirned/gi, 'Confirmed');
-            text = text.replace(/M-PE5A|M\s*-\s*PESA/gi, 'M-PESA');
-            text = text.replace(/Ksh\s*[lI](\d)/g, 'Ksh1$1');
-            text = text.replace(/KES\s*[lI](\d)/gi, 'KES 1$1');
-            text = text.replace(/Ksh\s*(\d+)\s*,\s*(\d{3})/gi, 'Ksh$1,$2');
-            text = text.replace(/KES\s*(\d+)\s*,\s*(\d{3})/gi, 'KES $1,$2');
-            text = text.replace(/(\d)\s*\.\s*(\d{2})\b/g, '$1.$2');
-            var lines = text.split(/\r?\n/).map(function(l) { return l.trim(); }).filter(function(l) {
+            text = text.replace(/Conflrmed|Confinned|Confi\\s*rmed|Confirned/gi, 'Confirmed');
+            text = text.replace(/M-PE5A|M\\s*-\\s*PESA/gi, 'M-PESA');
+            text = text.replace(/Ksh\\s*[lI](\\d)/g, 'Ksh1$1');
+            text = text.replace(/KES\\s*[lI](\\d)/gi, 'KES 1$1');
+            text = text.replace(/Ksh\\s*(\\d+)\\s*,\\s*(\\d{3})/gi, 'Ksh$1,$2');
+            text = text.replace(/KES\\s*(\\d+)\\s*,\\s*(\\d{3})/gi, 'KES $1,$2');
+            text = text.replace(/(\\d)\\s*\\.\\s*(\\d{2})\\b/g, '$1.$2');
+            var lines = text.split(/[\\r\\n]+/).map(function(l) { return l.trim(); }).filter(function(l) {
                 if (!l) return false;
-                if (/^\d{1,2}:\d{2}\s*(AM|PM)?$/i.test(l)) return false;
+                if (/^\\d{1,2}:\\d{2}\\s*(AM|PM)?$/i.test(l)) return false;
                 if (/^(4G|5G|LTE|VoLTE|Safaricom|M-PESA|Messages|Today|Yesterday)$/i.test(l)) return false;
                 return true;
             });
-            return lines.join(' ').replace(/\s{2,}/g, ' ').trim();
+            return lines.join(' ').replace(/\\s{2,}/g, ' ').trim();
         }
 
         function setSmsInputMode(mode) {
