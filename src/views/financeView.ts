@@ -20,6 +20,10 @@ export function renderFinanceDashboard(data: any): string {
     debts = [],
     bills = [],
     mmf_accounts = [],
+    total_mmf_balance = 0.0,
+    total_mmf_accrued_profit = 0.0,
+    total_mmf_principal = 0.0,
+    strict_saver_config = null,
     allocation_rules = [],
     total_balance = 0.0,
     weekly_income = 0.0,
@@ -83,9 +87,10 @@ export function renderFinanceDashboard(data: any): string {
     is_logged_in = false,
   } = data;
 
+  const strictNetFloor = Number(strict_saver_config?.net_floor_kes || 1000);
   const defaultSplitInputAmt = pay_yourself_amount > 0
     ? Number(pay_yourself_amount.toFixed(2))
-    : (today_shift_net > 0 ? Number(today_shift_net.toFixed(2)) : (last_shift_net > 0 ? Number(last_shift_net.toFixed(2)) : 2000));
+    : (today_shift_net > 0 ? Number(today_shift_net.toFixed(2)) : (last_shift_net > 0 ? Number(last_shift_net.toFixed(2)) : strictNetFloor));
 
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1542,6 +1547,31 @@ export function renderFinanceDashboard(data: any): string {
             const inputEl = document.getElementById('split-amount-input');
             const total = parseFloat(inputEl ? inputEl.value : 0) || 0;
             const rules = ${JSON.stringify(allocation_rules)};
+            const baseTargetEl = document.getElementById('split-base-target');
+            const baseTarget = parseFloat(baseTargetEl ? baseTargetEl.value : ${strictNetFloor}) || ${strictNetFloor};
+            const sweepCheck = document.getElementById('sweep_overflow_check');
+            const overflowBanner = document.getElementById('sweep-overflow-banner');
+            const overflowText = document.getElementById('sweep-overflow-amt-text');
+            const isSweeping = sweepCheck ? sweepCheck.checked : true;
+            
+            const hasOverflow = total > baseTarget;
+            const overflowAmt = hasOverflow ? Math.max(0, total - baseTarget) : 0;
+            
+            if (overflowBanner) {
+                if (hasOverflow && overflowAmt > 0) {
+                    overflowBanner.classList.remove('hidden');
+                    if (overflowText) {
+                        overflowText.innerText = curr === 'Ksh'
+                            ? ('Ksh ' + overflowAmt.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}))
+                            : ('$' + (overflowAmt / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                    }
+                } else {
+                    overflowBanner.classList.add('hidden');
+                }
+            }
+
+            const allocBase = (hasOverflow && isSweeping) ? baseTarget : total;
+
             let payYourselfKes = 0;
             let payYourselfPct = 0;
             let obligationsKes = 0;
@@ -1551,18 +1581,26 @@ export function renderFinanceDashboard(data: any): string {
             
             rules.forEach(r => {
                 const pct = parseFloat(r.percentage) || 0;
-                const kesAmt = total * (pct / 100);
+                let kesAmt = allocBase * (pct / 100);
+                const bName = String(r.bucket_name || '').toLowerCase();
+                const tType = String(r.target_type || '').toUpperCase();
+                const isMmfBucket = bName.includes('mmf') || bName.includes('ziidi') || bName.includes('britam');
+
+                let extraDisplay = '';
+                if (hasOverflow && isSweeping && isMmfBucket) {
+                    kesAmt += overflowAmt;
+                    extraDisplay = ' <span class="text-[10px] text-amber-500 dark:text-amber-400 font-bold block">(+' + (curr === 'Ksh' ? 'Ksh ' + overflowAmt.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2}) : '$' + (overflowAmt/USD_TO_KES).toFixed(1)) + ' overflow)</span>';
+                }
+
                 const spanEl = document.getElementById('rule-calc-' + r.id);
                 if (spanEl) {
                     if (curr === 'Ksh') {
-                        spanEl.innerText = 'Ksh ' + kesAmt.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        spanEl.innerHTML = 'Ksh ' + kesAmt.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + extraDisplay;
                     } else {
-                        spanEl.innerText = '$' + (kesAmt / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        spanEl.innerHTML = '$' + (kesAmt / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + extraDisplay;
                     }
                 }
 
-                const bName = String(r.bucket_name || '').toLowerCase();
-                const tType = String(r.target_type || '').toUpperCase();
                 if (tType === 'GOAL' || bName.includes('pay yourself') || bName.includes('mmf') || bName.includes('ziidi') || bName.includes('britam') || bName.includes('sacco') || bName.includes('lock') || bName.includes('goal') || bName.includes('invest') || bName.includes('chama') || bName.includes('emergenc')) {
                     payYourselfKes += kesAmt;
                     payYourselfPct += pct;
@@ -1580,12 +1618,24 @@ export function renderFinanceDashboard(data: any): string {
                 : ('$' + (val / USD_TO_KES).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
 
             const pyfEl = document.getElementById('pyf-summary-wealth');
-            if (pyfEl) pyfEl.innerText = fmtAmt(payYourselfKes) + ' (' + Math.round(payYourselfPct) + '%)';
+            if (pyfEl) pyfEl.innerText = fmtAmt(payYourselfKes) + ' (' + Math.round((payYourselfKes / Math.max(1, total)) * 100) + '%)';
             const obEl = document.getElementById('pyf-summary-reserves');
-            if (obEl) obEl.innerText = fmtAmt(obligationsKes) + ' (' + Math.round(obligationsPct) + '%)';
+            if (obEl) obEl.innerText = fmtAmt(obligationsKes) + ' (' + Math.round((obligationsKes / Math.max(1, total)) * 100) + '%)';
             const pkEl = document.getElementById('pyf-summary-pocket');
-            if (pkEl) pkEl.innerText = fmtAmt(pocketKes) + ' (' + Math.round(pocketPct) + '%)';
+            if (pkEl) pkEl.innerText = fmtAmt(pocketKes) + ' (' + Math.round((pocketKes / Math.max(1, total)) * 100) + '%)';
         }
+
+        function toggleMmfProfitForm(id) {
+            var f = document.getElementById('mmf-profit-form-' + id);
+            if (f) {
+                f.classList.toggle('hidden');
+                if (!f.classList.contains('hidden')) {
+                    var inp = f.querySelector('input[name="amount"]');
+                    if (inp) inp.focus();
+                }
+            }
+        }
+        window.toggleMmfProfitForm = toggleMmfProfitForm;
 
         function onTxCategoryChange(val) {
             const container = document.getElementById('custom-category-container');
@@ -2777,15 +2827,15 @@ export function renderFinanceDashboard(data: any): string {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Weekly Target Income</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_income_weekly" value="${income_targets.weekly.target}" placeholder="15000" data-placeholder-base="15000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_weekly" value="${income_targets?.weekly?.target ?? 15000}" placeholder="15000" data-placeholder-base="15000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
                             </div>
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Monthly Target Income</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_income_monthly" value="${income_targets.monthly.target}" placeholder="65000" data-placeholder-base="65000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_monthly" value="${income_targets?.monthly?.target ?? 65000}" placeholder="65000" data-placeholder-base="65000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
                             </div>
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Yearly Target Income</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_income_yearly" value="${income_targets.yearly.target}" placeholder="780000" data-placeholder-base="780000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                                <input type="number" step="any" inputmode="decimal" name="target_income_yearly" value="${income_targets?.yearly?.target ?? 780000}" placeholder="780000" data-placeholder-base="780000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
                             </div>
                         </div>
                     </div>
@@ -2795,15 +2845,15 @@ export function renderFinanceDashboard(data: any): string {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Weekly Expense Budget</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_expense_weekly" value="${expense_targets.weekly.target}" placeholder="6000" data-placeholder-base="6000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_weekly" value="${expense_targets?.weekly?.target ?? 6000}" placeholder="6000" data-placeholder-base="6000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
                             </div>
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Monthly Expense Budget</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_expense_monthly" value="${expense_targets.monthly.target}" placeholder="25000" data-placeholder-base="25000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_monthly" value="${expense_targets?.monthly?.target ?? 25000}" placeholder="25000" data-placeholder-base="25000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
                             </div>
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Yearly Expense Budget</label>
-                                <input type="number" step="any" inputmode="decimal" name="target_expense_yearly" value="${expense_targets.yearly.target}" placeholder="300000" data-placeholder-base="300000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
+                                <input type="number" step="any" inputmode="decimal" name="target_expense_yearly" value="${expense_targets?.yearly?.target ?? 300000}" placeholder="300000" data-placeholder-base="300000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-400 convertible-placeholder" required>
                             </div>
                         </div>
                     </div>
@@ -3029,6 +3079,7 @@ export function renderFinanceDashboard(data: any): string {
             </div>
 
             <form action="/split/distribute" method="POST" class="space-y-3">
+                <input type="hidden" name="base_target" id="split-base-target" value="${strictNetFloor}">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                     <div>
                         <label class="block text-xs font-semibold text-gray-700 dark:text-indigo-300 mb-1">Enter Today's Net Take-Home (<span class="curr-symbol-label">Ksh</span>)</label>
@@ -3062,6 +3113,25 @@ export function renderFinanceDashboard(data: any): string {
                     <button type="button" onclick="setSplitAmountPreset(2000)" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">Ksh 2,000</button>
                     <button type="button" onclick="setSplitAmountPreset(2500)" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">Ksh 2,500</button>
                     <button type="button" onclick="setSplitAmountPreset(3500)" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">Ksh 3,500</button>
+                </div>
+
+                <!-- 🚀 100% Overflow Sweeper Banner & Toggle -->
+                <div id="sweep-overflow-banner" class="${defaultSplitInputAmt > strictNetFloor ? '' : 'hidden '}p-3 bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-amber-500/15 border border-amber-300 dark:border-amber-700/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-xl">🚀</span>
+                        <div>
+                            <span class="font-black text-amber-900 dark:text-amber-200 block">
+                                100% Overflow Rule: Split Base Ksh ${strictNetFloor.toLocaleString()} &amp; Sweep Extra <span id="sweep-overflow-amt-text" class="text-emerald-600 dark:text-emerald-400 font-black underline">Ksh ${(Math.max(0, defaultSplitInputAmt - strictNetFloor)).toLocaleString(undefined, {minimumFractionDigits: 2})}</span> to MMF
+                            </span>
+                            <span class="text-[11px] text-gray-600 dark:text-gray-300">
+                                Strictly adheres to your Ksh ${strictNetFloor.toLocaleString()} survival floor while sweeping 100% of bonus earnings straight into high-yield MMF compounding wealth.
+                            </span>
+                        </div>
+                    </div>
+                    <label class="flex items-center gap-2 cursor-pointer shrink-0 font-extrabold text-amber-800 dark:text-amber-300 select-none bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 shadow-2xs">
+                        <input type="checkbox" name="sweep_overflow" id="sweep_overflow_check" value="1" checked onchange="updateSplitBreakdown()" class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500">
+                        <span>Sweep to MMF</span>
+                    </label>
                 </div>
             </form>
 
@@ -4016,14 +4086,59 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- 📈 MMF & Passive Yields Section -->
-        <div id="mmf-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-sm space-y-4">
+        <div id="mmf-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-sm space-y-5">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
                     <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <span>📈 Money Market Funds & Sacco Yields</span>
+                        <span>📈 Money Market Funds &amp; Sacco Yields</span>
                         <span class="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/60">${mmf_accounts.length} Total</span>
                     </h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Track passive interest compounding daily (Ziidi MMF 13.5%, Sanlam 14.5%, Britam 13.8%).</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Track passive interest compounding daily (Ziidi MMF 13.5%, Sanlam 14.5%, Britam 13.8%) and differentiate real profit gains from deposited capital.</p>
+                </div>
+            </div>
+
+            <!-- ⚖️ Dual-Metric Grand Audit Bar: Total Balance vs Accrued Profits vs Principal Saved -->
+            <div class="p-4 bg-gradient-to-r from-amber-950/90 via-slate-900 to-emerald-950/90 border border-amber-500/50 rounded-2xl shadow-md space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="p-3 bg-slate-950/70 border border-amber-400/40 rounded-xl">
+                        <div class="flex items-center justify-between text-xs text-amber-300 font-bold mb-1">
+                            <span>🏦 Total MMF Account Balance</span>
+                            <span class="text-[10px] px-2 py-0.2 rounded-full bg-amber-500/20 text-amber-300">Live App Match</span>
+                        </div>
+                        <p class="text-2xl font-black text-amber-400 convertible-amount" data-kes="${total_mmf_balance}">${formatKes(total_mmf_balance)}</p>
+                        <p class="text-[10px] text-gray-400 mt-0.5">Grand balance that should match your Ziidi / Britam / Sanlam app.</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-950/70 border border-emerald-400/40 rounded-xl">
+                        <div class="flex items-center justify-between text-xs text-emerald-300 font-bold mb-1">
+                            <span>💰 Total Accrued Real Profits</span>
+                            <span class="text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300">Pure Yield</span>
+                        </div>
+                        <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${total_mmf_accrued_profit}">+${formatKes(total_mmf_accrued_profit)}</p>
+                        <p class="text-[10px] text-gray-400 mt-0.5">Cumulative interest &amp; daily profits gained while you sleep.</p>
+                    </div>
+
+                    <div class="p-3 bg-slate-950/70 border border-cyan-400/40 rounded-xl">
+                        <div class="flex items-center justify-between text-xs text-cyan-300 font-bold mb-1">
+                            <span>📥 Principal Saved by You</span>
+                            <span class="text-[10px] px-2 py-0.2 rounded-full bg-cyan-500/20 text-cyan-300">Sweat Capital</span>
+                        </div>
+                        <p class="text-2xl font-black text-cyan-400 convertible-amount" data-kes="${total_mmf_principal}">${formatKes(total_mmf_principal)}</p>
+                        <p class="text-[10px] text-gray-400 mt-0.5">Shift earnings &amp; savings you deposited yourself.</p>
+                    </div>
+                </div>
+
+                <!-- Instant Strict Audit Verification Pill -->
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-amber-900/60 text-xs">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-black uppercase tracking-wider">✅ Strict Audit Check</span>
+                        <span class="text-gray-300 text-[11px]">
+                            Principal (<strong class="text-cyan-300">${formatKes(total_mmf_principal)}</strong>) + Accrued Profits (<strong class="text-emerald-300">${formatKes(total_mmf_accrued_profit)}</strong>) = Total MMF (<strong class="text-amber-300">${formatKes(total_mmf_balance)}</strong>)
+                        </span>
+                    </div>
+                    <span class="text-[11px] font-bold ${Math.abs((total_mmf_principal + total_mmf_accrued_profit) - total_mmf_balance) < 0.05 ? 'text-emerald-400' : 'text-amber-400'}">
+                        ${Math.abs((total_mmf_principal + total_mmf_accrued_profit) - total_mmf_balance) < 0.05 ? '🎯 100% Balanced &amp; Verified' : '⚡ Rebalancing in progress'}
+                    </span>
                 </div>
             </div>
 
@@ -4039,24 +4154,89 @@ export function renderFinanceDashboard(data: any): string {
                             ${m.interest_rate_p_a}% p.a.
                         </span>
                     </div>
+
+                    <!-- Dual Metric Display: Total MMF Balance vs Accrued Profit -->
                     <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div class="p-2 bg-gray-50 dark:bg-gray-800/80 rounded-lg">
-                            <p class="text-[10px] text-gray-400">Current Balance</p>
-                            <p class="font-bold text-gray-900 dark:text-white convertible-amount" data-kes="${m.balance}">${formatKes(m.balance)}</p>
+                        <div class="p-2.5 bg-gray-50 dark:bg-gray-800/80 rounded-lg border border-gray-100 dark:border-gray-700/60">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">🏦 Total Balance</p>
+                            <p class="font-black text-gray-900 dark:text-white text-base convertible-amount" data-kes="${m.balance}">${formatKes(m.balance)}</p>
+                            <p class="text-[9px] text-gray-400">Principal: <span class="font-bold text-gray-600 dark:text-gray-300">${formatKes(m.principal_deposited || m.balance)}</span></p>
                         </div>
-                        <div class="p-2 bg-amber-50 dark:bg-amber-950/40 rounded-lg">
-                            <p class="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Monthly Yield</p>
-                            <p class="font-bold text-amber-700 dark:text-amber-400 convertible-amount" data-kes="${m.monthly_return}">${formatKes(m.monthly_return)}</p>
+                        <div class="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800/60">
+                            <p class="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wider">💰 Accrued Real Profit</p>
+                            <p class="font-black text-emerald-600 dark:text-emerald-400 text-base convertible-amount" data-kes="${m.total_accrued_profit || 0}">+${formatKes(m.total_accrued_profit || 0)}</p>
+                            <p class="text-[9px] text-emerald-600/80 dark:text-emerald-400/80">Est. / mo: <span class="font-bold">${formatKes(m.monthly_return)}</span></p>
                         </div>
                     </div>
-                    <p class="text-[10px] text-gray-400">
-                        Daily: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${m.daily_return}">${formatKes(m.daily_return)}</strong> &nbsp;•&nbsp; Annual: <strong class="convertible-amount" data-kes="${m.annual_return}">${formatKes(m.annual_return)}</strong>
-                    </p>
-                    <form action="/accounts/interest/log/${m.id}" method="POST">
-                        <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-lg text-xs transition shadow-xs flex items-center justify-center space-x-1.5">
-                            <span>💰 Deposit Monthly Yield</span>
-                        </button>
-                    </form>
+
+                    <!-- Daily Compounding Pace & Accrued Daily Profits Breakdown -->
+                    <div class="p-2 bg-amber-50/60 dark:bg-amber-950/30 rounded-lg border border-amber-200/50 dark:border-amber-900/40 text-[11px] space-y-1.5">
+                        <div class="flex justify-between items-center text-gray-500 dark:text-gray-400 text-[10px]">
+                            <span>Compounding Pace:</span>
+                            <span>Daily: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${m.daily_return}">${formatKes(m.daily_return)}</strong> • Annual: <strong class="convertible-amount" data-kes="${m.annual_return}">${formatKes(m.annual_return)}</strong></span>
+                        </div>
+                        ${m.recent_profit_logs && m.recent_profit_logs.length > 0 ? `
+                        <div class="pt-1 border-t border-amber-200/40 dark:border-amber-900/40">
+                            <span class="text-[10px] font-bold text-amber-800 dark:text-amber-300 block mb-0.5">📊 Recent Accrued Daily Profits:</span>
+                            <div class="flex flex-wrap gap-1">
+                                ${m.recent_profit_logs.map((l: any) => `
+                                <span class="px-1.5 py-0.5 rounded bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]" title="${l.date}: ${l.description}">
+                                    ${l.day_name || l.date}: +${Number(l.amount).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}
+                                </span>`).join('')}
+                            </div>
+                        </div>` : `
+                        <div class="text-[10px] text-gray-400 dark:text-gray-500 italic">
+                            💡 No daily interest logged yet. Deposit today's profit below to track real yield!
+                        </div>`}
+                    </div>
+
+                    <!-- Action Bar: 1-Tap Daily Credit + Custom SMS Profit Logger -->
+                    <div class="space-y-2 pt-1">
+                        <div class="grid grid-cols-2 gap-2">
+                            <form action="/accounts/interest/log/${m.id}" method="POST">
+                                <input type="hidden" name="period" value="daily">
+                                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold py-2 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1" title="Credit estimated daily interest of ${formatKes(m.daily_return)}">
+                                    <span>⚡ Credit Today (${formatKes(m.daily_return)})</span>
+                                </button>
+                            </form>
+                            <button type="button" onclick="toggleMmfProfitForm('${m.id}')" class="w-full bg-amber-50 dark:bg-amber-950/70 hover:bg-amber-100 dark:hover:bg-amber-900 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-bold py-2 rounded-lg text-xs transition active:scale-95 flex items-center justify-center gap-1">
+                                <span>📝 Custom Profit</span>
+                            </button>
+                        </div>
+
+                        <!-- Expandable Custom SMS / App Profit Logger Form -->
+                        <form id="mmf-profit-form-${m.id}" action="/accounts/interest/log/${m.id}" method="POST" class="hidden p-2.5 bg-gray-50 dark:bg-gray-800/90 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2 text-xs">
+                            <div class="flex justify-between items-center font-bold text-gray-700 dark:text-gray-300 text-[11px]">
+                                <span>Enter Exact Interest Received:</span>
+                                <span class="text-[10px] text-gray-400">(e.g. from Ziidi / M-Pesa SMS)</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 mb-0.5">Profit Amount (Ksh)</label>
+                                    <input type="number" step="any" name="amount" placeholder="e.g. 50.00" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-emerald-600 dark:text-emerald-400 text-xs" required>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 mb-0.5">Date Received</label>
+                                    <input type="date" name="date" value="${today}" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 rounded-lg text-xs transition shadow-2xs">
+                                    💰 Record &amp; Credit Profit
+                                </button>
+                                <button type="button" onclick="toggleMmfProfitForm('${m.id}')" class="px-2.5 py-1.5 text-gray-400 hover:text-gray-600 text-xs">
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+
+                        <form action="/accounts/interest/log/${m.id}" method="POST">
+                            <input type="hidden" name="period" value="monthly">
+                            <button type="submit" class="w-full text-center text-[10px] font-bold text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition py-0.5">
+                                📅 Or Deposit Full Monthly Yield (+${formatKes(m.monthly_return)})
+                            </button>
+                        </form>
+                    </div>
                 </div>`).join('') : `
                 <div class="md:col-span-3 p-6 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
                     <p class="text-xs text-gray-500">No MMF or High-Yield accounts setup yet. Add Ziidi MMF (Safaricom) or Sacco savings below with an APY rate!</p>

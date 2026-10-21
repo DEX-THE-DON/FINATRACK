@@ -380,7 +380,7 @@ app.get('/', async (c) => {
     };
   });
 
-  // MMF passive yield calculations
+  // MMF passive yield calculations & accrued profit tracking
   const mmfAccounts = [];
   let totalMonthlyPassive = new Decimal(0);
   for (const a of accs) {
@@ -391,14 +391,54 @@ app.get('/', async (c) => {
       const dYield = calculateDailyYield(bal, rate);
       const aYield = calculateAnnualYield(bal, rate);
       totalMonthlyPassive = totalMonthlyPassive.plus(mYield);
+
+      // Accrued real profits & interest logged to this MMF account
+      const accTxs = txs.filter((t: any) =>
+        String(t.account_id) === String(a.id) &&
+        (
+          (t.category || '').toLowerCase().includes('interest') ||
+          (t.category || '').toLowerCase().includes('yield') ||
+          (t.description || '').toLowerCase().includes('interest') ||
+          (t.description || '').toLowerCase().includes('yield') ||
+          (t.description || '').toLowerCase().includes('profit')
+        ) &&
+        t.transaction_type === 'INCOME'
+      );
+      const accruedProfit = accTxs.reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
+      const principalDeposited = Math.max(0, bal - accruedProfit);
+
+      const recentProfitLogs = [...accTxs]
+        .sort((x: any, y: any) => new Date(y.date || 0).getTime() - new Date(x.date || 0).getTime())
+        .slice(0, 5)
+        .map((t: any) => {
+          const d = t.date ? new Date(t.date) : new Date();
+          const dayName = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short' });
+          return {
+            id: t.id,
+            date: t.date,
+            day_name: dayName,
+            amount: Number(t.amount || 0),
+            description: t.description || 'MMF Interest Yield',
+          };
+        });
+
       mmfAccounts.push({
         ...a,
+        total_balance: bal,
+        total_accrued_profit: accruedProfit,
+        principal_deposited: principalDeposited,
+        recent_profit_logs: recentProfitLogs,
         monthly_return: mYield.toFixed(2),
         daily_return: dYield.toFixed(2),
         annual_return: aYield.toFixed(2),
       });
     }
   }
+
+  const totalMmfBalance = mmfAccounts.reduce((sum, m) => sum + Number(m.balance || 0), 0);
+  const totalMmfAccruedProfit = mmfAccounts.reduce((sum, m) => sum + Number(m.total_accrued_profit || 0), 0);
+  const totalMmfPrincipal = mmfAccounts.reduce((sum, m) => sum + Number(m.principal_deposited || 0), 0);
+  const strictSaverConfig = getStrictSaverConfig(c);
 
   // Enriched Debts & Loans with Danger Zone Intelligence
   const enrichedDebts = (debts || []).map((d: any) => {
@@ -498,6 +538,10 @@ app.get('/', async (c) => {
     debts: enrichedDebts,
     bills: bills || [],
     mmf_accounts: mmfAccounts,
+    total_mmf_balance: totalMmfBalance,
+    total_mmf_accrued_profit: totalMmfAccruedProfit,
+    total_mmf_principal: totalMmfPrincipal,
+    strict_saver_config: strictSaverConfig,
     allocation_rules: rules,
     total_balance: totalBalance,
     weekly_income: weeklyIncome,

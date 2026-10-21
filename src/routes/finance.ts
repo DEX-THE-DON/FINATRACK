@@ -4,6 +4,7 @@ import { AppEnv, getRequestContext } from '../db/supabase';
 import {
   toDecimal,
   calculateMonthlyYield,
+  calculateDailyYield,
   allocateWaterfallSplit,
   allocateGoalSubSplits,
   calculateBudgetPace,
@@ -219,25 +220,52 @@ financeRoutes.post('/accounts/delete/:id', async (c) => {
 financeRoutes.post('/accounts/interest/log/:id', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
-
-  const { data: acc } = await supabase.from('accounts').select('*').eq('id', id).single();
-  if (acc && acc.interest_rate_p_a > 0 && acc.balance > 0) {
-    const monthlyYield = calculateMonthlyYield(acc.balance, acc.interest_rate_p_a).toDecimalPlaces(2);
-    const newBal = toDecimal(acc.balance).plus(monthlyYield).toNumber();
-
-    await supabase.from('accounts').update({ balance: newBal }).eq('id', id);
-    await supabase.from('transactions').insert({
-      ...(userId ? { user_id: userId } : {}),
-      account_id: acc.id,
-      transaction_type: 'INCOME',
-      category: 'Interest & Yield',
-      amount: monthlyYield.toNumber(),
-      description: `Monthly MMF Interest Yield (${acc.name} @ ${acc.interest_rate_p_a}% p.a.)`,
-      date: new Date().toISOString().slice(0, 10),
-    });
+  let body: any = {};
+  try {
+    body = await c.req.parseBody();
+  } catch (e) {
+    body = {};
   }
 
-  return c.redirect('/?toast=Monthly+MMF+yield+credited+successfully', 303);
+  const customAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
+  const period = String(body['period'] || (customAmt > 0 ? 'custom' : 'monthly')).toLowerCase();
+  const txDate = String(body['date'] || new Date().toISOString().slice(0, 10));
+  const notes = String(body['notes'] || '').trim();
+
+  const { data: acc } = await supabase.from('accounts').select('*').eq('id', id).single();
+  if (acc) {
+    let yieldAmount = new Decimal(0);
+    let desc = '';
+
+    if (customAmt > 0) {
+      yieldAmount = toDecimal(customAmt).toDecimalPlaces(2);
+      desc = notes || `Daily MMF Profit Yield (${acc.name})`;
+    } else if (period === 'daily') {
+      yieldAmount = calculateDailyYield(acc.balance, acc.interest_rate_p_a || 0).toDecimalPlaces(2);
+      desc = notes || `Daily MMF Interest Yield (${acc.name} @ ${acc.interest_rate_p_a}% p.a.)`;
+    } else {
+      yieldAmount = calculateMonthlyYield(acc.balance, acc.interest_rate_p_a || 0).toDecimalPlaces(2);
+      desc = notes || `Monthly MMF Interest Yield (${acc.name} @ ${acc.interest_rate_p_a}% p.a.)`;
+    }
+
+    if (yieldAmount.greaterThan(0)) {
+      const newBal = toDecimal(acc.balance).plus(yieldAmount).toNumber();
+      await supabase.from('accounts').update({ balance: newBal }).eq('id', id);
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: acc.id,
+        transaction_type: 'INCOME',
+        category: 'Interest & Yield',
+        amount: yieldAmount.toNumber(),
+        description: desc,
+        date: txDate,
+      });
+
+      return c.redirect(`/?toast=${encodeURIComponent(`MMF Profit of Ksh ${yieldAmount.toNumber().toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} credited successfully`)}#mmf-card`, 303);
+    }
+  }
+
+  return c.redirect('/?toast=Unable+to+credit+yield#mmf-card', 303);
 });
 
 // ------------------------------------------------------------------------------
@@ -1097,8 +1125,17 @@ financeRoutes.post('/split/distribute', async (c) => {
   const body = await c.req.parseBody();
   const rawAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
   const sourceAccountId = body['source_account_id'] ? String(body['source_account_id']) : null;
+  const sweepOverflow = String(body['sweep_overflow'] || '') === '1';
+  const baseTarget = parseFloat(String(body['base_target'] || '0.0')) || 0.0;
 
   if (rawAmt <= 0) return c.redirect('/?toast=Please+enter+a+valid+amount', 303);
+
+  let splitBaseAmt = rawAmt;
+  let overflowAmt = 0;
+  if (sweepOverflow && baseTarget > 0 && rawAmt > baseTarget) {
+    splitBaseAmt = baseTarget;
+    overflowAmt = toDecimal(rawAmt).minus(baseTarget).toDecimalPlaces(2).toNumber();
+  }
 
   let dbRules: any[] = [];
   try {
@@ -1159,7 +1196,7 @@ financeRoutes.post('/split/distribute', async (c) => {
   }
 
   const splitResults = allocateWaterfallSplit(
-    rawAmt,
+    splitBaseAmt,
     rules.map((r: any) => ({
       id: r.id,
       bucket_name: r.bucket_name,
@@ -1332,7 +1369,31 @@ financeRoutes.post('/split/distribute', async (c) => {
     }
   }
 
-  return c.redirect('/?toast=Income+successfully+distributed+via+Waterfall+Split!', 303);
+  // 100% Overflow Sweep: Extra profit above base target sweeps directly to MMF / Savings
+  if (overflowAmt > 0) {
+    const targetMmf = userAccounts.find(a => a.account_type === 'MMF' || (a.name || '').toLowerCase().includes('mmf') || (a.name || '').toLowerCase().includes('ziidi') || (a.name || '').toLowerCase().includes('britam')) ||
+      userAccounts.find(a => a.account_type === 'SAVINGS') ||
+      userAccounts[0];
+
+    if (targetMmf) {
+      const newBal = toDecimal(targetMmf.balance).plus(overflowAmt).toNumber();
+      targetMmf.balance = newBal;
+      await supabase.from('accounts').update({ balance: newBal }).eq('id', targetMmf.id);
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetMmf.id,
+        transaction_type: 'TRANSFER',
+        category: 'Waterfall Split',
+        amount: overflowAmt,
+        description: `🚀 100% Overflow Sweep: Extra Ksh ${overflowAmt.toLocaleString(undefined, {minimumFractionDigits: 2})} profit swept directly to ${targetMmf.name}`,
+        date: today,
+      });
+
+      return c.redirect(`/?toast=${encodeURIComponent(`Distributed base Ksh ${splitBaseAmt.toLocaleString()} across rules + Swept Ksh ${overflowAmt.toLocaleString()} overflow directly to ${targetMmf.name}!`)}#waterfall-card`, 303);
+    }
+  }
+
+  return c.redirect('/?toast=Income+successfully+distributed+via+Waterfall+Split!#waterfall-card', 303);
 });
 
 // ------------------------------------------------------------------------------
