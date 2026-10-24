@@ -85,7 +85,17 @@ export function renderFinanceDashboard(data: any): string {
     unique_categories = [],
     username = 'Dennis',
     is_logged_in = false,
+    active_profile = 'RIDER',
   } = data;
+
+  const activeProfileMode = (active_profile === 'TRADER' || active_profile === 'SALARIED') ? active_profile : 'RIDER';
+  const activeProfileIcon = activeProfileMode === 'TRADER' ? '🥬' : activeProfileMode === 'SALARIED' ? '💼' : '🛵';
+  const activeProfileLabel = activeProfileMode === 'TRADER' ? 'Mama Mboga Mode' : activeProfileMode === 'SALARIED' ? 'Salaried Mode' : 'Rider Mode';
+  const activeProfileBadge = activeProfileMode === 'TRADER'
+    ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+    : activeProfileMode === 'SALARIED'
+      ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800'
+      : 'bg-blue-50 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-800';
 
   const strictNetFloor = Number(strict_saver_config?.net_floor_kes || 1000);
   const defaultSplitInputAmt = pay_yourself_amount > 0
@@ -1637,6 +1647,15 @@ export function renderFinanceDashboard(data: any): string {
         }
         window.toggleMmfProfitForm = toggleMmfProfitForm;
 
+        function openProfileModal() {
+            document.getElementById('profile-switcher-modal')?.classList.remove('hidden');
+        }
+        function closeProfileModal() {
+            document.getElementById('profile-switcher-modal')?.classList.add('hidden');
+        }
+        window.openProfileModal = openProfileModal;
+        window.closeProfileModal = closeProfileModal;
+
         function onTxCategoryChange(val) {
             const container = document.getElementById('custom-category-container');
             const input = document.getElementById('tx-custom-category');
@@ -2216,9 +2235,23 @@ export function renderFinanceDashboard(data: any): string {
                     <span class="sm:hidden">Install</span>
                 </button>
 
-                <a href="/rider" class="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
-                    <span>🛵 <span class="hidden md:inline">Rider Fleet</span></span>
-                </a>
+                <!-- Profile Switcher Button -->
+                <button type="button" onclick="openProfileModal()" class="px-2.5 sm:px-3 py-1.5 ${activeProfileBadge} rounded-xl text-xs font-black transition active:scale-95 flex items-center gap-1.5 shadow-2xs border">
+                    <span>${activeProfileIcon} <span class="hidden sm:inline">${activeProfileLabel}</span></span>
+                    <span class="text-[10px] opacity-70">▾</span>
+                </button>
+
+                <div class="hidden lg:flex items-center space-x-1">
+                    <a href="/rider" class="px-2 py-1 rounded-lg text-xs font-bold ${activeProfileMode === 'RIDER' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'} transition">
+                        🛵 Rider
+                    </a>
+                    <a href="/trader" class="px-2 py-1 rounded-lg text-xs font-bold ${activeProfileMode === 'TRADER' ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'} transition">
+                        🥬 Mama Mboga
+                    </a>
+                    <a href="/salaried" class="px-2 py-1 rounded-lg text-xs font-bold ${activeProfileMode === 'SALARIED' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'} transition">
+                        💼 Salaried
+                    </a>
+                </div>
 
                 <select id="currency-selector" onchange="setCurrency(this.value)" class="text-xs bg-gray-100 dark:bg-gray-800 border-0 rounded-lg px-2.5 py-1.5 font-bold text-gray-700 dark:text-gray-200 cursor-pointer">
                     <option value="Ksh" ${current_currency === 'Ksh' ? 'selected' : ''}>KSH</option>
@@ -2308,9 +2341,12 @@ export function renderFinanceDashboard(data: any): string {
             <button onclick="document.getElementById('debts-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-rose-600 to-amber-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>💳 Loans & Debts ${dangerCount > 0 ? `<span class="px-1.5 py-0.2 bg-white text-rose-700 rounded-full font-black text-[10px] animate-pulse">🚨 ${dangerCount}</span>` : ''}</span>
             </button>
-            <a href="/rider" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
-                <span>🛵 Log Shift</span>
+            <a href="${activeProfileMode === 'TRADER' ? '/trader' : activeProfileMode === 'SALARIED' ? '/salaried' : '/rider'}" class="flex items-center space-x-1.5 px-3.5 py-2 ${activeProfileMode === 'TRADER' ? 'bg-emerald-600' : activeProfileMode === 'SALARIED' ? 'bg-indigo-600' : 'bg-blue-600'} active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>${activeProfileMode === 'TRADER' ? '🥬 Soko Closeout' : activeProfileMode === 'SALARIED' ? '💼 Payday Split' : '🛵 Log Shift'}</span>
             </a>
+            <button type="button" onclick="openProfileModal()" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+                <span>🔄 Switch Persona</span>
+            </button>
             <a href="/finance/export/csv" class="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>📥 Export CSV</span>
             </a>
@@ -5065,15 +5101,75 @@ export function renderFinanceDashboard(data: any): string {
         </div>
     </div>
 
+    <!-- Universal Profile Switcher Modal -->
+    <div id="profile-switcher-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+                <div>
+                    <h3 class="font-extrabold text-base text-gray-900 dark:text-white">Choose Your Finatrack Profile</h3>
+                    <p class="text-xs text-gray-500">Switch between profiles anytime. All accounts, goals &amp; wealth data stay unified!</p>
+                </div>
+                <button type="button" onclick="closeProfileModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <div class="grid grid-cols-1 gap-2.5 text-xs">
+                <!-- 1. Rider Mode -->
+                <form action="/profile/switch" method="POST">
+                    <input type="hidden" name="profile_mode" value="RIDER">
+                    <button type="submit" class="w-full p-3.5 rounded-2xl border ${activeProfileMode === 'RIDER' ? 'border-2 border-blue-500 bg-blue-50/60 dark:bg-blue-950/40' : 'border-gray-200 dark:border-gray-800 hover:border-blue-500 bg-white dark:bg-gray-800/80 hover:bg-blue-50/50 dark:hover:bg-blue-950/40'} text-left transition flex items-center justify-between group active:scale-98">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-2xl p-2 bg-blue-100 dark:bg-blue-950 rounded-xl">🛵</span>
+                            <div>
+                                <span class="font-bold text-sm text-gray-900 dark:text-white block group-hover:text-blue-600">Mobility &amp; Rider Mode ${activeProfileMode === 'RIDER' ? '<span class="text-xs text-blue-600 font-extrabold ml-1">(Active)</span>' : ''}</span>
+                                <span class="text-gray-500 dark:text-gray-400">Kilometers, Fuel, CPK &amp; 23:50 Shift Closeout Ritual</span>
+                            </div>
+                        </div>
+                        <span class="text-blue-600 font-extrabold text-xs">${activeProfileMode === 'RIDER' ? '✓ Active' : 'Switch →'}</span>
+                    </button>
+                </form>
+
+                <!-- 2. Mama Mboga Mode -->
+                <form action="/profile/switch" method="POST">
+                    <input type="hidden" name="profile_mode" value="TRADER">
+                    <button type="submit" class="w-full p-3.5 rounded-2xl border ${activeProfileMode === 'TRADER' ? 'border-2 border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40' : 'border-gray-200 dark:border-gray-800 hover:border-emerald-500 bg-white dark:bg-gray-800/80 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40'} text-left transition flex items-center justify-between group active:scale-98">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-2xl p-2 bg-emerald-100 dark:bg-emerald-950 rounded-xl">🥬</span>
+                            <div>
+                                <span class="font-bold text-sm text-gray-900 dark:text-white block group-hover:text-emerald-600">Mama Mboga &amp; Micro-Shop ${activeProfileMode === 'TRADER' ? '<span class="text-xs text-emerald-600 font-extrabold ml-1">(Active)</span>' : ''}</span>
+                                <span class="text-gray-500 dark:text-gray-400">Marikiti Soko Restock, Kanjo Fees &amp; Daftari ya Mkopo</span>
+                            </div>
+                        </div>
+                        <span class="text-emerald-600 font-extrabold text-xs">${activeProfileMode === 'TRADER' ? '✓ Active' : 'Switch →'}</span>
+                    </button>
+                </form>
+
+                <!-- 3. Salaried Mode -->
+                <form action="/profile/switch" method="POST">
+                    <input type="hidden" name="profile_mode" value="SALARIED">
+                    <button type="submit" class="w-full p-3.5 rounded-2xl border ${activeProfileMode === 'SALARIED' ? 'border-2 border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40' : 'border-gray-200 dark:border-gray-800 hover:border-indigo-500 bg-white dark:bg-gray-800/80 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40'} text-left transition flex items-center justify-between group active:scale-98">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-2xl p-2 bg-indigo-100 dark:bg-indigo-950 rounded-xl">💼</span>
+                            <div>
+                                <span class="font-bold text-sm text-gray-900 dark:text-white block group-hover:text-indigo-600">Salaried &amp; Professional ${activeProfileMode === 'SALARIED' ? '<span class="text-xs text-indigo-600 font-extrabold ml-1">(Active)</span>' : ''}</span>
+                                <span class="text-gray-500 dark:text-gray-400">Monthly Payday Waterfall &amp; Salary Runway Pacing</span>
+                            </div>
+                        </div>
+                        <span class="text-indigo-600 font-extrabold text-xs">${activeProfileMode === 'SALARIED' ? '✓ Active' : 'Switch →'}</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- 📱 Native Mobile Bottom App Dock -->
     <nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800/80 px-4 py-2 flex justify-around items-center sm:hidden shadow-lg safe-area-bottom">
         <a href="/" class="flex flex-col items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-bold active:scale-90 transition-transform">
             <span class="text-xl">⚡</span>
             <span class="text-[10px] tracking-tight">Finance</span>
         </a>
-        <a href="/rider" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 active:scale-90 transition-transform font-medium">
-            <span class="text-xl">🛵</span>
-            <span class="text-[10px] tracking-tight">Rider</span>
+        <a href="${activeProfileMode === 'TRADER' ? '/trader' : activeProfileMode === 'SALARIED' ? '/salaried' : '/rider'}" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-emerald-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">${activeProfileIcon}</span>
+            <span class="text-[10px] tracking-tight">${activeProfileMode === 'TRADER' ? 'Soko' : activeProfileMode === 'SALARIED' ? 'Payday' : 'Rider'}</span>
         </a>
         <a href="#mpesa-card" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-emerald-500 active:scale-90 transition-transform font-medium">
             <span class="text-xl">📲</span>
@@ -5083,10 +5179,10 @@ export function renderFinanceDashboard(data: any): string {
             <span class="text-xl">🌊</span>
             <span class="text-[10px] tracking-tight">Split</span>
         </a>
-        <a href="/login" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-pink-500 active:scale-90 transition-transform font-medium">
-            <span class="text-xl">🔑</span>
-            <span class="text-[10px] tracking-tight">Account</span>
-        </a>
+        <button type="button" onclick="openProfileModal()" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-purple-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">🔄</span>
+            <span class="text-[10px] tracking-tight">Profile</span>
+        </button>
     </nav>
 </body>
 </html>`;

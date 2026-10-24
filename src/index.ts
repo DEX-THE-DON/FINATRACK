@@ -3,11 +3,16 @@ import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules } from './routes/finance';
 import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig } from './routes/rider';
+import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
+import { salariedRoutes, getSalariedConfig } from './routes/salaried';
 import { exportRoutes } from './routes/export';
 import { authRoutes } from './routes/auth';
 import { renderFinanceDashboard } from './views/financeView';
 import { renderRiderDashboard } from './views/riderView';
+import { renderTraderDashboard } from './views/traderView';
+import { renderSalariedDashboard } from './views/salariedView';
 import { renderAuthView } from './views/authView';
+import { getActiveProfile, setActiveProfile, PROFILES, ProfileMode } from './utils/profile';
 import {
   toDecimal,
   calculateMonthlyYield,
@@ -564,6 +569,7 @@ app.get('/', async (c) => {
     toast,
     username,
     is_logged_in: isLoggedIn,
+    active_profile: getActiveProfile(c),
   });
 
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -745,6 +751,7 @@ app.get('/rider', async (c) => {
     current_currency: userCurrency,
     username,
     is_logged_in: isLoggedIn,
+    active_profile: getActiveProfile(c),
   });
 
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -770,10 +777,82 @@ app.get('/auth', (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// 4. MOUNT ROUTE MODULES
+// 4. MAMA MBOGA & MICRO-SHOP DASHBOARD (GET /trader)
+// ------------------------------------------------------------------------------
+app.get('/trader', async (c) => {
+  const { userId, username, isLoggedIn } = await getRequestContext(c);
+  const toast = c.req.query('toast') || '';
+  const traderConfig = getTraderConfig(c);
+  const traderLogs = getSavedTraderLogs(c);
+  const traderCredits = getSavedTraderCredits(c);
+  const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
+
+  const html = renderTraderDashboard({
+    username: username || 'Dennis',
+    is_logged_in: isLoggedIn,
+    trader_config: traderConfig,
+    trader_logs: traderLogs,
+    trader_credits: traderCredits,
+    toast,
+    current_currency: userCurrency,
+  });
+
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return c.html(html);
+});
+
+// ------------------------------------------------------------------------------
+// 5. SALARIED & PROFESSIONAL DASHBOARD (GET /salaried)
+// ------------------------------------------------------------------------------
+app.get('/salaried', async (c) => {
+  const { supabase, userId, username, isLoggedIn } = await getRequestContext(c);
+  const toast = c.req.query('toast') || '';
+  const salariedConfig = getSalariedConfig(c);
+  const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
+
+  const { data: accounts } = await supabase.from('accounts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
+  const { data: dbRules } = await supabase.from('allocation_rules').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
+  const rules = resolveEffectiveAllocationRules(c, dbRules || []);
+
+  const totalBal = (accounts || []).reduce((sum: number, a: any) => sum + Number(a.balance || 0), 0);
+
+  const html = renderSalariedDashboard({
+    username: username || 'Dennis',
+    is_logged_in: isLoggedIn,
+    salaried_config: salariedConfig,
+    total_balance: totalBal,
+    toast,
+    current_currency: userCurrency,
+    accounts: accounts || [],
+    allocation_rules: rules,
+  });
+
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return c.html(html);
+});
+
+// ------------------------------------------------------------------------------
+// 6. UNIVERSAL PROFILE SWITCHER (POST /profile/switch)
+// ------------------------------------------------------------------------------
+app.post('/profile/switch', async (c) => {
+  const body: any = await c.req.parseBody().catch(() => ({}));
+  const rawMode = String(body['profile_mode'] || c.req.query('profile_mode') || 'RIDER').toUpperCase();
+  const validMode: ProfileMode = (rawMode === 'TRADER' || rawMode === 'SALARIED') ? rawMode : 'RIDER';
+  setActiveProfile(c, validMode);
+
+  const profile = PROFILES[validMode];
+  const targetRoute = profile.primaryRoute;
+  const toastMsg = encodeURIComponent(`Switched to ${profile.label} Mode ${profile.icon}`);
+  return c.redirect(`${targetRoute}?toast=${toastMsg}`, 303);
+});
+
+// ------------------------------------------------------------------------------
+// 7. MOUNT ROUTE MODULES
 // ------------------------------------------------------------------------------
 app.route('/', financeRoutes);
 app.route('/', riderRoutes);
+app.route('/', traderRoutes);
+app.route('/', salariedRoutes);
 app.route('/', exportRoutes);
 app.route('/', authRoutes);
 
