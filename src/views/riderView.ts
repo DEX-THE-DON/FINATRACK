@@ -187,11 +187,17 @@ export function renderRiderDashboard(data: any): string {
         })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
                     colors: {
                         primary: '#3B82F6',
                         dark: '#0F172A',
@@ -201,12 +207,23 @@ export function renderRiderDashboard(data: any): string {
         }
     </script>
     <style>
+        html, body {
+            overflow-x: hidden;
+            max-width: 100vw;
+        }
         .convertible-amount { transition: all 0.2s ease-in-out; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
         .dark ::-webkit-scrollbar-thumb { background: #334155; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Tailwind v4 -> v3 CDN compatibility utilities */
+        .shadow-xs { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+        .shadow-2xs { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03); }
+        .backdrop-blur-xs { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+        .rounded-xs { border-radius: 0.125rem; }
+        .aspect-4\/3 { aspect-ratio: 4 / 3; }
+        .active\:scale-98:active { transform: scale(0.98); }
         @supports (padding: max(0px)) {
             .safe-area-bottom {
                 padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
@@ -2684,47 +2701,47 @@ export function renderRiderDashboard(data: any): string {
         <button onclick="document.getElementById('toast-banner').remove()" class="ml-4 text-blue-200 hover:text-white">✕</button>
     </div>` : ''}
 
-    <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-30 shadow-xs">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <span class="text-2xl">🛵</span>
-                <div>
-                    <h1 class="font-extrabold text-lg text-gray-900 dark:text-white tracking-tight leading-none">Rider Fleet Tracker</h1>
-                    <span class="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">EV & ICE Time Intelligence</span>
+    <header class="bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/80 dark:border-gray-800 sticky top-0 z-30 shadow-xs">
+        <div class="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex justify-between items-center gap-2">
+            <a href="/rider" class="flex items-center space-x-2.5 shrink-0">
+                <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-base sm:text-lg text-white shadow-xs">
+                    🛵
                 </div>
-            </div>
+                <div>
+                    <h1 class="font-extrabold text-base sm:text-lg text-gray-900 dark:text-white tracking-tight leading-none">Rider Fleet</h1>
+                    <span class="hidden sm:block text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-0.5">EV &amp; ICE Time Intelligence</span>
+                </div>
+            </a>
             
-            <div class="flex items-center space-x-2 sm:space-x-3">
-                <button onclick="triggerAppInstall()" class="pwa-install-trigger px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-sm transition flex items-center space-x-1.5 hidden">
+            <div class="flex items-center gap-1.5 sm:gap-2.5">
+                <button onclick="triggerAppInstall()" class="pwa-install-trigger px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-xs transition flex items-center gap-1 hidden">
                     <span>📲</span>
                     <span class="hidden sm:inline">Install App</span>
-                    <span class="sm:hidden">Install</span>
                 </button>
 
-                <a href="/finance/statement" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
-                    <span>📄 <span class="hidden md:inline">SACCO Statement</span></span>
-                </a>
-
                 <!-- Profile Switcher Button -->
-                <button type="button" onclick="openProfileModal()" class="px-2.5 sm:px-3 py-1.5 ${activeProfileBadge} rounded-xl text-xs font-black transition active:scale-95 flex items-center gap-1.5 shadow-2xs border">
-                    <span>${activeProfileIcon} <span class="hidden sm:inline">${activeProfileLabel}</span></span>
+                <button type="button" onclick="openProfileModal()" class="px-2.5 sm:px-3 py-1.5 ${activeProfileBadge} rounded-xl text-xs font-black transition active:scale-95 flex items-center gap-1 shadow-2xs border">
+                    <span>${activeProfileIcon} <span class="hidden md:inline">${activeProfileLabel}</span></span>
                     <span class="text-[10px] opacity-70">▾</span>
                 </button>
 
-                <div class="hidden lg:flex items-center space-x-1">
-                    <a href="/trader" class="px-2 py-1 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-                        🥬 Mama Mboga
+                <div class="hidden lg:flex items-center space-x-1 bg-gray-100/80 dark:bg-gray-800/80 p-1 rounded-xl border border-gray-200/60 dark:border-gray-700/60">
+                    <a href="/" class="px-2.5 py-1 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 transition">
+                        ⚡ Finance
                     </a>
-                    <a href="/salaried" class="px-2 py-1 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                    <a href="/trader" class="px-2.5 py-1 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 transition">
+                        🥬 Trader
+                    </a>
+                    <a href="/salaried" class="px-2.5 py-1 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 transition">
                         💼 Salaried
                     </a>
                 </div>
 
-                <a href="/" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
-                    <span>⚡ <span class="hidden md:inline">Finance</span></span>
+                <a href="/" class="hidden sm:inline-flex lg:hidden px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition items-center gap-1 shadow-xs">
+                    <span>⚡ Finance</span>
                 </a>
 
-                <select id="currency-selector" onchange="setCurrency(this.value)" class="text-xs bg-gray-100 dark:bg-gray-800 border-0 rounded-lg px-2.5 py-1.5 font-bold text-gray-700 dark:text-gray-200 cursor-pointer">
+                <select id="currency-selector" onchange="setCurrency(this.value)" class="text-xs bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-2 sm:px-2.5 py-1.5 font-bold text-gray-700 dark:text-gray-200 cursor-pointer">
                     <option value="Ksh" ${current_currency === 'Ksh' ? 'selected' : ''}>KSH</option>
                     <option value="USD" ${current_currency === 'USD' ? 'selected' : ''}>USD</option>
                 </select>
@@ -2732,43 +2749,47 @@ export function renderRiderDashboard(data: any): string {
                 ${is_logged_in ? `
                 <div class="flex items-center space-x-1.5 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/80 px-2.5 py-1.5 rounded-xl shadow-xs">
                     <span class="text-xs">👤</span>
-                    <span class="text-xs font-bold text-blue-800 dark:text-blue-300 max-w-[100px] truncate hidden sm:inline">${username}</span>
+                    <span class="text-xs font-bold text-blue-800 dark:text-blue-300 max-w-[90px] truncate hidden sm:inline">${username}</span>
                     <form action="/auth/logout" method="POST" class="inline m-0 p-0">
                         <input type="hidden" name="redirect_to" value="/rider">
-                        <button type="submit" title="Logout" class="text-[10px] text-rose-500 dark:text-rose-400 font-bold hover:underline ml-1">✕</button>
+                        <button type="submit" title="Logout" class="text-[11px] text-rose-500 dark:text-rose-400 font-bold hover:underline ml-0.5">✕</button>
                     </form>
                 </div>
                 ` : `
-                <a href="/login" class="px-3 py-1.5 bg-gradient-to-r from-pink-500/10 to-purple-500/10 hover:from-pink-500/20 hover:to-purple-500/20 text-pink-600 dark:text-pink-400 border border-pink-500/30 rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs">
-                    <span>🔑 <span class="hidden sm:inline">Sign In</span></span>
+                <a href="/login" class="px-2.5 sm:px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs">
+                    <span>🔑</span>
+                    <span class="hidden sm:inline">Sign In</span>
                 </a>
                 `}
 
-                <button onclick="toggleDarkMode()" class="dark-mode-toggle-btn p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Toggle Dark/Light Mode">
+                <button onclick="toggleDarkMode()" class="dark-mode-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Toggle Dark/Light Mode">
                     🌙
                 </button>
             </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 flex-1 w-full pb-28 sm:pb-8">
+    <main class="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6 flex-1 w-full pb-28 sm:pb-10">
         
         <!-- 👋 Welcome Greeting Hero Banner -->
-        <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-5 border border-gray-100 dark:border-gray-800 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div class="flex items-center space-x-3.5">
-                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-2xl text-white shadow-md">
+        <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-5 border border-gray-200/80 dark:border-gray-800 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-xl sm:text-2xl text-white shadow-md shrink-0">
                     🛵
                 </div>
                 <div>
                     <h2 class="text-base sm:text-lg font-black text-gray-900 dark:text-white leading-tight">
                         ${is_logged_in ? `Welcome back, <span class="text-blue-600 dark:text-blue-400 font-extrabold">${username}</span>!` : `Welcome to <span class="text-blue-600 dark:text-blue-400 font-extrabold">Rider Fleet Tracker</span>!`}
                     </h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Dynamic EV battery swap & ICE fuel intelligence with automatic financial ledger synchronization.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Dynamic EV battery swap &amp; ICE fuel intelligence with automatic financial ledger synchronization.</p>
                 </div>
             </div>
-            <div class="flex items-center space-x-2 text-xs">
+            <div class="flex flex-wrap items-center gap-2 text-xs w-full sm:w-auto">
+                <a href="/finance/statement" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl font-bold transition flex items-center gap-1.5 shadow-2xs active:scale-95">
+                    <span>📄 SACCO Statement</span>
+                </a>
                 ${is_logged_in ? `
-                <span class="px-3 py-1 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 font-bold rounded-xl flex items-center gap-1.5 shadow-2xs">
+                <span class="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 font-bold rounded-xl flex items-center gap-1.5 shadow-2xs">
                     <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
                     <span>Authenticated (${username})</span>
                 </span>
@@ -2781,7 +2802,7 @@ export function renderRiderDashboard(data: any): string {
         </div>
 
         <!-- Mobile Quick Action Pills (Horizontal scroll on phone) -->
-        <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-4 px-4 sticky top-14 z-20 bg-gray-50/90 dark:bg-slate-950/90 backdrop-blur-md">
+        <div class="flex sm:hidden overflow-x-auto gap-2 py-2 no-scrollbar -mx-3.5 px-3.5 sticky top-14 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-gray-200/70 dark:border-gray-800/70">
             <a href="/?pay_yourself_amount=${closeoutSplitAmount.toFixed(2)}#waterfall-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 active:scale-95 text-slate-950 text-xs font-black rounded-xl shadow-xs shrink-0 transition">
                 <span>👑 Pay Yourself (23:50)</span>
             </a>

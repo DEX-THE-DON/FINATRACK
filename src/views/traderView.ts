@@ -42,16 +42,32 @@ export function renderTraderDashboard(data: {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>🥬 Mama Mboga &amp; Soko Hub - Finatrack</title>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#064e3b">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script>
         tailwind.config = {
-            darkMode: 'media',
+            darkMode: 'class',
             theme: {
                 extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
                     colors: {
                         emerald: { 850: '#064e3b', 950: '#022c22' }
                     }
@@ -59,54 +75,87 @@ export function renderTraderDashboard(data: {
             }
         }
     </script>
+    <style>
+        html, body {
+            overflow-x: hidden;
+            max-width: 100vw;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        .dark ::-webkit-scrollbar-thumb { background: #334155; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .shadow-xs { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+        .shadow-2xs { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03); }
+        .backdrop-blur-xs { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+        .rounded-xs { border-radius: 0.125rem; }
+        .active\:scale-98:active { transform: scale(0.98); }
+        @supports (padding: max(0px)) {
+            .safe-area-bottom {
+                padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+            }
+        }
+    </style>
 </head>
-<body class="bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 min-h-screen font-sans pb-24 sm:pb-12 antialiased selection:bg-emerald-500 selection:text-white">
+<body class="bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 min-h-screen font-sans pb-28 sm:pb-12 antialiased selection:bg-emerald-500 selection:text-white">
 
     <!-- Top Navigation Header -->
-    <header class="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-emerald-200 dark:border-emerald-900/60 shadow-xs">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
-            <div class="flex items-center space-x-3">
-                <a href="/" class="flex items-center space-x-2">
-                    <span class="text-2xl">🥬</span>
-                    <span class="text-xl font-black bg-gradient-to-r from-emerald-600 via-teal-500 to-amber-500 bg-clip-text text-transparent tracking-tight">Finatrack</span>
-                </a>
-                <span class="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    Soko &amp; Stall Hub
-                </span>
-            </div>
+    <header class="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200/80 dark:border-emerald-900/60 shadow-xs">
+        <div class="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+            <a href="/" class="flex items-center space-x-2.5 shrink-0">
+                <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-600 flex items-center justify-center text-base sm:text-lg text-white shadow-xs">
+                    🥬
+                </div>
+                <div>
+                    <span class="font-extrabold text-base sm:text-lg text-gray-900 dark:text-white tracking-tight block leading-none">Finatrack</span>
+                    <span class="hidden sm:block text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mt-0.5">Soko &amp; Stall Hub</span>
+                </div>
+            </a>
 
             <!-- Profile Mode Switcher Pill & Navigation Links -->
-            <div class="flex items-center space-x-2">
+            <div class="flex items-center gap-1.5 sm:gap-2.5">
                 <!-- Profile Switcher Button -->
-                <button type="button" onclick="openProfileModal()" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-black transition active:scale-95 flex items-center gap-1.5 shadow-2xs">
-                    <span>🥬 Mama Mboga Mode</span>
+                <button type="button" onclick="openProfileModal()" class="px-2.5 sm:px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-black transition active:scale-95 flex items-center gap-1 shadow-2xs">
+                    <span>🥬 <span class="hidden sm:inline">Mama Mboga Mode</span><span class="sm:hidden">Soko</span></span>
                     <span class="text-[10px] opacity-70">▾</span>
                 </button>
 
-                <a href="/" class="hidden md:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition">
-                    ⚡ Finance
-                </a>
-                <a href="/rider" class="hidden md:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition">
-                    🛵 Rider
-                </a>
-                <a href="/salaried" class="hidden md:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition">
-                    💼 Salaried
-                </a>
+                <div class="hidden md:flex items-center space-x-1 bg-gray-100/80 dark:bg-gray-800/80 p-1 rounded-xl border border-gray-200/60 dark:border-gray-700/60">
+                    <a href="/" class="px-2.5 py-1 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition">
+                        ⚡ Finance
+                    </a>
+                    <a href="/rider" class="px-2.5 py-1 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition">
+                        🛵 Rider
+                    </a>
+                    <a href="/salaried" class="px-2.5 py-1 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition">
+                        💼 Salaried
+                    </a>
+                </div>
 
                 ${is_logged_in ? `
-                <a href="/auth/logout" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
-                    Logout
-                </a>` : `
-                <a href="/login" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs">
-                    Login
+                <div class="flex items-center space-x-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 px-2.5 py-1.5 rounded-xl shadow-xs">
+                    <span class="text-xs">👤</span>
+                    <span class="text-xs font-bold text-emerald-800 dark:text-emerald-300 max-w-[90px] truncate hidden sm:inline">${username}</span>
+                    <form action="/auth/logout" method="POST" class="inline m-0 p-0">
+                        <input type="hidden" name="redirect_to" value="/trader">
+                        <button type="submit" title="Logout" class="text-[11px] text-rose-500 dark:text-rose-400 font-bold hover:underline ml-0.5">✕</button>
+                    </form>
+                </div>` : `
+                <a href="/login" class="px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1">
+                    <span>🔑</span>
+                    <span class="hidden sm:inline">Sign In</span>
                 </a>`}
+
+                <button onclick="toggleDarkMode()" class="dark-mode-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Toggle Dark/Light Mode">
+                    🌙
+                </button>
             </div>
         </div>
     </header>
 
     <!-- Toast Notification -->
     ${toast ? `
-    <div id="toast-bar" class="max-w-4xl mx-auto px-4 mt-4">
+    <div id="toast-bar" class="max-w-4xl mx-auto px-3.5 sm:px-4 mt-3">
         <div class="p-3 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-lg flex items-center justify-between">
             <div class="flex items-center space-x-2">
                 <span>🔔</span>
@@ -116,50 +165,50 @@ export function renderTraderDashboard(data: {
         </div>
     </div>` : ''}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main class="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
 
         <!-- ☀️ Top Soko / Market Briefing Card -->
-        <div class="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 border-2 border-emerald-500/60 p-6 rounded-3xl text-white shadow-xl space-y-4">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 border border-emerald-500/50 p-4 sm:p-6 rounded-2xl sm:rounded-3xl text-white shadow-xl space-y-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
                 <div class="space-y-1">
                     <div class="flex items-center gap-2 flex-wrap">
-                        <span class="px-2.5 py-0.5 bg-emerald-500 text-slate-950 font-black text-[11px] rounded-full uppercase tracking-wider">🥬 Mama Mboga &amp; Soko OS</span>
+                        <span class="px-2.5 py-0.5 bg-emerald-500 text-slate-950 font-black text-[10px] sm:text-[11px] rounded-full uppercase tracking-wider">🥬 Mama Mboga &amp; Soko OS</span>
                         <span class="text-xs text-emerald-300 font-bold">${trader_config.stall_name} • ${trader_config.market_location}</span>
                     </div>
-                    <h1 class="text-2xl sm:text-3xl font-black text-white">Daily Stall &amp; Marikiti Soko Command</h1>
+                    <h1 class="text-xl sm:text-3xl font-black text-white leading-tight">Daily Stall &amp; Marikiti Soko Command</h1>
                     <p class="text-xs text-emerald-200/80">Capital is Holy: Keep Tomorrow's Soko Restock Fund separate from today's dinner and living expenses.</p>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
                     <button type="button" onclick="document.getElementById('stall-settings-modal').classList.remove('hidden')" class="px-3 py-1.5 bg-slate-900/80 hover:bg-slate-800 border border-emerald-500/40 rounded-xl text-xs font-bold text-emerald-300 transition active:scale-95 flex items-center gap-1.5">
                         ⚙️ Soko Settings
                     </button>
-                    <a href="/#waterfall-card" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-600 hover:to-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition active:scale-95 flex items-center gap-1.5">
+                    <a href="/#waterfall-card" class="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-600 hover:to-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition active:scale-95 flex items-center gap-1.5">
                         👑 Pay Yourself First
                     </a>
                 </div>
             </div>
 
             <!-- Key Numbers Bar -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                <div class="p-3 bg-slate-950/70 border border-emerald-500/30 rounded-2xl">
-                    <span class="text-[10px] font-bold text-emerald-300 uppercase block">🎯 Daily Net Profit Target</span>
-                    <span class="text-lg sm:text-xl font-black text-white">${formatKes(targetFloor)}</span>
-                    <span class="text-[10px] text-emerald-400 block mt-0.5">${isTargetHit ? '🟢 Target Met on Last Closeout' : '⏳ Floor to Hit Today'}</span>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
+                <div class="p-3 bg-slate-950/75 border border-emerald-500/30 rounded-2xl">
+                    <span class="text-[10px] font-bold text-emerald-300 uppercase block">🎯 Daily Net Target</span>
+                    <span class="text-base sm:text-xl font-black text-white break-words">${formatKes(targetFloor)}</span>
+                    <span class="text-[10px] text-emerald-400 block mt-0.5">${isTargetHit ? '🟢 Target Met' : '⏳ Floor to Hit Today'}</span>
                 </div>
-                <div class="p-3 bg-slate-950/70 border border-amber-500/30 rounded-2xl">
-                    <span class="text-[10px] font-bold text-amber-300 uppercase block">📦 Standard Restock Fund</span>
-                    <span class="text-lg sm:text-xl font-black text-amber-400">${formatKes(trader_config.default_restock_kes)}</span>
-                    <span class="text-[10px] text-gray-400 block mt-0.5">Protected Marikiti Soko Capital</span>
+                <div class="p-3 bg-slate-950/75 border border-amber-500/30 rounded-2xl">
+                    <span class="text-[10px] font-bold text-amber-300 uppercase block">📦 Restock Fund</span>
+                    <span class="text-base sm:text-xl font-black text-amber-400 break-words">${formatKes(trader_config.default_restock_kes)}</span>
+                    <span class="text-[10px] text-gray-400 block mt-0.5">Protected Soko Capital</span>
                 </div>
-                <div class="p-3 bg-slate-950/70 border border-rose-500/30 rounded-2xl">
-                    <span class="text-[10px] font-bold text-rose-300 uppercase block">📒 Daftari ya Mkopo (Owed)</span>
-                    <span class="text-lg sm:text-xl font-black text-rose-400">${formatKes(totalUnpaidCredit)}</span>
-                    <span class="text-[10px] text-rose-300 block mt-0.5">${unpaidCount} customer${unpaidCount === 1 ? '' : 's'} to collect from</span>
+                <div class="p-3 bg-slate-950/75 border border-rose-500/30 rounded-2xl">
+                    <span class="text-[10px] font-bold text-rose-300 uppercase block">📒 Daftari (Owed)</span>
+                    <span class="text-base sm:text-xl font-black text-rose-400 break-words">${formatKes(totalUnpaidCredit)}</span>
+                    <span class="text-[10px] text-rose-300 block mt-0.5">${unpaidCount} customer${unpaidCount === 1 ? '' : 's'}</span>
                 </div>
-                <div class="p-3 bg-slate-950/70 border border-cyan-500/30 rounded-2xl">
-                    <span class="text-[10px] font-bold text-cyan-300 uppercase block">🚀 Latest Net Shift Profit</span>
-                    <span class="text-lg sm:text-xl font-black text-cyan-400">${formatKes(latestNet)}</span>
-                    <span class="text-[10px] text-cyan-300 block mt-0.5">${latestOverflow > 0 ? `+${formatKes(latestOverflow)} swept to MMF` : 'Last recorded closeout'}</span>
+                <div class="p-3 bg-slate-950/75 border border-cyan-500/30 rounded-2xl">
+                    <span class="text-[10px] font-bold text-cyan-300 uppercase block">🚀 Latest Net Profit</span>
+                    <span class="text-base sm:text-xl font-black text-cyan-400 break-words">${formatKes(latestNet)}</span>
+                    <span class="text-[10px] text-cyan-300 block mt-0.5">${latestOverflow > 0 ? `+${formatKes(latestOverflow)} swept` : 'Last closeout'}</span>
                 </div>
             </div>
         </div>
@@ -529,10 +578,32 @@ export function renderTraderDashboard(data: {
             <span class="text-xl">👑</span>
             <span class="text-[10px] tracking-tight">Split</span>
         </a>
+        <button type="button" onclick="openProfileModal()" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-purple-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">🔄</span>
+            <span class="text-[10px] tracking-tight">Profile</span>
+        </button>
     </nav>
 
     <script>
         var TARGET_FLOOR = ${targetFloor};
+
+        function updateThemeIcon() {
+            var isDark = document.documentElement.classList.contains('dark');
+            document.querySelectorAll('.dark-mode-toggle-btn').forEach(function(btn) {
+                btn.innerHTML = isDark ? '☀️' : '🌙';
+                btn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+            });
+        }
+
+        function toggleDarkMode() {
+            var isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateThemeIcon();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateThemeIcon();
+        });
 
         function recalcTraderCloseoutPreview() {
             var gross = parseFloat(document.getElementById('trader_gross')?.value || 0) || 0;
@@ -610,6 +681,7 @@ export function renderTraderDashboard(data: {
         window.calcMarginEstimator = calcMarginEstimator;
         window.openProfileModal = openProfileModal;
         window.closeProfileModal = closeProfileModal;
+        window.toggleDarkMode = toggleDarkMode;
     </script>
 </body>
 </html>`;

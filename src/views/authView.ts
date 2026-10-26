@@ -42,12 +42,16 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
         }
     </script>
     <style>
+        html, body {
+            overflow-x: hidden;
+        }
         body {
             background-color: #0f172a;
             background-image:
-                radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.12) 0%, transparent 45%),
-                radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.10) 0%, transparent 45%);
+                radial-gradient(circle at 18% 18%, rgba(16, 185, 129, 0.14) 0%, transparent 45%),
+                radial-gradient(circle at 82% 82%, rgba(59, 130, 246, 0.12) 0%, transparent 45%);
             min-height: 100vh;
+            min-height: 100dvh;
         }
 
         /* Ensure input text & autofill are always clearly visible */
@@ -66,7 +70,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
 
         /* Top Segmented Pill Glider */
         .auth-tab-glider {
-            transition: transform 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+            transition: transform 0.42s cubic-bezier(0.65, 0, 0.35, 1);
             will-change: transform;
         }
         #auth-card-container.mode-signup .auth-tab-glider {
@@ -76,18 +80,27 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             transform: translateX(100%);
         }
 
-        /* Mobile (< 768px): Horizontal Sliding Form Track (200% width) */
+        /* Mobile (< 768px): Full-Width Horizontal Sliding Form Track (200% width) */
+        .auth-forms-viewport {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
         .auth-forms-track {
             display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
             width: 200%;
-            transition: transform 0.52s cubic-bezier(0.65, 0, 0.35, 1);
+            align-items: flex-start;
+            transition: transform 0.48s cubic-bezier(0.65, 0, 0.35, 1);
             will-change: transform;
         }
         .auth-form-slide {
             flex: 0 0 50%;
             width: 50%;
+            max-width: 50%;
             box-sizing: border-box;
-            transition: opacity 0.4s ease, transform 0.52s cubic-bezier(0.65, 0, 0.35, 1);
+            transition: opacity 0.35s ease, transform 0.48s cubic-bezier(0.65, 0, 0.35, 1);
         }
         #auth-card-container.mode-login .auth-forms-track {
             transform: translateX(0%);
@@ -96,21 +109,56 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             transform: translateX(-50%);
         }
 
+        @media (max-width: 767px) {
+            #auth-card-container.mode-login #signup-slide-panel {
+                opacity: 0;
+                pointer-events: none;
+                max-height: 390px;
+                overflow: hidden;
+            }
+            #auth-card-container.mode-login #login-slide-panel {
+                opacity: 1;
+                pointer-events: auto;
+                max-height: 1000px;
+            }
+            #auth-card-container.mode-signup #login-slide-panel {
+                opacity: 0;
+                pointer-events: none;
+                max-height: 450px;
+                overflow: hidden;
+            }
+            #auth-card-container.mode-signup #signup-slide-panel {
+                opacity: 1;
+                pointer-events: auto;
+                max-height: 1000px;
+            }
+        }
+
         /* Desktop (>= 768px): Classic 2-Column Sliding Overlay Card */
         @media (min-width: 768px) {
+            .auth-forms-viewport {
+                min-height: 510px;
+                display: flex;
+                align-items: stretch;
+            }
             .auth-forms-track {
                 width: 100%;
+                min-height: 510px;
+                align-items: center;
                 transform: none !important;
             }
             .auth-form-slide {
                 flex: 0 0 50%;
                 width: 50%;
+                max-width: 50%;
+                max-height: none !important;
+                overflow: visible !important;
             }
             /* Subtle inner slide + fade on the forms as the overlay glides across */
             #auth-card-container.mode-signup #login-slide-panel {
                 opacity: 0;
                 pointer-events: none;
-                transform: translateX(-24px);
+                transform: translateX(-20px);
             }
             #auth-card-container.mode-signup #signup-slide-panel {
                 opacity: 1;
@@ -120,7 +168,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             #auth-card-container.mode-login #signup-slide-panel {
                 opacity: 0;
                 pointer-events: none;
-                transform: translateX(24px);
+                transform: translateX(20px);
             }
             #auth-card-container.mode-login #login-slide-panel {
                 opacity: 1;
@@ -136,7 +184,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                 left: 0;
                 width: 50%;
                 z-index: 30;
-                transition: transform 0.58s cubic-bezier(0.65, 0, 0.35, 1);
+                transition: transform 0.55s cubic-bezier(0.65, 0, 0.35, 1);
                 will-change: transform;
             }
             /* In Sign Up mode: Overlay sits on the LEFT (0%), revealing Sign Up form on the RIGHT */
@@ -151,10 +199,19 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             /* Inner overlay text track slides smoothly too */
             .overlay-content-track {
                 display: flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
                 width: 200%;
                 height: 100%;
-                transition: transform 0.58s cubic-bezier(0.65, 0, 0.35, 1);
+                transition: transform 0.55s cubic-bezier(0.65, 0, 0.35, 1);
                 will-change: transform;
+            }
+            .overlay-content-slide {
+                flex: 0 0 50%;
+                width: 50%;
+                max-width: 50%;
+                height: 100%;
+                box-sizing: border-box;
             }
             #auth-card-container.mode-signup .overlay-content-track {
                 transform: translateX(0%);
@@ -168,37 +225,37 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
 <body class="text-slate-100 flex flex-col justify-between min-h-screen antialiased selection:bg-emerald-500 selection:text-white">
 
     <!-- Top Simple Header -->
-    <header class="w-full max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex justify-between items-center">
-        <a href="/" class="flex items-center gap-2.5 group">
-            <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-lg shadow-md shadow-emerald-500/20 group-hover:scale-105 transition">
+    <header class="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-3.5 pb-2 sm:py-5 flex justify-between items-center gap-2">
+        <a href="/" class="flex items-center gap-2.5 group shrink-0">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-lg shadow-md shadow-emerald-500/20 group-hover:scale-105 transition">
                 ⚡
             </div>
             <div>
-                <span class="font-extrabold text-lg tracking-tight text-white block leading-none">Finatrack</span>
+                <span class="font-extrabold text-base sm:text-lg tracking-tight text-white block leading-none">Finatrack</span>
                 <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Personal &amp; Fleet OS</span>
             </div>
         </a>
 
-        <div class="flex items-center gap-2">
-            <a href="/" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 transition">
+        <div class="flex items-center gap-1.5 sm:gap-2">
+            <a href="/" class="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 transition">
                 ⚡ Finance
             </a>
-            <a href="/rider" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 transition">
+            <a href="/rider" class="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 transition">
                 🛵 Rider
             </a>
-            <a href="/trader" class="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700/80 transition">
+            <a href="/trader" class="hidden sm:inline-flex px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 transition">
                 🥬 Trader
             </a>
-            <a href="/salaried" class="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700/80 transition">
+            <a href="/salaried" class="hidden sm:inline-flex px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 transition">
                 💼 Salaried
             </a>
         </div>
     </header>
 
     <!-- Main Centered Sliding Auth Card -->
-    <main class="flex-1 flex items-center justify-center px-3 sm:px-6 py-4 w-full">
+    <main class="flex-1 flex items-center justify-center px-3.5 sm:px-6 py-3 sm:py-6 w-full">
         <div id="auth-card-container"
-             class="w-full max-w-md md:max-w-4xl bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl overflow-hidden ${isLogin ? 'mode-login' : 'mode-signup'}">
+             class="w-full max-w-[420px] md:max-w-4xl bg-slate-900/95 backdrop-blur-xl border border-slate-800/90 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden ${isLogin ? 'mode-login' : 'mode-signup'}">
 
             <!-- Optional Toast Banner -->
             ${toast ? `
@@ -207,9 +264,9 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             </div>` : ''}
 
             <!-- Top Segmented Sliding Switcher (Always accessible on Mobile & Desktop) -->
-            <div class="px-6 pt-5 pb-2 md:border-b md:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/60">
+            <div class="px-4 sm:px-6 pt-4 pb-3 border-b border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-slate-900/80">
                 <div class="flex items-center gap-2 text-xs text-slate-400">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                     <span id="auth-status-label" class="font-semibold text-slate-300">
                         ${isLogin ? 'Signing in to your Finatrack account' : 'Creating a new Finatrack account'}
                     </span>
@@ -222,20 +279,20 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                     <button type="button"
                             id="tab-signup-btn"
                             onclick="switchAuthTab('signup')"
-                            class="relative z-10 py-1.5 text-xs font-bold rounded-lg transition-colors ${!isLogin ? 'text-white' : 'text-slate-400 hover:text-slate-200'}">
+                            class="relative z-10 py-2 sm:py-1.5 text-xs font-extrabold rounded-lg transition-colors ${!isLogin ? 'text-white' : 'text-slate-400 hover:text-slate-200'}">
                         Sign Up
                     </button>
                     <button type="button"
                             id="tab-login-btn"
                             onclick="switchAuthTab('login')"
-                            class="relative z-10 py-1.5 text-xs font-bold rounded-lg transition-colors ${isLogin ? 'text-white' : 'text-slate-400 hover:text-slate-200'}">
+                            class="relative z-10 py-2 sm:py-1.5 text-xs font-extrabold rounded-lg transition-colors ${isLogin ? 'text-white' : 'text-slate-400 hover:text-slate-200'}">
                         Log In
                     </button>
                 </div>
             </div>
 
             <!-- Interactive Sliding Body -->
-            <div class="relative overflow-hidden min-h-[460px] flex items-center">
+            <div class="auth-forms-viewport">
 
                 <!-- DESKTOP SLIDING OVERLAY PANEL (Slides Left <-> Right on md+) -->
                 <div id="auth-sliding-overlay"
@@ -243,7 +300,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                     <div class="overlay-content-track">
 
                         <!-- Overlay Slide A (Shown when mode === 'signup', sitting on LEFT side) -->
-                        <div class="w-1/2 h-full p-8 lg:p-10 flex flex-col justify-between">
+                        <div class="overlay-content-slide p-8 lg:p-10 flex flex-col justify-between">
                             <div class="flex items-center gap-2">
                                 <span class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-base">⚡</span>
                                 <span class="font-bold text-sm tracking-wide text-emerald-100">Finatrack OS</span>
@@ -275,7 +332,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                         </div>
 
                         <!-- Overlay Slide B (Shown when mode === 'login', sitting on RIGHT side) -->
-                        <div class="w-1/2 h-full p-8 lg:p-10 flex flex-col justify-between">
+                        <div class="overlay-content-slide p-8 lg:p-10 flex flex-col justify-between">
                             <div class="flex items-center gap-2">
                                 <span class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-base">⚡</span>
                                 <span class="font-bold text-sm tracking-wide text-emerald-100">Finatrack OS</span>
@@ -310,11 +367,11 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                 </div>
 
                 <!-- FORMS TRACK (Left 50% = Log In Form, Right 50% = Sign Up Form) -->
-                <div id="auth-forms-track" class="auth-forms-track items-center">
+                <div id="auth-forms-track" class="auth-forms-track">
 
                     <!-- PANEL 1 (LEFT): LOG IN FORM -->
-                    <div id="login-slide-panel" class="auth-form-slide p-6 sm:p-8 lg:p-10">
-                        <div class="mb-5">
+                    <div id="login-slide-panel" class="auth-form-slide p-5 sm:p-8 lg:p-10">
+                        <div class="mb-4 sm:mb-5">
                             <h2 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Welcome Back</h2>
                             <p class="text-xs text-slate-400 mt-1">Enter your email and password to log in.</p>
                         </div>
@@ -348,7 +405,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                                         <span class="pw-btn-text">Show</span>
                                     </button>
                                 </div>
-                                <div class="flex items-center justify-between mt-2">
+                                <div class="flex flex-wrap items-center justify-between gap-2 mt-2.5">
                                     <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
                                         <input type="checkbox" id="login-show-pw-check"
                                                onchange="toggleAuthPassword('login-password', 'login-pw-toggle-btn', 'login-show-pw-check', this.checked)"
@@ -381,23 +438,23 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                     </div>
 
                     <!-- PANEL 2 (RIGHT): SIGN UP FORM -->
-                    <div id="signup-slide-panel" class="auth-form-slide p-6 sm:p-8 lg:p-10">
+                    <div id="signup-slide-panel" class="auth-form-slide p-5 sm:p-8 lg:p-10">
                         <div class="mb-4">
                             <h2 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Create Account</h2>
                             <p class="text-xs text-slate-400 mt-1">Set up your profile in under 30 seconds.</p>
                         </div>
 
                         <form id="signup-form" action="/auth/signup" method="POST" class="space-y-3.5">
-                            <div class="grid grid-cols-2 gap-3">
+                            <div class="grid grid-cols-2 gap-2.5 sm:gap-3">
                                 <div>
                                     <label for="signup-first-name" class="block text-xs font-semibold text-slate-300 mb-1">First Name</label>
                                     <input type="text" id="signup-first-name" name="first_name" placeholder="Dennis" required autocomplete="given-name"
-                                           class="auth-input w-full px-3.5 py-2.5 rounded-xl border border-slate-700 text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition">
+                                           class="auth-input w-full px-3 sm:px-3.5 py-2.5 rounded-xl border border-slate-700 text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition">
                                 </div>
                                 <div>
                                     <label for="signup-last-name" class="block text-xs font-semibold text-slate-300 mb-1">Last Name</label>
                                     <input type="text" id="signup-last-name" name="last_name" placeholder="Dex" required autocomplete="family-name"
-                                           class="auth-input w-full px-3.5 py-2.5 rounded-xl border border-slate-700 text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition">
+                                           class="auth-input w-full px-3 sm:px-3.5 py-2.5 rounded-xl border border-slate-700 text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition">
                                 </div>
                             </div>
 
@@ -424,7 +481,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                                         <span class="pw-btn-text">Show</span>
                                     </button>
                                 </div>
-                                <div class="flex items-center justify-between mt-2">
+                                <div class="flex flex-wrap items-center justify-between gap-2 mt-2.5">
                                     <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
                                         <input type="checkbox" id="signup-show-pw-check"
                                                onchange="toggleAuthPassword('signup-password', 'signup-pw-toggle-btn', 'signup-show-pw-check', this.checked)"
