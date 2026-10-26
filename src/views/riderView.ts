@@ -8,6 +8,7 @@ export function renderRiderDashboard(data: any): string {
     time_intelligence = {},
     maintenance_schedules = [],
     compliance_deadlines = [],
+    roadside_incidents = [],
     bike_financings = [],
     ev_roi_stats = {
       totalKm: 0,
@@ -863,7 +864,71 @@ export function renderRiderDashboard(data: any): string {
                 splitLinkEl.href = '/?pay_yourself_amount=' + pureNet.toFixed(2) + '#waterfall-card';
                 splitLinkEl.innerText = '👑 23:50 Split Ksh ' + pureNet.toLocaleString() + ' Now →';
             }
+
+            syncCashVsWalletSplit(false);
         }
+
+        function syncPlatformSplitToGross() {
+            var uber = Math.max(0, parseFloat(document.getElementById('shift_uber_earned')?.value) || 0);
+            var bolt = Math.max(0, parseFloat(document.getElementById('shift_bolt_earned')?.value) || 0);
+            var little = Math.max(0, parseFloat(document.getElementById('shift_little_earned')?.value) || 0);
+            var direct = Math.max(0, parseFloat(document.getElementById('shift_direct_cash_earned')?.value) || 0);
+            var sum = uber + bolt + little + direct;
+            if (sum > 0) {
+                var grossInp = document.querySelector('input[name="total_earned"]');
+                if (grossInp) {
+                    grossInp.value = String(sum);
+                }
+            }
+            updateStrictSaverAudit();
+        }
+
+        function syncCashVsWalletSplit(fromCashOrWalletInput) {
+            var gross = Math.max(0, parseFloat(document.querySelector('input[name="total_earned"]')?.value) || 0);
+            var fuel = Math.max(0, parseFloat(document.getElementById('shift_fuel_cost_input')?.value) || 0);
+            var food = Math.max(0, parseFloat(document.querySelector('input[name="food_spent"]')?.value) || 0);
+            var airtime = Math.max(0, parseFloat(document.querySelector('input[name="airtime_spent"]')?.value) || 0);
+            var misc = Math.max(0, parseFloat(document.querySelector('input[name="misc_expenses"]')?.value) || 0);
+            var totalExp = fuel + food + airtime + misc;
+
+            var cashInp = document.getElementById('shift_cash_in_hand');
+            var walletInp = document.getElementById('shift_app_wallet_balance');
+            var summaryEl = document.getElementById('shift_wallet_reconcile_summary');
+            if (!cashInp || !walletInp) return;
+
+            var cashVal = Math.max(0, parseFloat(cashInp.value) || 0);
+            var walletVal = Math.max(0, parseFloat(walletInp.value) || 0);
+
+            if (fromCashOrWalletInput === 'CASH' && gross > 0) {
+                walletVal = Math.max(0, gross - cashVal);
+                walletInp.value = String(walletVal);
+            } else if (fromCashOrWalletInput === 'WALLET' && gross > 0) {
+                cashVal = Math.max(0, gross - walletVal);
+                cashInp.value = String(cashVal);
+            }
+
+            var effectiveCash = (cashVal > 0 || walletVal > 0) ? cashVal : gross;
+            var liquidPocketNet = Math.max(0, effectiveCash - totalExp);
+            if (summaryEl) {
+                summaryEl.innerHTML = '💵 Liquid Cash in Pocket (After Expenses): <strong class="text-emerald-600 dark:text-emerald-400">Ksh ' + liquidPocketNet.toLocaleString() + '</strong> • 📱 Stuck in App Wallet: <strong class="text-amber-600 dark:text-amber-400">Ksh ' + walletVal.toLocaleString() + '</strong>';
+            }
+        }
+
+        function applyRoadsidePreset(typeKey, titleHint, defaultAmt) {
+            var drawer = document.getElementById('add-roadside-incident-drawer');
+            if (drawer) drawer.classList.remove('hidden');
+            var typeSel = document.getElementById('roadside_incident_type_select');
+            var titleInp = document.getElementById('roadside_incident_title_input');
+            var amtInp = document.getElementById('roadside_incident_amount_input');
+            if (typeSel) typeSel.value = typeKey;
+            if (titleInp) titleInp.value = titleHint;
+            if (amtInp && defaultAmt) amtInp.value = String(defaultAmt);
+            if (amtInp) amtInp.focus();
+        }
+
+        window.syncPlatformSplitToGross = syncPlatformSplitToGross;
+        window.syncCashVsWalletSplit = syncCashVsWalletSplit;
+        window.applyRoadsidePreset = applyRoadsidePreset;
 
         function calcOdometerServiceStatus(fromUserEdit) {
             const curInput = document.getElementById('current_odometer_input');
@@ -1098,13 +1163,68 @@ export function renderRiderDashboard(data: any): string {
             }
         }
 
-        function toggleMaintDrawer() {
-            const container = document.getElementById('maint-log-form-container');
-            if (container) container.classList.toggle('hidden');
+        function openNewDocWithCamera(side) {
+            const container = document.getElementById('new-comp-form-container');
+            if (container) {
+                container.classList.remove('hidden');
+                container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            openDocCameraCapture(null, null, side || 'front');
         }
 
+        function toggleMaintDrawer(forceOpen) {
+            const container = document.getElementById('maint-log-form-container');
+            if (!container) return;
+            if (forceOpen === true) {
+                container.classList.remove('hidden');
+            } else if (forceOpen === false) {
+                container.classList.add('hidden');
+            } else {
+                container.classList.toggle('hidden');
+            }
+            if (!container.classList.contains('hidden')) {
+                container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                setTimeout(function() {
+                    const oilInp = document.getElementById('service_oil_cost');
+                    if (oilInp) oilInp.focus();
+                }, 150);
+            }
+        }
+
+        function applyMaintRepairPreset(titleStr, oilKes, padsKes, plugKes, laborKes, otherKes, notesStr) {
+            const container = document.getElementById('maint-log-form-container');
+            if (container) {
+                container.classList.remove('hidden');
+                container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            const titleInp = document.getElementById('service_type_input');
+            const oilInp = document.getElementById('service_oil_cost');
+            const padsInp = document.getElementById('service_brake_pad_cost');
+            const plugInp = document.getElementById('service_spark_plug_cost');
+            const laborInp = document.getElementById('service_labor_cost');
+            const otherInp = document.getElementById('service_other_cost');
+            const notesInp = document.getElementById('service_notes_input');
+
+            if (titleInp && titleStr !== undefined) titleInp.value = titleStr;
+            if (oilInp) oilInp.value = oilKes > 0 ? String(oilKes) : '';
+            if (padsInp) padsInp.value = padsKes > 0 ? String(padsKes) : '';
+            if (plugInp) plugInp.value = plugKes > 0 ? String(plugKes) : '';
+            if (laborInp) laborInp.value = laborKes > 0 ? String(laborKes) : '';
+            if (otherInp) otherInp.value = otherKes > 0 ? String(otherKes) : '';
+            if (notesInp && notesStr !== undefined) notesInp.value = notesStr;
+
+            calcServiceTotal();
+            if (titleStr === '' && titleInp) {
+                titleInp.focus();
+            }
+        }
+
+        window.toggleMaintDrawer = toggleMaintDrawer;
+        window.applyMaintRepairPreset = applyMaintRepairPreset;
+        window.calcServiceTotal = calcServiceTotal;
+
         // ==========================================
-        // 📄 DIGITAL GLOVEBOX & DOCUMENT SCANNER (PHONE & PC)
+        // 📄 DIGITAL GLOVEBOX, LIVE CAMERA & DOCUMENT SCANNER (PHONE & PC)
         // ==========================================
         var _gloveboxTesseractLoaded = false;
         function loadGloveboxTesseract() {
@@ -1141,21 +1261,79 @@ export function renderRiderDashboard(data: any): string {
             });
         }
 
+        // 3-Tier Storage: In-Memory + IndexedDB + localStorage
+        var _finatrackDocScansMem = {};
+        try {
+            var _initRaw = localStorage.getItem('finatrack_doc_scans_v1');
+            if (_initRaw) {
+                _finatrackDocScansMem = JSON.parse(_initRaw) || {};
+            }
+        } catch(e) {}
+
+        function openGloveboxIdb() {
+            return new Promise(function(resolve) {
+                if (!window.indexedDB) return resolve(null);
+                try {
+                    var req = window.indexedDB.open('finatrack_glovebox_db', 1);
+                    req.onupgradeneeded = function(ev) {
+                        var db = ev.target.result;
+                        if (!db.objectStoreNames.contains('scans')) {
+                            db.createObjectStore('scans');
+                        }
+                    };
+                    req.onsuccess = function(ev) { resolve(ev.target.result); };
+                    req.onerror = function() { resolve(null); };
+                } catch(e) {
+                    resolve(null);
+                }
+            });
+        }
+
+        function hydrateScansFromIdb() {
+            openGloveboxIdb().then(function(db) {
+                if (!db) return;
+                try {
+                    var tx = db.transaction('scans', 'readonly');
+                    var st = tx.objectStore('scans');
+                    var getReq = st.get('all_scans');
+                    getReq.onsuccess = function() {
+                        if (getReq.result && typeof getReq.result === 'object') {
+                            var merged = Object.assign({}, getReq.result, _finatrackDocScansMem);
+                            _finatrackDocScansMem = merged;
+                            refreshDocCardScanBadges();
+                        }
+                    };
+                } catch(e) {}
+            });
+        }
+
         function getDocScansStore() {
             try {
                 var raw = localStorage.getItem('finatrack_doc_scans_v1');
-                return raw ? JSON.parse(raw) : {};
-            } catch(e) {
-                return {};
-            }
+                if (raw) {
+                    var parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed === 'object') {
+                        _finatrackDocScansMem = Object.assign({}, parsed, _finatrackDocScansMem);
+                    }
+                }
+            } catch(e) {}
+            return _finatrackDocScansMem;
         }
 
         function saveDocScansStore(store) {
+            _finatrackDocScansMem = store || {};
             try {
-                localStorage.setItem('finatrack_doc_scans_v1', JSON.stringify(store));
+                localStorage.setItem('finatrack_doc_scans_v1', JSON.stringify(_finatrackDocScansMem));
             } catch(e) {
-                console.warn('Could not save to localStorage:', e);
+                console.warn('localStorage quota reached, persisting in IndexedDB & memory:', e);
             }
+            openGloveboxIdb().then(function(db) {
+                if (!db) return;
+                try {
+                    var tx = db.transaction('scans', 'readwrite');
+                    tx.objectStore('scans').put(_finatrackDocScansMem, 'all_scans');
+                } catch(e) {}
+            });
         }
 
         function normalizeDocKey(title, docId) {
@@ -1163,33 +1341,107 @@ export function renderRiderDashboard(data: any): string {
             return docId ? (docId + '_' + base) : ('doc_' + base);
         }
 
+        function hasAnyScanData(entry) {
+            if (!entry) return false;
+            return Boolean(
+                entry.dataUri ||
+                (entry.front && entry.front.dataUri) ||
+                (entry.back && entry.back.dataUri)
+            );
+        }
+
+        function getDocSides(entry) {
+            if (!entry) return { front: null, back: null };
+            var front = entry.front && entry.front.dataUri ? entry.front : (entry.dataUri ? {
+                dataUri: entry.dataUri,
+                type: entry.type || 'image',
+                name: entry.name || 'Front Side',
+                sizeKb: entry.sizeKb || 0
+            } : null);
+            var back = entry.back && entry.back.dataUri ? entry.back : null;
+            return { front: front, back: back };
+        }
+
+        function findStoredScanForDoc(store, docId, title) {
+            if (!store) return null;
+            var keyWithId = normalizeDocKey(title, docId);
+            var keyNoId = normalizeDocKey(title, null);
+            if (hasAnyScanData(store[keyWithId])) return store[keyWithId];
+            if (hasAnyScanData(store[keyNoId])) return store[keyNoId];
+            var keys = Object.keys(store);
+            var normTitle = (title || '').toLowerCase().trim();
+            for (var i = 0; i < keys.length; i++) {
+                var k = keys[i];
+                var entry = store[k];
+                if (!hasAnyScanData(entry)) continue;
+                if (docId && (entry.docId === docId || k.indexOf(docId + '_') === 0)) return entry;
+                if (normTitle && entry.title && entry.title.toLowerCase().trim() === normTitle) return entry;
+            }
+            return null;
+        }
+
+        function upsertDocScanSideInStore(docId, title, side, scanObj) {
+            var targetSide = (side === 'back') ? 'back' : 'front';
+            var store = getDocScansStore();
+            var existing = findStoredScanForDoc(store, docId, title) || {};
+            var sides = getDocSides(existing);
+            if (targetSide === 'back') {
+                sides.back = scanObj;
+            } else {
+                sides.front = scanObj;
+            }
+            var primary = sides.front || sides.back;
+            var key = normalizeDocKey(title, docId);
+            store[key] = {
+                docId: docId || existing.docId || null,
+                title: title || existing.title || 'Document',
+                dataUri: primary ? primary.dataUri : '',
+                type: primary ? primary.type : 'image',
+                name: primary ? primary.name : 'Document',
+                sizeKb: (sides.front ? (sides.front.sizeKb || 0) : 0) + (sides.back ? (sides.back.sizeKb || 0) : 0),
+                front: sides.front || null,
+                back: sides.back || null,
+                attachedAt: new Date().toISOString()
+            };
+            saveDocScansStore(store);
+            return store[key];
+        }
+
         var _pendingNewDocScan = null;
+        var _pendingNewDocScans = { front: null, back: null };
 
         function compressDocumentFile(file) {
             return new Promise(function(resolve) {
-                if (file.type === 'application/pdf') {
+                if (!file) {
+                    resolve(null);
+                    return;
+                }
+                var isPdf = (file.type === 'application/pdf') || /\\.pdf$/i.test(file.name || '');
+                if (isPdf) {
                     var r = new FileReader();
                     r.onload = function(e) {
                         resolve({
                             dataUri: e.target.result,
                             type: 'pdf',
-                            name: file.name,
-                            sizeKb: Math.round(file.size / 1024)
+                            name: file.name || 'document.pdf',
+                            sizeKb: Math.max(1, Math.round((file.size || 1024) / 1024))
                         });
                     };
+                    r.onerror = function() { resolve(null); };
                     r.readAsDataURL(file);
                     return;
                 }
 
                 var reader = new FileReader();
                 reader.onload = function(ev) {
+                    var rawDataUri = ev.target.result;
                     var img = new Image();
                     img.onload = function() {
                         try {
-                            var maxW = 1200;
-                            var maxH = 1600;
-                            var w = img.width;
-                            var h = img.height;
+                            var maxW = 1100;
+                            var maxH = 1400;
+                            var w = img.width || 800;
+                            var h = img.height || 600;
                             if (w > maxW || h > maxH) {
                                 var ratio = Math.min(maxW / w, maxH / h);
                                 w = Math.round(w * ratio);
@@ -1200,160 +1452,601 @@ export function renderRiderDashboard(data: any): string {
                             canvas.height = h;
                             var ctx = canvas.getContext('2d');
                             if (!ctx) {
-                                resolve({ dataUri: ev.target.result, type: 'image', name: file.name, sizeKb: Math.round(file.size / 1024) });
+                                resolve({ dataUri: rawDataUri, type: 'image', name: file.name || 'photo.jpg', sizeKb: Math.max(1, Math.round((file.size || 1024) / 1024)) });
                                 return;
                             }
                             ctx.drawImage(img, 0, 0, w, h);
-                            var compressedUri = canvas.toDataURL('image/jpeg', 0.82);
+                            var compressedUri = canvas.toDataURL('image/jpeg', 0.80);
                             resolve({
                                 dataUri: compressedUri,
                                 type: 'image',
-                                name: file.name,
-                                sizeKb: Math.round(compressedUri.length * 0.75 / 1024)
+                                name: file.name || 'photo.jpg',
+                                sizeKb: Math.max(1, Math.round(compressedUri.length * 0.75 / 1024))
                             });
                         } catch(e) {
-                            resolve({ dataUri: ev.target.result, type: 'image', name: file.name, sizeKb: Math.round(file.size / 1024) });
+                            resolve({ dataUri: rawDataUri, type: 'image', name: file.name || 'photo.jpg', sizeKb: Math.max(1, Math.round((file.size || 1024) / 1024)) });
                         }
                     };
                     img.onerror = function() {
-                        resolve({ dataUri: ev.target.result, type: 'image', name: file.name, sizeKb: Math.round(file.size / 1024) });
+                        resolve({ dataUri: rawDataUri, type: 'image', name: file.name || 'photo.jpg', sizeKb: Math.max(1, Math.round((file.size || 1024) / 1024)) });
                     };
-                    img.src = ev.target.result;
+                    img.src = rawDataUri;
                 };
+                reader.onerror = function() { resolve(null); };
                 reader.readAsDataURL(file);
             });
         }
 
-        async function handleNewDocScanSelect(file) {
-            if (!file) return;
+        var _pdfThumbSvg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="%23e11d48" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+
+        function renderNewDocDualSidePreviews() {
             var previewBox = document.getElementById('new-doc-scan-preview-box');
-            var thumbImg = document.getElementById('new-doc-scan-thumb');
-            var metaText = document.getElementById('new-doc-scan-meta');
+            var frontSlot = document.getElementById('new-doc-front-preview-slot');
+            var backSlot = document.getElementById('new-doc-back-preview-slot');
+            var frontImg = document.getElementById('new-doc-front-thumb');
+            var backImg = document.getElementById('new-doc-back-thumb');
+            var frontMeta = document.getElementById('new-doc-front-meta');
+            var backMeta = document.getElementById('new-doc-back-meta');
             var ocrStatus = document.getElementById('new-doc-scan-ocr-status');
 
+            var hasFront = Boolean(_pendingNewDocScans.front && _pendingNewDocScans.front.dataUri);
+            var hasBack = Boolean(_pendingNewDocScans.back && _pendingNewDocScans.back.dataUri);
+            _pendingNewDocScan = _pendingNewDocScans.front || _pendingNewDocScans.back || null;
+
+            if (!hasFront && !hasBack) {
+                if (previewBox) previewBox.classList.add('hidden');
+                return;
+            }
             if (previewBox) previewBox.classList.remove('hidden');
-            if (thumbImg) {
-                if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
-                    thumbImg.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="%23e11d48" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+
+            if (frontSlot) {
+                if (hasFront) {
+                    frontSlot.classList.remove('opacity-60');
+                    if (frontImg) {
+                        frontImg.src = _pendingNewDocScans.front.type === 'pdf' ? _pdfThumbSvg : _pendingNewDocScans.front.dataUri;
+                        frontImg.classList.remove('hidden');
+                    }
+                    if (frontMeta) {
+                        frontMeta.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-extrabold">✅ 🪪 Front Attached</span> • ' + _pendingNewDocScans.front.name + ' (' + _pendingNewDocScans.front.sizeKb + ' KB)';
+                    }
                 } else {
-                    try {
-                        thumbImg.src = URL.createObjectURL(file);
-                    } catch(e) {}
+                    frontSlot.classList.add('opacity-60');
+                    if (frontImg) frontImg.classList.add('hidden');
+                    if (frontMeta) {
+                        frontMeta.innerHTML = '<span class="text-gray-500">🪪 Front Side not attached yet (Details / Photo)</span>';
+                    }
                 }
             }
-            if (metaText) metaText.innerText = '📷 ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
-            if (ocrStatus) {
-                ocrStatus.innerHTML = '<span class="text-xs text-amber-600 dark:text-amber-400 font-bold animate-pulse">⏳ Optimizing image...</span>';
+
+            if (backSlot) {
+                if (hasBack) {
+                    backSlot.classList.remove('opacity-60');
+                    if (backImg) {
+                        backImg.src = _pendingNewDocScans.back.type === 'pdf' ? _pdfThumbSvg : _pendingNewDocScans.back.dataUri;
+                        backImg.classList.remove('hidden');
+                    }
+                    if (backMeta) {
+                        backMeta.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-extrabold">✅ 🔄 Back Attached</span> • ' + _pendingNewDocScans.back.name + ' (' + _pendingNewDocScans.back.sizeKb + ' KB)';
+                    }
+                } else {
+                    backSlot.classList.add('opacity-60');
+                    if (backImg) backImg.classList.add('hidden');
+                    if (backMeta) {
+                        backMeta.innerHTML = '<span class="text-amber-600 dark:text-amber-400 font-semibold">🔄 Optional: Attach Back Side for DL / ID Expiry Dates</span>';
+                    }
+                }
             }
 
-            // Clear input values
-            var camInput = document.getElementById('new-doc-camera-input');
-            if (camInput) camInput.value = '';
-            var fileInput = document.getElementById('new-doc-file-input');
-            if (fileInput) fileInput.value = '';
+            if (ocrStatus) {
+                var sideSummary = (hasFront && hasBack) ? 'Both Front &amp; Back Sides' : (hasFront ? 'Front Side' : 'Back Side');
+                ocrStatus.innerHTML = '<div class="flex flex-wrap items-center gap-2 mt-1">' +
+                    '<button type="button" onclick="runOcrOnPendingDocScan()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs active:scale-95 cursor-pointer">🔍 Auto-Read Details &amp; Expiry (' + sideSummary + ')</button>' +
+                    (!hasBack ? '<button type="button" onclick="openNewDocBackCamera()" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs active:scale-95 cursor-pointer">📷 + Snap Back Side (Expiry)</button>' : '') +
+                    '<span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">👇 Click &quot;💾 Save Document to Tracker&quot; below when ready!</span>' +
+                    '</div>';
+            }
+        }
+
+        function openNewDocBackCamera() {
+            openDocCameraCapture(null, null, 'back');
+        }
+
+        function handleNewDocBackSelect(inputEl) {
+            handleNewDocScanSelect(inputEl, 'back');
+        }
+
+        function removePendingDocSide(side) {
+            if (side === 'back') {
+                _pendingNewDocScans.back = null;
+            } else if (side === 'front') {
+                _pendingNewDocScans.front = null;
+            } else {
+                _pendingNewDocScans.front = null;
+                _pendingNewDocScans.back = null;
+            }
+            renderNewDocDualSidePreviews();
+            savePendingDocScanOnCreate();
+            refreshDocCardScanBadges();
+        }
+
+        async function handleNewDocScanSelect(inputOrFile, side) {
+            var targetSide = (side === 'back') ? 'back' : 'front';
+            var file = null;
+            var inputEl = null;
+            if (inputOrFile && inputOrFile.files && inputOrFile.files.length > 0) {
+                inputEl = inputOrFile;
+                file = inputOrFile.files[0];
+            } else if (inputOrFile instanceof File || (inputOrFile && inputOrFile.size !== undefined)) {
+                file = inputOrFile;
+            }
+            if (!file) return;
+
+            var container = document.getElementById('new-comp-form-container');
+            if (container) container.classList.remove('hidden');
+
+            var previewBox = document.getElementById('new-doc-scan-preview-box');
+            var ocrStatus = document.getElementById('new-doc-scan-ocr-status');
+            if (previewBox) previewBox.classList.remove('hidden');
+            if (ocrStatus) {
+                ocrStatus.innerHTML = '<span class="text-xs text-amber-600 dark:text-amber-400 font-bold animate-pulse">⏳ Processing ' + (targetSide === 'back' ? '🔄 Back Side' : '🪪 Front Side') + ' image...</span>';
+            }
 
             try {
+                // If user selected 2 files at once in a file picker, treat file[0] as Front and file[1] as Back!
+                var secondFile = (inputEl && inputEl.files && inputEl.files.length > 1) ? inputEl.files[1] : null;
                 var res = await compressDocumentFile(file);
-                _pendingNewDocScan = res;
+                var resBack = secondFile ? await compressDocumentFile(secondFile) : null;
+                if (inputEl) inputEl.value = '';
 
-                if (thumbImg && res.type !== 'pdf' && res.dataUri) {
-                    thumbImg.src = res.dataUri;
+                if (!res || !res.dataUri) {
+                    if (ocrStatus) ocrStatus.innerHTML = '<span class="text-rose-500 text-xs font-bold">⚠️ Could not read image file. Please try another photo.</span>';
+                    return;
                 }
-                if (metaText) {
-                    metaText.innerHTML = '<strong>' + res.name + '</strong> (' + res.sizeKb + ' KB) • Ready to attach';
+
+                if (secondFile && resBack && resBack.dataUri) {
+                    _pendingNewDocScans.front = res;
+                    _pendingNewDocScans.back = resBack;
+                } else if (targetSide === 'back') {
+                    _pendingNewDocScans.back = res;
+                } else {
+                    _pendingNewDocScans.front = res;
                 }
-                if (ocrStatus) {
-                    ocrStatus.innerHTML = '<button type="button" onclick="runOcrOnPendingDocScan()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs active:scale-95">🔍 Auto-Read Expiry &amp; Ref # from Document</button>';
-                }
+
+                renderNewDocDualSidePreviews();
+                savePendingDocScanOnCreate();
+                refreshDocCardScanBadges();
+                // Automatically run smart OCR so expiry date & details populate with birth-date protection
+                runOcrOnPendingDocScan();
             } catch (err) {
+                if (inputEl) inputEl.value = '';
                 console.warn('Doc compression error:', err);
                 if (ocrStatus) {
-                    ocrStatus.innerHTML = '<span class="text-rose-500 text-xs font-bold">⚠️ Could not compress, but original attached.</span>';
+                    ocrStatus.innerHTML = '<span class="text-rose-500 text-xs font-bold">⚠️ Could not compress, please try again.</span>';
                 }
             }
         }
 
-        async function runOcrOnPendingDocScan() {
-            if (!_pendingNewDocScan || _pendingNewDocScan.type === 'pdf') {
-                alert('OCR text extraction works best on photo/image scans. If using PDF, enter details manually.');
-                return;
+        function applyDataUriToNewDocForm(dataUri, nameStr, side) {
+            var targetSide = (side === 'back') ? 'back' : 'front';
+            var container = document.getElementById('new-comp-form-container');
+            if (container) container.classList.remove('hidden');
+
+            var sizeKb = Math.max(1, Math.round(dataUri.length * 0.75 / 1024));
+            var scanObj = {
+                dataUri: dataUri,
+                type: 'image',
+                name: nameStr || ((targetSide === 'back' ? 'Back_Camera_' : 'Front_Camera_') + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.jpg'),
+                sizeKb: sizeKb
+            };
+
+            if (targetSide === 'back') {
+                _pendingNewDocScans.back = scanObj;
+            } else {
+                _pendingNewDocScans.front = scanObj;
             }
-            var ocrStatus = document.getElementById('new-doc-scan-ocr-status');
-            if (ocrStatus) {
-                ocrStatus.innerHTML = '<span class="text-xs font-bold text-amber-600 dark:text-amber-400 animate-pulse">⏳ Scanning document for Expiry Date &amp; Reference #...</span>';
-            }
-            try {
-                var Tesseract = await loadGloveboxTesseract();
-                var result = await Tesseract.recognize(_pendingNewDocScan.dataUri, 'eng');
-                var text = (result && result.data && result.data.text) ? result.data.text : '';
 
-                // Extract dates: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, or DD Month YYYY
-                var datePatterns = [
-                    /\\b(\\d{1,2})[\\/\\-\\.](\\d{1,2})[\\/\\-\\.](\\d{4})\\b/,
-                    /\\b(20\\d{2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{1,2})\\b/,
-                    /\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+(20\\d{2})\\b/i
-                ];
+            renderNewDocDualSidePreviews();
+            savePendingDocScanOnCreate();
+            refreshDocCardScanBadges();
+            runOcrOnPendingDocScan();
+        }
 
-                var foundExpiry = null;
-                var expiryInput = document.getElementById('new-doc-expiry-input');
-                var notesInput = document.getElementById('new-doc-notes-input');
+        // ==========================================
+        // 🧠 SMART KENYAN DOCUMENT OCR PARSER (ID, SMART DL FRONT/BACK, INSURANCE, GOOD CONDUCT)
+        // Filters out Birth Dates (DOB) & Issue Dates so they NEVER become Expiry Dates!
+        // ==========================================
+        function parseAllDatesWithContext(rawText, sideSource) {
+            if (!rawText) return [];
+            var results = [];
+            var nowYear = new Date().getFullYear();
+            var monthsMap = {
+                jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+                jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+            };
 
-                // Search for expiry date
-                for (var p = 0; p < datePatterns.length; p++) {
-                    var m = text.match(datePatterns[p]);
-                    if (m) {
-                        try {
-                            if (p === 0) {
-                                var day = ('0' + m[1]).slice(-2);
-                                var mo = ('0' + m[2]).slice(-2);
-                                var yr = m[3];
-                                foundExpiry = yr + '-' + mo + '-' + day;
-                            } else if (p === 1) {
-                                foundExpiry = m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
-                            } else if (p === 2) {
-                                var dObj = new Date(m[0]);
-                                if (!isNaN(dObj.getTime())) {
-                                    foundExpiry = dObj.toISOString().slice(0, 10);
-                                }
-                            }
-                            if (foundExpiry) break;
-                        } catch(e) {}
+            // Normalize OCR quirks like "12 . 05 . 1998" or "15 / 08 / 2027"
+            var text = rawText.replace(/(\\d)\\s*([\\/\\-\\.])\\s*(\\d)/g, '$1$2$3');
+            var lines = text.split(/\\r?\\n/);
+
+            for (var lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+                var line = lines[lineIdx];
+                var prevLine = lineIdx > 0 ? lines[lineIdx - 1] : '';
+                var lineMatches = [];
+
+                // Pattern 1: DD/MM/YYYY or DD.MM.YYYY or DD-MM-YYYY
+                var re1 = /\\b(\\d{1,2})[\\/\\-\\.](\\d{1,2})[\\/\\-\\.]((?:19|20)\\d{2})\\b/g;
+                var m1;
+                while ((m1 = re1.exec(line)) !== null) {
+                    var d1 = parseInt(m1[1], 10);
+                    var mo1 = parseInt(m1[2], 10);
+                    var yr1 = parseInt(m1[3], 10);
+                    if (mo1 > 12 && d1 <= 12) { var tmp = d1; d1 = mo1; mo1 = tmp; }
+                    if (mo1 >= 1 && mo1 <= 12 && d1 >= 1 && d1 <= 31) {
+                        var iso1 = yr1 + '-' + ('0' + mo1).slice(-2) + '-' + ('0' + d1).slice(-2);
+                        lineMatches.push({ iso: iso1, year: yr1, index: m1.index, raw: m1[0] });
                     }
                 }
 
-                // Reference / Policy # check (e.g. PCC-..., POL-..., DL..., TIMS...)
-                var refMatch = text.match(/\\b(PCC[A-Z0-9\\-]+|POL[\\-0-9A-Z]+|DL[0-9A-Z]+|NTSA[0-9A-Z]+|PIN[A-Z0-9]+)\\b/i);
-
-                if (foundExpiry && expiryInput) {
-                    expiryInput.value = foundExpiry;
+                // Pattern 2: YYYY-MM-DD or YYYY/MM/DD
+                var re2 = /\\b((?:19|20)\\d{2})[\\/\\-\\.](\\d{1,2})[\\/\\-\\.](\\d{1,2})\\b/g;
+                var m2;
+                while ((m2 = re2.exec(line)) !== null) {
+                    var yr2 = parseInt(m2[1], 10);
+                    var mo2 = parseInt(m2[2], 10);
+                    var d2 = parseInt(m2[3], 10);
+                    if (mo2 >= 1 && mo2 <= 12 && d2 >= 1 && d2 <= 31) {
+                        var iso2 = yr2 + '-' + ('0' + mo2).slice(-2) + '-' + ('0' + d2).slice(-2);
+                        lineMatches.push({ iso: iso2, year: yr2, index: m2.index, raw: m2[0] });
+                    }
                 }
-                if (refMatch && notesInput && !notesInput.value) {
-                    notesInput.value = 'Ref: ' + refMatch[0];
+
+                // Pattern 3: DD Mon YYYY (e.g. 15 AUG 2027)
+                var re3 = /\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\\s,\\-]+((?:19|20)\\d{2})\\b/gi;
+                var m3;
+                while ((m3 = re3.exec(line)) !== null) {
+                    var d3 = parseInt(m3[1], 10);
+                    var moStr = m3[2].toLowerCase().slice(0, 3);
+                    var mo3 = monthsMap[moStr] || '01';
+                    var yr3 = parseInt(m3[3], 10);
+                    if (d3 >= 1 && d3 <= 31) {
+                        var iso3 = yr3 + '-' + mo3 + '-' + ('0' + d3).slice(-2);
+                        lineMatches.push({ iso: iso3, year: yr3, index: m3.index, raw: m3[0] });
+                    }
+                }
+
+                // Sort matches on this line by position
+                lineMatches.sort(function(a, b) { return a.index - b.index; });
+
+                for (var j = 0; j < lineMatches.length; j++) {
+                    var item = lineMatches[j];
+                    var beforeOnLine = line.slice(0, item.index);
+                    var contextBefore = (prevLine + ' ' + beforeOnLine).slice(-80);
+                    var contextAfter = line.slice(item.index + item.raw.length, item.index + item.raw.length + 35);
+
+                    var role = 'CANDIDATE';
+
+                    // 1. Birth Date (DOB) Detection:
+                    // - Any year <= (nowYear - 14) is a birth year (nobody's current license/insurance expired 14+ years ago)
+                    // - Or preceded by BIRTH, DOB, D.O.B, BORN, KUZALIWA, or Smart DL field "3."
+                    var isBirthLabel = /\\b(birth|d\\.?o\\.?b|born|kuzaliwa|tarehe\\s*ya\\s*kuzaliwa)\\b/i.test(contextBefore) || /(?:^|\\s)3[\\.\\:\\)]\\s*$/.test(beforeOnLine.trim());
+                    var isExpiryLabel = /\\b(expir|exp\\.?|valid\\s*until|valid\\s*to|valid\\s*thru|validity|renew|due\\s*date|4b[\\.\\:\\)]?)\\b/i.test(contextBefore + ' ' + contextAfter);
+                    var isIssueLabel = /\\b(issue|issued|valid\\s*from|date\\s*of\\s*issue|kutolewa|4a[\\.\\:\\)]?)\\b/i.test(contextBefore);
+
+                    if (item.year <= (nowYear - 14) || (isBirthLabel && !isExpiryLabel)) {
+                        role = 'DOB';
+                    } else if (isExpiryLabel && item.year >= (nowYear - 5)) {
+                        role = 'EXPIRY_EXPLICIT';
+                    } else if (isIssueLabel && !isExpiryLabel) {
+                        role = 'ISSUE';
+                    } else if (lineMatches.length >= 2) {
+                        // On NTSA Smart DL Back Table, each class row has: [Issue Date] [Expiry Date]
+                        var firstOnLine = lineMatches[0];
+                        var lastOnLine = lineMatches[lineMatches.length - 1];
+                        if (j === 0 && lastOnLine.iso > firstOnLine.iso && firstOnLine.year > (nowYear - 14)) {
+                            role = 'ISSUE';
+                        } else if (j === lineMatches.length - 1 && lastOnLine.iso > firstOnLine.iso && lastOnLine.year >= (nowYear - 3)) {
+                            role = 'EXPIRY_TABLE_PAIR';
+                        }
+                    }
+
+                    results.push({
+                        iso: item.iso,
+                        year: item.year,
+                        role: role,
+                        side: sideSource || 'front',
+                        raw: item.raw
+                    });
+                }
+            }
+            return results;
+        }
+
+        function analyzeKenyanDocumentOcr(frontText, backText, docCategoryHint) {
+            var fText = frontText || '';
+            var bText = backText || '';
+            var combinedText = (fText + '\\n' + bText).trim();
+            var nowYear = new Date().getFullYear();
+
+            var allDates = parseAllDatesWithContext(fText, 'front').concat(parseAllDatesWithContext(bText, 'back'));
+
+            var detectedDob = null;
+            var detectedIssue = null;
+            var explicitExpiries = [];
+            var tablePairExpiries = [];
+            var candidateExpiries = [];
+
+            for (var i = 0; i < allDates.length; i++) {
+                var d = allDates[i];
+                if (d.role === 'DOB') {
+                    if (!detectedDob) detectedDob = d.iso;
+                } else if (d.role === 'ISSUE') {
+                    if (!detectedIssue || d.iso > detectedIssue) detectedIssue = d.iso;
+                } else if (d.role === 'EXPIRY_EXPLICIT') {
+                    explicitExpiries.push(d);
+                } else if (d.role === 'EXPIRY_TABLE_PAIR') {
+                    tablePairExpiries.push(d);
+                } else if (d.role === 'CANDIDATE' && d.year >= (nowYear - 2) && d.year <= (nowYear + 15)) {
+                    candidateExpiries.push(d);
+                }
+            }
+
+            // Pick best expiry date (NEVER picking DOB or ISSUE)
+            var bestExpiry = null;
+            var expirySourceSide = null;
+
+            function pickLatestDate(arr) {
+                if (!arr || arr.length === 0) return null;
+                // Prefer back side if available, otherwise latest date
+                var backItems = arr.filter(function(x) { return x.side === 'back'; });
+                var pool = backItems.length > 0 ? backItems : arr;
+                pool.sort(function(a, b) { return a.iso < b.iso ? 1 : (a.iso > b.iso ? -1 : 0); });
+                return pool[0];
+            }
+
+            var chosen = pickLatestDate(explicitExpiries) || pickLatestDate(tablePairExpiries);
+            if (!chosen && candidateExpiries.length > 0) {
+                // Filter out any candidate that equals detectedDob or detectedIssue
+                var filteredCandidates = candidateExpiries.filter(function(c) {
+                    if (detectedDob && c.iso === detectedDob) return false;
+                    if (detectedIssue && c.iso <= detectedIssue) return false;
+                    return true;
+                });
+                chosen = pickLatestDate(filteredCandidates);
+            }
+
+            if (chosen) {
+                bestExpiry = chosen.iso;
+                expirySourceSide = chosen.side;
+            }
+
+            // Detect Document Type & Reference Numbers
+            var isNationalId = (docCategoryHint === 'NATIONAL_ID') ||
+                (/\\b(JAMHURI\\s+YA\\s+KENYA|IDENTITY\\s+CARD|KITAMBULISHO|SERIAL\\s+NUMBER)\\b/i.test(combinedText) && !/\\b(DRIVING\\s+LICEN[CS]E|NTSA)\\b/i.test(combinedText));
+            var isDrivingLicense = (docCategoryHint === 'DL') || /\\b(DRIVING\\s+LICEN[CS]E|PERMIS\\s+DE\\s+CONDUIRE|NTSA)\\b/i.test(combinedText);
+
+            var refParts = [];
+            var stdRefMatch = combinedText.match(/\\b(PCC[A-Z0-9\\-]+|POL[\\-0-9A-Z]+|DL[\\-0-9A-Z]{5,}|NTSA[0-9A-Z]+|A\\d{9}[A-Z])\\b/i);
+            if (stdRefMatch) {
+                refParts.push('Ref: ' + stdRefMatch[0].toUpperCase());
+            }
+
+            var idNumMatch = combinedText.match(/\\b(?:ID\\s*(?:NO|NUMBER)?[\\s\\:\\.]*)(\\d{7,9})\\b/i) ||
+                (isNationalId ? combinedText.match(/\\b(\\d{8})\\b/) : null);
+            if (idNumMatch && idNumMatch[1]) {
+                refParts.push('ID #' + idNumMatch[1]);
+            }
+
+            // Detect endorsed DL classes on back side (e.g. Class A2, B, C1)
+            if (isDrivingLicense && bText) {
+                var classMatches = bText.match(/\\b(A[123]|B[123]?|C[1E]?|D[123]?|PSV)\\b/g);
+                if (classMatches && classMatches.length > 0) {
+                    var uniqueClasses = [];
+                    classMatches.forEach(function(cls) {
+                        if (uniqueClasses.indexOf(cls) === -1) uniqueClasses.push(cls);
+                    });
+                    if (uniqueClasses.length > 0) {
+                        refParts.push('Classes: ' + uniqueClasses.slice(0, 5).join(', '));
+                    }
+                }
+            }
+
+            if (detectedDob) {
+                refParts.push('DOB: ' + detectedDob);
+            }
+            if (detectedIssue && !bestExpiry) {
+                refParts.push('Issued: ' + detectedIssue);
+            }
+
+            return {
+                expiryDate: bestExpiry,
+                expirySourceSide: expirySourceSide,
+                detectedDob: detectedDob,
+                detectedIssue: detectedIssue,
+                isNationalId: isNationalId,
+                isDrivingLicense: isDrivingLicense,
+                notesSummary: refParts.join(' • ')
+            };
+        }
+
+        async function runOcrOnPendingDocScan() {
+            var hasFront = Boolean(_pendingNewDocScans.front && _pendingNewDocScans.front.dataUri && _pendingNewDocScans.front.type !== 'pdf');
+            var hasBack = Boolean(_pendingNewDocScans.back && _pendingNewDocScans.back.dataUri && _pendingNewDocScans.back.type !== 'pdf');
+
+            if (!hasFront && !hasBack) {
+                if (_pendingNewDocScan && _pendingNewDocScan.type !== 'pdf') {
+                    _pendingNewDocScans.front = _pendingNewDocScan;
+                    hasFront = true;
+                } else {
+                    alert('OCR text extraction works on photo/image scans. If using PDF, enter details manually.');
+                    return;
+                }
+            }
+
+            var ocrStatus = document.getElementById('new-doc-scan-ocr-status');
+            if (ocrStatus) {
+                ocrStatus.innerHTML = '<span class="text-xs font-bold text-amber-600 dark:text-amber-400 animate-pulse">⏳ Smart-scanning ' + (hasFront && hasBack ? '🪪 Front &amp; 🔄 Back sides' : (hasBack ? '🔄 Back side' : '🪪 Front side')) + ' (filtering out Birth Date)...</span>';
+            }
+
+            try {
+                var Tesseract = await loadGloveboxTesseract();
+                var frontText = '';
+                var backText = '';
+
+                if (hasFront) {
+                    var resF = await Tesseract.recognize(_pendingNewDocScans.front.dataUri, 'eng');
+                    frontText = (resF && resF.data && resF.data.text) ? resF.data.text : '';
+                }
+                if (hasBack) {
+                    var resB = await Tesseract.recognize(_pendingNewDocScans.back.dataUri, 'eng');
+                    backText = (resB && resB.data && resB.data.text) ? resB.data.text : '';
+                }
+
+                var docCatSelect = document.getElementById('new-doc-category-select');
+                var catHint = docCatSelect ? docCatSelect.value : '';
+                var analysis = analyzeKenyanDocumentOcr(frontText, backText, catHint);
+
+                var expiryInput = document.getElementById('new-doc-expiry-input');
+                var notesInput = document.getElementById('new-doc-notes-input');
+
+                // Auto-switch preset if Kenyan National ID or DL was detected
+                if (analysis.isNationalId && docCatSelect && docCatSelect.value === 'GOOD_CONDUCT') {
+                    onDocTypePresetChanged('NATIONAL_ID');
+                } else if (analysis.isDrivingLicense && docCatSelect && docCatSelect.value === 'GOOD_CONDUCT') {
+                    onDocTypePresetChanged('DL');
+                }
+
+                // ONLY update expiryInput if a genuine Expiry Date was found (NEVER Birth Date!)
+                if (analysis.expiryDate && expiryInput) {
+                    expiryInput.value = analysis.expiryDate;
+                }
+
+                if (analysis.notesSummary && notesInput) {
+                    notesInput.value = analysis.notesSummary;
                 }
 
                 if (ocrStatus) {
-                    ocrStatus.innerHTML = '<span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">✅ Scanned! ' + (foundExpiry ? 'Found Expiry: ' + foundExpiry : 'Please verify expiry date.') + (refMatch ? ' (' + refMatch[0] + ')' : '') + '</span>';
+                    var msgHtml = '';
+                    var dobShieldBadge = analysis.detectedDob
+                        ? ' <span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">🛡️ Ignored Birth Date (' + analysis.detectedDob + ')</span>'
+                        : '';
+
+                    if (analysis.expiryDate) {
+                        msgHtml = '<div class="space-y-1">' +
+                            '<div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex flex-wrap items-center gap-1.5">' +
+                            '<span>✅ Expiry Date Auto-Read: <strong>' + analysis.expiryDate + '</strong>' + (analysis.expirySourceSide === 'back' ? ' (from 🔄 Back Side)' : '') + '</span>' +
+                            dobShieldBadge +
+                            '</div>' +
+                            (analysis.notesSummary ? '<p class="text-[11px] text-gray-600 dark:text-gray-300 font-mono">📋 ' + analysis.notesSummary + '</p>' : '') +
+                            '</div>';
+                    } else if (analysis.isNationalId) {
+                        msgHtml = '<div class="space-y-1">' +
+                            '<div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex flex-wrap items-center gap-1.5">' +
+                            '<span>🪪 Kenyan National ID Detected!</span>' +
+                            dobShieldBadge +
+                            '</div>' +
+                            '<p class="text-[11px] text-amber-700 dark:text-amber-300 font-semibold">Birth Date was kept in Notes &amp; excluded from Expiry Date (National ID has no expiry).</p>' +
+                            '</div>';
+                    } else if (!hasBack) {
+                        msgHtml = '<div class="space-y-1.5">' +
+                            '<div class="text-xs font-bold text-amber-700 dark:text-amber-300 flex flex-wrap items-center gap-1.5">' +
+                            '<span>🪪 Front Side Details Read!</span>' +
+                            dobShieldBadge +
+                            '</div>' +
+                            '<p class="text-[11px] text-gray-600 dark:text-gray-300">No expiry date on the Front side. <strong>For a Driving License, snap or upload the 🔄 Back Side</strong> to auto-read the Expiry Date!</p>' +
+                            '<div class="flex flex-wrap items-center gap-2 pt-0.5">' +
+                            '<button type="button" onclick="openNewDocBackCamera()" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs cursor-pointer">📷 Snap Back Side (Expiry)</button>' +
+                            '<label class="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[11px] font-bold transition shadow-xs cursor-pointer inline-flex items-center gap-1">' +
+                            '<span>📁 Upload Back Side</span>' +
+                            '<input type="file" accept="image/*,application/pdf" class="sr-only" onchange="handleNewDocBackSelect(this)">' +
+                            '</label>' +
+                            '</div>' +
+                            '</div>';
+                    } else {
+                        msgHtml = '<div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex flex-wrap items-center gap-1.5">' +
+                            '<span>✅ Scan attached! Please verify the Expiry Date below.</span>' +
+                            dobShieldBadge +
+                            '</div>';
+                    }
+                    ocrStatus.innerHTML = msgHtml;
                 }
             } catch(err) {
                 console.warn('OCR doc error:', err);
                 if (ocrStatus) {
-                    ocrStatus.innerHTML = '<span class="text-xs text-rose-500 font-semibold">⚠️ Could not auto-read text. Image is still attached!</span>';
+                    ocrStatus.innerHTML = '<span class="text-xs text-rose-500 font-semibold">⚠️ Could not auto-read text. Your image(s) are still attached!</span>';
                 }
             }
         }
 
+        async function runOcrOnExistingDocScans(docId, title) {
+            var store = getDocScansStore();
+            var item = findStoredScanForDoc(store, docId, title);
+            var sides = getDocSides(item);
+            var hasFront = Boolean(sides.front && sides.front.dataUri && sides.front.type !== 'pdf');
+            var hasBack = Boolean(sides.back && sides.back.dataUri && sides.back.type !== 'pdf');
+            if (!hasFront && !hasBack) {
+                alert('Please attach a photo of the document (Front or Back) first.');
+                return;
+            }
+            var statusBanner = document.getElementById('glovebox-ocr-live-banner');
+            if (statusBanner) {
+                statusBanner.classList.remove('hidden');
+                statusBanner.innerHTML = '<span class="animate-pulse">⏳ Scanning ' + (hasFront && hasBack ? '🪪 Front + 🔄 Back sides' : (hasBack ? '🔄 Back side' : '🪪 Front side')) + ' for Expiry Date (excluding Birth Date)...</span>';
+            }
+            try {
+                var Tesseract = await loadGloveboxTesseract();
+                var fText = '';
+                var bText = '';
+                if (hasFront) {
+                    var rf = await Tesseract.recognize(sides.front.dataUri, 'eng');
+                    fText = (rf && rf.data && rf.data.text) ? rf.data.text : '';
+                }
+                if (hasBack) {
+                    var rb = await Tesseract.recognize(sides.back.dataUri, 'eng');
+                    bText = (rb && rb.data && rb.data.text) ? rb.data.text : '';
+                }
+                var analysis = analyzeKenyanDocumentOcr(fText, bText, '');
+                var drawer = document.getElementById('comp-drawer-' + docId);
+                if (drawer) {
+                    drawer.classList.remove('hidden');
+                    var expInput = drawer.querySelector('input[name="expiry_date"]');
+                    var notesInput = drawer.querySelector('input[name="notes"]');
+                    if (analysis.expiryDate && expInput) expInput.value = analysis.expiryDate;
+                    if (analysis.notesSummary && notesInput && !notesInput.value) notesInput.value = analysis.notesSummary;
+                }
+                if (statusBanner) {
+                    var dobMsg = analysis.detectedDob ? ' • 🛡️ Ignored Birth Date (' + analysis.detectedDob + ')' : '';
+                    if (analysis.expiryDate) {
+                        statusBanner.innerHTML = '✅ Found Expiry Date: <strong>' + analysis.expiryDate + '</strong>' + dobMsg + (analysis.notesSummary ? ' • ' + analysis.notesSummary : '') + ' (Updated in Edit form below!)';
+                    } else {
+                        statusBanner.innerHTML = 'ℹ️ Details extracted' + dobMsg + (analysis.notesSummary ? ' (' + analysis.notesSummary + ')' : '') + (!hasBack ? '. Attach 🔄 Back Side to read Driving License expiry date!' : '');
+                    }
+                }
+            } catch (e) {
+                if (statusBanner) statusBanner.innerHTML = '⚠️ Could not auto-read text from image.';
+            }
+        }
+
         function savePendingDocScanOnCreate() {
-            if (!_pendingNewDocScan) return true;
+            var hasFront = Boolean(_pendingNewDocScans.front && _pendingNewDocScans.front.dataUri);
+            var hasBack = Boolean(_pendingNewDocScans.back && _pendingNewDocScans.back.dataUri);
+            if (!hasFront && !hasBack && !_pendingNewDocScan) return true;
             try {
                 var title = document.getElementById('new-doc-title-input')?.value || 'Document';
+                var frontObj = hasFront ? _pendingNewDocScans.front : _pendingNewDocScan;
+                var backObj = hasBack ? _pendingNewDocScans.back : null;
+                var primary = frontObj || backObj;
+                if (!primary) return true;
+
                 var key = normalizeDocKey(title, null);
                 var store = getDocScansStore();
                 store[key] = {
                     title: title,
-                    dataUri: _pendingNewDocScan.dataUri,
-                    type: _pendingNewDocScan.type,
-                    name: _pendingNewDocScan.name,
-                    sizeKb: _pendingNewDocScan.sizeKb,
+                    dataUri: primary.dataUri,
+                    type: primary.type,
+                    name: primary.name,
+                    sizeKb: (frontObj ? (frontObj.sizeKb || 0) : 0) + (backObj ? (backObj.sizeKb || 0) : 0),
+                    front: frontObj || null,
+                    back: backObj || null,
                     attachedAt: new Date().toISOString()
                 };
                 saveDocScansStore(store);
@@ -1363,24 +2056,223 @@ export function renderRiderDashboard(data: any): string {
             return true;
         }
 
-        function attachScanToExistingDoc(docId, title, file) {
+        function attachScanToExistingDoc(docId, title, inputOrFile, side) {
+            var targetSide = (side === 'back') ? 'back' : 'front';
+            var file = null;
+            var inputEl = null;
+            if (inputOrFile && inputOrFile.files && inputOrFile.files.length > 0) {
+                inputEl = inputOrFile;
+                file = inputOrFile.files[0];
+            } else if (inputOrFile instanceof File || (inputOrFile && inputOrFile.size !== undefined)) {
+                file = inputOrFile;
+            }
             if (!file) return;
+
+            var secondFile = (inputEl && inputEl.files && inputEl.files.length > 1) ? inputEl.files[1] : null;
+
             compressDocumentFile(file).then(function(res) {
-                var store = getDocScansStore();
-                var key = normalizeDocKey(title, docId);
-                store[key] = {
-                    docId: docId,
-                    title: title,
-                    dataUri: res.dataUri,
-                    type: res.type,
-                    name: res.name,
-                    sizeKb: res.sizeKb,
-                    attachedAt: new Date().toISOString()
-                };
-                saveDocScansStore(store);
-                refreshDocCardScanBadges();
-                showGloveboxModal(docId, title);
+                if (!res || !res.dataUri) {
+                    if (inputEl) inputEl.value = '';
+                    alert('Could not read the selected file. Please try another image or PDF.');
+                    return;
+                }
+                if (secondFile) {
+                    compressDocumentFile(secondFile).then(function(res2) {
+                        if (inputEl) inputEl.value = '';
+                        upsertDocScanSideInStore(docId, title, 'front', res);
+                        if (res2 && res2.dataUri) {
+                            upsertDocScanSideInStore(docId, title, 'back', res2);
+                        }
+                        refreshDocCardScanBadges();
+                        showGloveboxModal(docId, title, 'both');
+                    });
+                } else {
+                    if (inputEl) inputEl.value = '';
+                    upsertDocScanSideInStore(docId, title, targetSide, res);
+                    refreshDocCardScanBadges();
+                    showGloveboxModal(docId, title, 'both');
+                }
             });
+        }
+
+        function attachDataUriToExistingDoc(docId, title, dataUri, nameStr, side) {
+            if (!dataUri) return;
+            var targetSide = (side === 'back') ? 'back' : 'front';
+            var sizeKb = Math.max(1, Math.round(dataUri.length * 0.75 / 1024));
+            var scanObj = {
+                dataUri: dataUri,
+                type: 'image',
+                name: nameStr || ((targetSide === 'back' ? 'Back_' : 'Front_') + new Date().toISOString().slice(0, 10) + '.jpg'),
+                sizeKb: sizeKb
+            };
+            upsertDocScanSideInStore(docId, title, targetSide, scanObj);
+            refreshDocCardScanBadges();
+            showGloveboxModal(docId, title, 'both');
+        }
+
+        // ==========================================
+        // 📷 LIVE WEBCAM / PHONE CAMERA STREAM MODAL (SUPPORTS FRONT & BACK DOCUMENT SIDES)
+        // ==========================================
+        var _activeCameraStream = null;
+        var _cameraTargetDocId = null;
+        var _cameraTargetDocTitle = null;
+        var _cameraTargetSide = 'front';
+        var _cameraFacingMode = 'environment';
+
+        function setCameraModalSide(side) {
+            _cameraTargetSide = (side === 'back') ? 'back' : 'front';
+            var btnFront = document.getElementById('cam-side-btn-front');
+            var btnBack = document.getElementById('cam-side-btn-back');
+            var subtitleEl = document.getElementById('doc-live-camera-subtitle');
+            var targetTitle = _cameraTargetDocTitle || (document.getElementById('new-doc-title-input')?.value || 'Document');
+
+            if (btnFront && btnBack) {
+                if (_cameraTargetSide === 'back') {
+                    btnBack.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-black bg-indigo-600 text-white shadow-xs transition cursor-pointer';
+                    btnFront.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer';
+                } else {
+                    btnFront.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-black bg-amber-600 text-white shadow-xs transition cursor-pointer';
+                    btnBack.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer';
+                }
+            }
+            if (subtitleEl) {
+                var sideLabel = (_cameraTargetSide === 'back') ? '🔄 BACK SIDE (Expiry Dates / Classes)' : '🪪 FRONT SIDE (Details / ID / Photo)';
+                subtitleEl.innerText = sideLabel + ' • ' + targetTitle;
+            }
+        }
+
+        async function startCameraStreamInModal() {
+            var videoEl = document.getElementById('doc-live-camera-video');
+            var statusEl = document.getElementById('doc-live-camera-status');
+            var snapBtn = document.getElementById('doc-live-camera-snap-btn');
+
+            stopActiveCameraStream();
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                if (statusEl) {
+                    statusEl.innerHTML = '⚠️ Live camera viewfinder requires camera permissions or HTTPS. Tap <strong>&quot;📱 Select / Capture Photo from Device&quot;</strong> below to take or pick a photo directly!';
+                    statusEl.classList.remove('hidden');
+                }
+                if (snapBtn) snapBtn.classList.add('hidden');
+                return;
+            }
+
+            if (statusEl) {
+                statusEl.innerHTML = '⏳ Starting camera... Please click <strong>Allow</strong> if your browser asks for camera access.';
+                statusEl.classList.remove('hidden');
+            }
+
+            try {
+                var constraints = {
+                    video: {
+                        facingMode: { ideal: _cameraFacingMode },
+                        width: { ideal: 1280 },
+                        height: { ideal: 960 }
+                    },
+                    audio: false
+                };
+                var stream = null;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (firstErr) {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                }
+                _activeCameraStream = stream;
+                if (videoEl) {
+                    videoEl.srcObject = stream;
+                    await videoEl.play().catch(function() {});
+                }
+                if (statusEl) statusEl.classList.add('hidden');
+                if (snapBtn) snapBtn.classList.remove('hidden');
+            } catch (err) {
+                console.warn('Camera access error:', err);
+                if (statusEl) {
+                    statusEl.innerHTML = '⚠️ Could not access live camera (' + (err && err.message ? err.message : 'Permission denied or no webcam found') + '). Use <strong>&quot;📱 Select / Capture Photo from Device&quot;</strong> below!';
+                    statusEl.classList.remove('hidden');
+                }
+                if (snapBtn) snapBtn.classList.add('hidden');
+            }
+        }
+
+        function stopActiveCameraStream() {
+            if (_activeCameraStream) {
+                try {
+                    _activeCameraStream.getTracks().forEach(function(t) { t.stop(); });
+                } catch(e) {}
+                _activeCameraStream = null;
+            }
+            var videoEl = document.getElementById('doc-live-camera-video');
+            if (videoEl) {
+                videoEl.srcObject = null;
+            }
+        }
+
+        function openDocCameraCapture(docId, title, side) {
+            _cameraTargetDocId = docId || null;
+            _cameraTargetDocTitle = title || (document.getElementById('new-doc-title-input')?.value || 'Document');
+            var modal = document.getElementById('doc-live-camera-modal');
+            setCameraModalSide(side || 'front');
+            if (modal) modal.classList.remove('hidden');
+            startCameraStreamInModal();
+        }
+
+        function closeDocCameraModal() {
+            stopActiveCameraStream();
+            var modal = document.getElementById('doc-live-camera-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function flipDocCamera() {
+            _cameraFacingMode = (_cameraFacingMode === 'environment') ? 'user' : 'environment';
+            startCameraStreamInModal();
+        }
+
+        function captureLiveCameraFrame() {
+            var videoEl = document.getElementById('doc-live-camera-video');
+            if (!videoEl || !videoEl.videoWidth) {
+                alert('Camera stream is not ready yet. Please wait a moment or use the file upload button.');
+                return;
+            }
+            var maxW = 1100;
+            var maxH = 1400;
+            var w = videoEl.videoWidth;
+            var h = videoEl.videoHeight;
+            if (w > maxW || h > maxH) {
+                var ratio = Math.min(maxW / w, maxH / h);
+                w = Math.round(w * ratio);
+                h = Math.round(h * ratio);
+            }
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(videoEl, 0, 0, w, h);
+            var dataUri = canvas.toDataURL('image/jpeg', 0.82);
+
+            var targetId = _cameraTargetDocId;
+            var targetTitle = _cameraTargetDocTitle || 'Document';
+            var targetSide = _cameraTargetSide || 'front';
+            closeDocCameraModal();
+
+            if (targetId) {
+                attachDataUriToExistingDoc(targetId, targetTitle, dataUri, (targetSide === 'back' ? 'Back_' : 'Front_') + targetId + '.jpg', targetSide);
+            } else {
+                applyDataUriToNewDocForm(dataUri, (targetSide === 'back' ? 'Back_Document_Snap.jpg' : 'Front_Document_Snap.jpg'), targetSide);
+            }
+        }
+
+        function handleModalFallbackFileInput(inputEl) {
+            if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
+            var targetId = _cameraTargetDocId;
+            var targetTitle = _cameraTargetDocTitle || 'Document';
+            var targetSide = _cameraTargetSide || 'front';
+            closeDocCameraModal();
+            if (targetId) {
+                attachScanToExistingDoc(targetId, targetTitle, inputEl, targetSide);
+            } else {
+                handleNewDocScanSelect(inputEl, targetSide);
+            }
         }
 
         function refreshDocCardScanBadges() {
@@ -1388,20 +2280,48 @@ export function renderRiderDashboard(data: any): string {
             document.querySelectorAll('[data-comp-doc-id]').forEach(function(card) {
                 var id = card.getAttribute('data-comp-doc-id');
                 var title = card.getAttribute('data-comp-doc-title');
-                var keyWithId = normalizeDocKey(title, id);
-                var keyNoId = normalizeDocKey(title, null);
-                var item = store[keyWithId] || store[keyNoId];
+                var item = findStoredScanForDoc(store, id, title);
+                var sides = getDocSides(item);
+                var hasFront = Boolean(sides.front && sides.front.dataUri);
+                var hasBack = Boolean(sides.back && sides.back.dataUri);
 
                 var badgeEl = card.querySelector('.glovebox-status-badge');
                 var viewBtn = card.querySelector('.glovebox-view-btn');
+                var previewContainer = card.querySelector('.glovebox-card-preview');
+                var previewImg = card.querySelector('.glovebox-card-preview-img');
+                var previewBackWrap = card.querySelector('.glovebox-card-preview-back-wrap');
+                var previewBackImg = card.querySelector('.glovebox-card-preview-back-img');
+                var previewLabel = card.querySelector('.glovebox-card-preview-label');
 
-                if (item && item.dataUri) {
+                if (hasFront || hasBack) {
                     if (badgeEl) {
                         badgeEl.className = 'glovebox-status-badge text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1';
-                        badgeEl.innerHTML = '<span>📎</span> Scanned Copy Ready';
+                        badgeEl.innerHTML = (hasFront && hasBack)
+                            ? '<span>📎</span> Front + Back Attached'
+                            : (hasFront ? '<span>📎</span> Front Side Attached' : '<span>📎</span> Back Side Attached');
                     }
                     if (viewBtn) {
                         viewBtn.classList.remove('hidden');
+                    }
+                    if (previewContainer) {
+                        previewContainer.classList.remove('hidden');
+                        var primarySide = sides.front || sides.back;
+                        if (previewImg && primarySide) {
+                            previewImg.src = primarySide.type === 'pdf' ? _pdfThumbSvg : primarySide.dataUri;
+                        }
+                        if (previewBackWrap && previewBackImg) {
+                            if (hasFront && hasBack) {
+                                previewBackWrap.classList.remove('hidden');
+                                previewBackImg.src = sides.back.type === 'pdf' ? _pdfThumbSvg : sides.back.dataUri;
+                            } else {
+                                previewBackWrap.classList.add('hidden');
+                            }
+                        }
+                        if (previewLabel) {
+                            previewLabel.innerText = (hasFront && hasBack)
+                                ? '🪪 Front + 🔄 Back Sides Ready'
+                                : (hasFront ? '🪪 Front Side Ready (Tap +Back if 2-sided)' : '🔄 Back Side Ready');
+                        }
                     }
                 } else {
                     if (badgeEl) {
@@ -1411,15 +2331,48 @@ export function renderRiderDashboard(data: any): string {
                     if (viewBtn) {
                         viewBtn.classList.add('hidden');
                     }
+                    if (previewContainer) {
+                        previewContainer.classList.add('hidden');
+                    }
                 }
             });
         }
 
-        function showGloveboxModal(docId, title) {
+        var _currentGloveboxDocId = null;
+        var _currentGloveboxDocTitle = null;
+
+        function triggerGloveboxCamera(side) {
+            document.getElementById('doc-glovebox-modal')?.classList.add('hidden');
+            openDocCameraCapture(_currentGloveboxDocId, _currentGloveboxDocTitle, side || 'front');
+        }
+
+        function triggerGloveboxUpload(inputEl, side) {
+            attachScanToExistingDoc(_currentGloveboxDocId, _currentGloveboxDocTitle, inputEl, side || 'front');
+        }
+
+        function triggerGloveboxOcr() {
+            runOcrOnExistingDocScans(_currentGloveboxDocId, _currentGloveboxDocTitle);
+        }
+
+        function viewGloveboxBoth() { showGloveboxModal(_currentGloveboxDocId, _currentGloveboxDocTitle, 'both'); }
+        function viewGloveboxFront() { showGloveboxModal(_currentGloveboxDocId, _currentGloveboxDocTitle, 'front'); }
+        function viewGloveboxBack() { showGloveboxModal(_currentGloveboxDocId, _currentGloveboxDocTitle, 'back'); }
+        function snapGloveboxFront() { triggerGloveboxCamera('front'); }
+        function snapGloveboxBack() { triggerGloveboxCamera('back'); }
+        function uploadGloveboxFront(inputEl) { triggerGloveboxUpload(inputEl, 'front'); }
+        function uploadGloveboxBack(inputEl) { triggerGloveboxUpload(inputEl, 'back'); }
+
+        function showGloveboxModal(docId, title, viewSide) {
+            _currentGloveboxDocId = docId;
+            _currentGloveboxDocTitle = title;
+            var activeSide = viewSide || 'both';
             var store = getDocScansStore();
             var keyWithId = normalizeDocKey(title, docId);
             var keyNoId = normalizeDocKey(title, null);
-            var item = store[keyWithId] || store[keyNoId];
+            var item = findStoredScanForDoc(store, docId, title);
+            var sides = getDocSides(item);
+            var hasFront = Boolean(sides.front && sides.front.dataUri);
+            var hasBack = Boolean(sides.back && sides.back.dataUri);
 
             var modal = document.getElementById('doc-glovebox-modal');
             var modalTitle = document.getElementById('glovebox-modal-title');
@@ -1430,26 +2383,76 @@ export function renderRiderDashboard(data: any): string {
             if (!modal) return;
             if (modalTitle) modalTitle.innerText = title;
 
-            if (item && item.dataUri) {
-                if (modalViewer) {
-                    if (item.type === 'pdf') {
-                        modalViewer.innerHTML = '<iframe src="' + item.dataUri + '" class="w-full h-[65vh] rounded-xl border border-gray-700" title="' + title + '"></iframe>';
-                    } else {
-                        modalViewer.innerHTML = '<div class="max-h-[68vh] overflow-auto flex items-center justify-center p-2 bg-slate-950 rounded-xl border border-gray-800">' +
-                            '<img src="' + item.dataUri + '" alt="' + title + '" class="max-w-full max-h-[65vh] object-contain rounded-lg shadow-lg">' +
+            if (hasFront || hasBack) {
+                var controlsHtml = '<div class="flex flex-wrap items-center justify-between gap-2 mb-3 p-2.5 bg-gray-100 dark:bg-gray-800/80 rounded-xl text-xs">' +
+                    '<div class="flex items-center gap-1.5 flex-wrap">' +
+                    '<button type="button" onclick="viewGloveboxBoth()" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ' + (activeSide === 'both' ? 'bg-amber-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300') + '">🪪+🔄 Both Sides</button>' +
+                    (hasFront ? '<button type="button" onclick="viewGloveboxFront()" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ' + (activeSide === 'front' ? 'bg-amber-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300') + '">🪪 Front Side</button>' : '') +
+                    (hasBack ? '<button type="button" onclick="viewGloveboxBack()" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ' + (activeSide === 'back' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300') + '">🔄 Back Side</button>' : '') +
+                    '<button type="button" onclick="triggerGloveboxOcr()" class="px-2.5 py-1 rounded-lg font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">🔍 Auto-Read Expiry</button>' +
+                    '</div>' +
+                    '<div class="flex items-center gap-1.5 flex-wrap">' +
+                    '<button type="button" onclick="snapGloveboxFront()" class="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[11px] font-bold cursor-pointer">📷 ' + (hasFront ? 'Retake Front' : '+ Snap Front') + '</button>' +
+                    '<button type="button" onclick="snapGloveboxBack()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold cursor-pointer">📷 ' + (hasBack ? 'Retake Back' : '+ Snap Back') + '</button>' +
+                    '<label class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-[11px] font-bold cursor-pointer inline-flex items-center gap-1">' +
+                    '<span>📁 +Upload Back</span>' +
+                    '<input type="file" accept="image/*,application/pdf" class="sr-only" onchange="uploadGloveboxBack(this)">' +
+                    '</label>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div id="glovebox-ocr-live-banner" class="hidden mb-3 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs font-semibold"></div>';
+
+                var renderSideBlock = function(sideObj, labelText) {
+                    if (!sideObj || !sideObj.dataUri) return '';
+                    if (sideObj.type === 'pdf') {
+                        return '<div class="space-y-1.5">' +
+                            '<p class="text-xs font-extrabold text-amber-500">' + labelText + '</p>' +
+                            '<iframe src="' + sideObj.dataUri + '" class="w-full h-[55vh] rounded-xl border border-gray-700" title="' + labelText + '"></iframe>' +
                             '</div>';
                     }
+                    return '<div class="space-y-1.5">' +
+                        '<div class="flex items-center justify-between text-xs px-1">' +
+                        '<span class="font-extrabold text-amber-400">' + labelText + '</span>' +
+                        '<a href="' + sideObj.dataUri + '" download="' + (title.replace(/[^a-z0-9]/gi, '_') || 'doc') + '_' + labelText.replace(/[^a-z0-9]/gi, '') + '.jpg" class="text-emerald-400 hover:underline font-bold">⬇️ Download Side</a>' +
+                        '</div>' +
+                        '<div class="flex items-center justify-center p-2 bg-slate-950 rounded-xl border border-gray-800">' +
+                        '<img src="' + sideObj.dataUri + '" alt="' + labelText + '" class="max-w-full max-h-[55vh] object-contain rounded-lg shadow-lg">' +
+                        '</div>' +
+                        '</div>';
+                };
+
+                var bodyHtml = '';
+                if (activeSide === 'front' && hasFront) {
+                    bodyHtml = renderSideBlock(sides.front, '🪪 FRONT SIDE (Details / ID / Photo)');
+                } else if (activeSide === 'back' && hasBack) {
+                    bodyHtml = renderSideBlock(sides.back, '🔄 BACK SIDE (Expiry Dates / Vehicle Classes)');
+                } else {
+                    bodyHtml = '<div class="grid grid-cols-1 ' + (hasFront && hasBack ? 'md:grid-cols-2' : '') + ' gap-3 max-h-[65vh] overflow-y-auto pr-1">' +
+                        (hasFront ? renderSideBlock(sides.front, '🪪 FRONT SIDE (Details / Photo)') : '') +
+                        (hasBack ? renderSideBlock(sides.back, '🔄 BACK SIDE (Expiry Dates / Classes)') : '') +
+                        '</div>';
                 }
-                if (downloadBtn) {
-                    downloadBtn.href = item.dataUri;
-                    downloadBtn.download = (title.replace(/[^a-z0-9]/gi, '_') || 'document') + (item.type === 'pdf' ? '.pdf' : '.jpg');
+
+                if (modalViewer) {
+                    modalViewer.innerHTML = controlsHtml + bodyHtml;
+                }
+
+                var primarySide = (activeSide === 'back' && hasBack) ? sides.back : (sides.front || sides.back);
+                if (downloadBtn && primarySide) {
+                    downloadBtn.href = primarySide.dataUri;
+                    downloadBtn.download = (title.replace(/[^a-z0-9]/gi, '_') || 'document') + (primarySide.type === 'pdf' ? '.pdf' : '.jpg');
                     downloadBtn.classList.remove('hidden');
                 }
                 if (deleteBtn) {
                     deleteBtn.onclick = function() {
-                        if (confirm('Remove scanned copy for ' + title + '?')) {
+                        if (confirm('Remove scanned copies for ' + title + '?')) {
                             delete store[keyWithId];
                             delete store[keyNoId];
+                            Object.keys(store).forEach(function(k) {
+                                if (docId && (store[k]?.docId === docId || k.indexOf(docId + '_') === 0)) {
+                                    delete store[k];
+                                }
+                            });
                             saveDocScansStore(store);
                             refreshDocCardScanBadges();
                             modal.classList.add('hidden');
@@ -1462,9 +2465,18 @@ export function renderRiderDashboard(data: any): string {
                     modalViewer.innerHTML = '<div class="p-8 text-center space-y-3 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">' +
                         '<span class="text-4xl">📷</span>' +
                         '<h4 class="font-bold text-gray-800 dark:text-gray-200">No Scanned Copy Attached Yet</h4>' +
-                        '<p class="text-xs text-gray-500 dark:text-gray-400">Snap a photo with your phone camera or upload a PDF/Image below.</p>' +
-                        '<div class="flex justify-center gap-2 pt-2">' +
-                        '<button type="button" onclick="document.getElementById(\\'doc-card-file-input-' + docId + '\\')?.click()" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition shadow-xs">📷 Scan / Upload Now</button>' +
+                        '<p class="text-xs text-gray-500 dark:text-gray-400">Attach the <strong>🪪 Front Side</strong> (details) and optional <strong>🔄 Back Side</strong> (expiry dates for Driving License / ID).</p>' +
+                        '<div class="flex flex-wrap justify-center gap-2 pt-2">' +
+                        '<button type="button" onclick="snapGloveboxFront()" class="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition shadow-xs cursor-pointer">📷 Snap Front Side</button>' +
+                        '<button type="button" onclick="snapGloveboxBack()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition shadow-xs cursor-pointer">📷 Snap Back Side</button>' +
+                        '<label class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-xs cursor-pointer inline-flex items-center gap-1">' +
+                        '<span>📁 Upload Front</span>' +
+                        '<input type="file" accept="image/*,application/pdf" class="sr-only" onchange="uploadGloveboxFront(this)">' +
+                        '</label>' +
+                        '<label class="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition shadow-xs cursor-pointer inline-flex items-center gap-1">' +
+                        '<span>📁 Upload Back</span>' +
+                        '<input type="file" accept="image/*,application/pdf" class="sr-only" onchange="uploadGloveboxBack(this)">' +
+                        '</label>' +
                         '</div>' +
                         '</div>';
                 }
@@ -1475,10 +2487,46 @@ export function renderRiderDashboard(data: any): string {
             modal.classList.remove('hidden');
         }
 
+        // Expose all document & camera handlers globally
+        window.selectDocPresetQuick = selectDocPresetQuick;
+        window.openNewDocWithCamera = openNewDocWithCamera;
+        window.openNewDocBackCamera = openNewDocBackCamera;
+        window.handleNewDocBackSelect = handleNewDocBackSelect;
+        window.onDocTypePresetChanged = onDocTypePresetChanged;
+        window.onDocIntervalChanged = onDocIntervalChanged;
+        window.toggleComplianceDrawer = toggleComplianceDrawer;
+        window.handleNewDocScanSelect = handleNewDocScanSelect;
+        window.removePendingDocSide = removePendingDocSide;
+        window.runOcrOnPendingDocScan = runOcrOnPendingDocScan;
+        window.runOcrOnExistingDocScans = runOcrOnExistingDocScans;
+        window.savePendingDocScanOnCreate = savePendingDocScanOnCreate;
+        window.attachScanToExistingDoc = attachScanToExistingDoc;
+        window.showGloveboxModal = showGloveboxModal;
+        window.viewGloveboxBoth = viewGloveboxBoth;
+        window.viewGloveboxFront = viewGloveboxFront;
+        window.viewGloveboxBack = viewGloveboxBack;
+        window.snapGloveboxFront = snapGloveboxFront;
+        window.snapGloveboxBack = snapGloveboxBack;
+        window.uploadGloveboxFront = uploadGloveboxFront;
+        window.uploadGloveboxBack = uploadGloveboxBack;
+        window.triggerGloveboxCamera = triggerGloveboxCamera;
+        window.triggerGloveboxUpload = triggerGloveboxUpload;
+        window.triggerGloveboxOcr = triggerGloveboxOcr;
+        window.openDocCameraCapture = openDocCameraCapture;
+        window.setCameraModalSide = setCameraModalSide;
+        window.closeDocCameraModal = closeDocCameraModal;
+        window.flipDocCamera = flipDocCamera;
+        window.captureLiveCameraFrame = captureLiveCameraFrame;
+        window.handleModalFallbackFileInput = handleModalFallbackFileInput;
+
         document.addEventListener('DOMContentLoaded', function() {
+            hydrateScansFromIdb();
             refreshDocCardScanBadges();
         });
-        setTimeout(refreshDocCardScanBadges, 800);
+        setTimeout(function() {
+            hydrateScansFromIdb();
+            refreshDocCardScanBadges();
+        }, 600);
 
 
         // ==========================================
@@ -1740,7 +2788,7 @@ export function renderRiderDashboard(data: any): string {
             <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>⏱️ Log Shift</span>
             </button>
-            <button onclick="document.getElementById('maint-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
+            <button onclick="toggleMaintDrawer(true)" class="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>🛠️ Service</span>
             </button>
             <button onclick="document.getElementById('compliance-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-amber-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
@@ -2459,6 +3507,53 @@ export function renderRiderDashboard(data: any): string {
                     </select>
                 </div>
 
+                <!-- 📱 Optional Platform Split & Cash-in-Hand vs. App Wallet Reconciliation -->
+                <details class="sm:col-span-2 lg:col-span-4 bg-gradient-to-r from-emerald-50/80 via-teal-50/60 to-indigo-50/80 dark:from-emerald-950/30 dark:via-slate-900 dark:to-indigo-950/30 p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800/70 space-y-3">
+                    <summary class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 cursor-pointer list-none select-none">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-black rounded-full uppercase tracking-wider">📱 PLATFORM &amp; WALLET RECONCILIATION</span>
+                            <span class="text-xs font-extrabold text-gray-900 dark:text-white">Split Uber vs. Bolt vs. Cash Trips &amp; Track Cash-in-Hand vs. App Wallet Balance</span>
+                        </div>
+                        <span class="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Click to Expand ▾</span>
+                    </summary>
+
+                    <div class="pt-3 border-t border-emerald-200/70 dark:border-emerald-900/50 space-y-3 text-xs">
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🚗 Uber Earned (Ksh)</label>
+                                <input type="number" step="any" min="0" name="uber_earned" id="shift_uber_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">⚡ Bolt Earned (Ksh)</label>
+                                <input type="number" step="any" min="0" name="bolt_earned" id="shift_bolt_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🚕 Little / Faras / Glovo (Ksh)</label>
+                                <input type="number" step="any" min="0" name="little_earned" id="shift_little_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🤝 Direct / Offline Cash (Ksh)</label>
+                                <input type="number" step="any" min="0" name="direct_cash_earned" id="shift_direct_cash_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-emerald-200/50 dark:border-gray-800">
+                            <div>
+                                <label class="block text-[10px] font-bold text-emerald-700 dark:text-emerald-300 mb-0.5">💵 Cash &amp; M-Pesa Collected in Hand Today (Ksh)</label>
+                                <input type="number" step="any" min="0" name="cash_in_hand" id="shift_cash_in_hand" oninput="syncCashVsWalletSplit('CASH')" placeholder="Liquid cash in pocket / M-Pesa" class="w-full p-2 bg-white dark:bg-gray-900 border border-emerald-300 dark:border-emerald-700 rounded-xl font-black text-emerald-600 dark:text-emerald-400">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-amber-700 dark:text-amber-300 mb-0.5">📱 Stuck in App Wallet / Card Trips Pending Payout (Ksh)</label>
+                                <input type="number" step="any" min="0" name="app_wallet_balance" id="shift_app_wallet_balance" oninput="syncCashVsWalletSplit('WALLET')" placeholder="Card / corporate trips in app wallet" class="w-full p-2 bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-700 rounded-xl font-black text-amber-600 dark:text-amber-400">
+                            </div>
+                        </div>
+
+                        <div id="shift_wallet_reconcile_summary" class="p-2.5 rounded-xl bg-white/90 dark:bg-gray-900/90 border border-emerald-200 dark:border-gray-800 text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                            💵 Liquid Cash in Pocket (After Expenses): <strong class="text-emerald-600 dark:text-emerald-400">Ksh 0</strong> • 📱 Stuck in App Wallet: <strong class="text-amber-600 dark:text-amber-400">Ksh 0</strong>
+                        </div>
+                    </div>
+                </details>
+
                 <!-- 🛡️ Live Post-Shift Strict Saver Audit & Expected Account Balance Bar -->
                 <div class="sm:col-span-2 lg:col-span-4 p-4 bg-slate-900 dark:bg-slate-950 border-2 border-indigo-600/60 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-md">
                     <div class="space-y-1">
@@ -2711,12 +3806,36 @@ export function renderRiderDashboard(data: any): string {
             <div id="maint-log-form-container" class="hidden bg-indigo-50/40 dark:bg-indigo-950/30 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-md space-y-4">
                 <div class="flex justify-between items-center border-b border-indigo-100 dark:border-indigo-900/60 pb-2">
                     <h3 class="text-sm font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
-                        <span>🔧 Record Bike Service & Maintenance Details</span>
+                        <span>🔧 Record Bike / Vehicle Service &amp; Repair Details</span>
                     </h3>
-                    <button type="button" onclick="toggleMaintDrawer()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
+                    <button type="button" onclick="toggleMaintDrawer(false)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
 
-                <form action="/rider/maintenance/log" method="POST" class="space-y-4">
+                <!-- ⚡ 1-Tap Quick Repair & Service Presets -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mr-1">⚡ Quick Repair Presets:</span>
+                    <button type="button" onclick="applyMaintRepairPreset('Engine Oil &amp; Filter Service', 500, 0, 0, 150, 0, 'Changed engine oil &amp; filter, paid mechanic labor.')" class="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white dark:bg-gray-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 transition cursor-pointer">
+                        🛢️ Oil Change (Ksh 650)
+                    </button>
+                    <button type="button" onclick="applyMaintRepairPreset('Brake Pads / Shoes Replacement', 0, 350, 0, 150, 0, 'Replaced worn brake pads/shoes and adjusted braking system.')" class="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white dark:bg-gray-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 transition cursor-pointer">
+                        🛑 Brake Pads (Ksh 500)
+                    </button>
+                    <button type="button" onclick="applyMaintRepairPreset('Oil Change, Brake Pads &amp; Labor Service', 500, 350, 0, 200, 0, 'Engine oil plus brake pads changed, inspected and in good condition, labor paid.')" class="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white dark:bg-gray-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 transition cursor-pointer">
+                        🛢️+🛑 Full Oil &amp; Brakes (Ksh 1,050)
+                    </button>
+                    <button type="button" onclick="applyMaintRepairPreset('Chain, Sprocket / Drive Belt Repair', 0, 0, 0, 300, 1200, 'Replaced chain &amp; sprocket set / drive belt and tensioned.')" class="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white dark:bg-gray-900 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-50 transition cursor-pointer">
+                        ⛓️ Chain / Sprocket (Ksh 1,500)
+                    </button>
+                    <button type="button" onclick="applyMaintRepairPreset('Tire / Tube Replacement &amp; Wheel Alignment', 0, 0, 0, 200, 2200, 'Replaced tire/tube and balanced wheel.')" class="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white dark:bg-gray-900 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 transition cursor-pointer">
+                        🛞 Tire / Tube (Ksh 2,400)
+                    </button>
+                    <button type="button" onclick="applyMaintRepairPreset('', 0, 0, 0, 0, 0, '')" class="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-indigo-600 text-white hover:bg-indigo-500 transition cursor-pointer">
+                        ✨ Custom Repair
+                    </button>
+                </div>
+
+                <form action="/rider/maintenance/log" method="POST" onsubmit="calcServiceTotal()" class="space-y-4">
+                    <input type="hidden" name="total_shift_km" value="${totalKmCovered}">
                     <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                         <div>
                             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Date</label>
@@ -2725,7 +3844,7 @@ export function renderRiderDashboard(data: any): string {
                         <div>
                             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Vehicle / Bike</label>
                             <select name="bike_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                                ${bikes.length > 0 ? bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'})</option>`).join('') : '<option value="">-- No Vehicle Selected --</option>'}
+                                ${bikes.length > 0 ? bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'})</option>`).join('') : '<option value="">-- Primary Fleet Vehicle --</option>'}
                             </select>
                         </div>
                         <div>
@@ -2733,8 +3852,8 @@ export function renderRiderDashboard(data: any): string {
                             <input type="number" step="any" id="service_odometer_form_input" name="service_odometer" value="${currentOdometer}" oninput="this.dataset.touched='1'" placeholder="e.g. 12450" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-black text-emerald-600 dark:text-emerald-400">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service Summary Title</label>
-                            <input type="text" id="service_type_input" name="service_type" value="Oil Change, Brake Pads & Labor Service" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold" required>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Service / Repair Summary Title</label>
+                            <input type="text" id="service_type_input" name="service_type" value="Oil Change, Brake Pads & Labor Service" placeholder="e.g. Clutch Cable & Brake Repair" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-bold" required>
                         </div>
                     </div>
 
@@ -2742,7 +3861,7 @@ export function renderRiderDashboard(data: any): string {
                     <div class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
                         <div class="flex justify-between items-center">
                             <span class="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Itemized Costs (<span class="curr-symbol-label">Ksh</span>)</span>
-                            <span class="text-xs text-gray-400">Leave 0 if not replaced / inspected & good</span>
+                            <span class="text-xs text-gray-400">Enter itemized parts below OR type Total Cost directly</span>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
                             <div>
@@ -2770,9 +3889,9 @@ export function renderRiderDashboard(data: any): string {
 
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
-                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Total Service Cost (<span class="curr-symbol-label">Ksh</span>)</label>
+                            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Total Service / Repair Cost (<span class="curr-symbol-label">Ksh</span>)</label>
                             <div class="relative">
-                                <input type="number" step="any" inputmode="decimal" id="service_total_cost" name="total_cost" placeholder="Total Cost" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-black text-rose-600 dark:text-rose-400" required>
+                                <input type="number" step="any" inputmode="decimal" id="service_total_cost" name="total_cost" placeholder="Auto-summed or type total" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-900 rounded-xl text-xs font-black text-rose-600 dark:text-rose-400">
                                 <span id="service_total_badge" class="absolute right-3 top-2.5 text-xs font-extrabold text-rose-500 pointer-events-none"></span>
                             </div>
                         </div>
@@ -2801,7 +3920,7 @@ export function renderRiderDashboard(data: any): string {
                     </div>
 
                     <div class="flex justify-end gap-2 pt-1">
-                        <button type="button" onclick="toggleMaintDrawer()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold">Cancel</button>
+                        <button type="button" onclick="toggleMaintDrawer(false)" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold">Cancel</button>
                         <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition shadow-xs active:scale-95">💾 Save Service & Update Ledger</button>
                     </div>
                 </form>
@@ -2812,15 +3931,20 @@ export function renderRiderDashboard(data: any): string {
                 ${maintenance_schedules.length > 0 ? maintenance_schedules.map((m: any) => {
                     const nextDiff = getDaysDiff(m.next_due_date);
                     const isUrgent = nextDiff.status === 'EXPIRED' || nextDiff.status === 'URGENT';
+                    const loggedCost = Number(m.cost_kes || m.brake_pad_cost_last || 0);
                     return `
                     <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border ${isUrgent ? 'border-amber-300 dark:border-amber-700/80 bg-amber-50/20' : 'border-gray-200 dark:border-gray-700'} space-y-3 flex flex-col justify-between shadow-2xs">
                         <div class="space-y-2">
-                            <div class="flex justify-between items-start">
+                            <div class="flex justify-between items-start gap-2">
                                 <div>
                                     <h4 class="font-bold text-gray-900 dark:text-white text-sm">${m.service_type}</h4>
-                                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Interval: Every ${m.interval_weeks || 3} Weeks</span>
+                                    <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                        <span class="text-[10px] text-gray-500 dark:text-gray-400">Every ${m.interval_weeks || 3} Weeks</span>
+                                        ${loggedCost > 0 ? `<span class="text-[10px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded">Ksh ${loggedCost.toLocaleString()}</span>` : ''}
+                                        ${m.service_odometer ? `<span class="text-[10px] font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded">📍 ${Number(m.service_odometer).toLocaleString()} km</span>` : ''}
+                                    </div>
                                 </div>
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isUrgent ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 animate-pulse' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'}">
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${isUrgent ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 animate-pulse' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'}">
                                     ${nextDiff.label}
                                 </span>
                             </div>
@@ -2852,7 +3976,7 @@ export function renderRiderDashboard(data: any): string {
                     </div>`;
                 }).join('') : `
                 <div class="col-span-full p-4 text-center rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-300 dark:border-gray-700">
-                    <p class="text-xs text-gray-500">No active maintenance records. Click "➕ Log Service / Repair" above to log yesterday's service!</p>
+                    <p class="text-xs text-gray-500">No active maintenance records. <button type="button" onclick="toggleMaintDrawer(true)" class="text-indigo-600 dark:text-indigo-400 font-bold underline">Click here to Log Service / Repair</button></p>
                 </div>`}
             </div>
         </div>
@@ -2874,13 +3998,17 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    <button type="button" onclick="selectDocPresetQuick('GOOD_CONDUCT')" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95">
+                    <button type="button" onclick="openNewDocWithCamera()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95 cursor-pointer">
+                        <span>📷 Take Picture</span>
+                    </button>
+                    <label class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1 active:scale-95 cursor-pointer">
+                        <span>📁 Upload Image / PDF</span>
+                        <input type="file" accept="image/*,application/pdf" class="sr-only" onchange="handleNewDocScanSelect(this)">
+                    </label>
+                    <button type="button" onclick="selectDocPresetQuick('GOOD_CONDUCT')" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95 cursor-pointer">
                         <span>👮 + Good Conduct</span>
                     </button>
-                    <button type="button" onclick="selectDocPresetQuick('CUSTOM')" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1 active:scale-95">
-                        <span>✨ + Custom Doc</span>
-                    </button>
-                    <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5">
+                    <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.toggle('hidden')" class="px-3.5 py-1.5 bg-gray-900 dark:bg-gray-800 hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95 cursor-pointer">
                         <span>➕ Add Document</span>
                     </button>
                 </div>
@@ -2930,37 +4058,86 @@ export function renderRiderDashboard(data: any): string {
                     <button type="button" onclick="document.getElementById('new-comp-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
 
-                <!-- 📷 Scan or Upload Document Copy (Phone & PC) -->
-                <div class="p-3.5 rounded-xl border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/40 dark:bg-amber-950/20 space-y-2.5">
+                <!-- 📷 Dual-Side Document Scanner (🪪 Front for Details + 🔄 Back for Expiry Dates) -->
+                <div class="p-3.5 rounded-xl border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
-                            <span class="text-xs font-black text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                                <span>📄</span> Scan or Upload Document Copy (Digital Glovebox)
+                            <span class="text-xs font-black text-amber-900 dark:text-amber-200 flex items-center gap-1.5 flex-wrap">
+                                <span>📄</span> Digital Glovebox Scanner — Supports 1-Sided &amp; 2-Sided Documents (Front + Back)
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold">🛡️ Smart Birth-Date Filter Active</span>
                             </span>
-                            <p class="text-[11px] text-gray-500 dark:text-gray-400">Attach photo (Camera/Gallery) or PDF (e.g. Good Conduct, Insurance, DL) so you can pull it up roadside in 1 tap!</p>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <input type="file" id="new-doc-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleNewDocScanSelect(this.files[0])">
-                            <input type="file" id="new-doc-file-input" accept="image/*,application/pdf" class="hidden" onchange="handleNewDocScanSelect(this.files[0])">
-                            <button type="button" onclick="document.getElementById('new-doc-camera-input')?.click()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1 active:scale-95">
-                                <span>📷 Snap with Camera</span>
-                            </button>
-                            <button type="button" onclick="document.getElementById('new-doc-file-input')?.click()" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl text-xs font-bold transition border border-gray-300 dark:border-gray-700 flex items-center gap-1 active:scale-95">
-                                <span>📁 Upload File / PDF</span>
-                            </button>
+                            <p class="text-[11px] text-gray-500 dark:text-gray-400">
+                                For <strong>Driving License (DL)</strong> or <strong>ID Card</strong>: attach <strong>🪪 Front Side</strong> (details/ID#) and <strong>🔄 Back Side</strong> (expiry dates &amp; classes). Birth dates (DOB) are automatically ignored so they never overwrite your Expiry Date!
+                            </p>
                         </div>
                     </div>
 
-                    <!-- Live Attached Scan Thumbnail & OCR Trigger -->
-                    <div id="new-doc-scan-preview-box" class="hidden flex items-center justify-between gap-3 p-2 bg-white dark:bg-gray-900 rounded-lg border border-amber-200 dark:border-amber-900/60 text-xs">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                            <img id="new-doc-scan-thumb" src="" alt="Scan Thumbnail" class="w-10 h-10 object-cover rounded-md border border-gray-200 dark:border-gray-700 bg-gray-900 shrink-0">
-                            <div class="min-w-0">
-                                <p id="new-doc-scan-meta" class="font-bold text-gray-900 dark:text-white truncate">Attached</p>
-                                <div id="new-doc-scan-ocr-status" class="mt-0.5"></div>
+                    <!-- Side-by-Side Front & Back Upload/Camera Slots -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <!-- Slot 1: Front Side -->
+                        <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800/70 flex flex-col justify-between gap-2">
+                            <div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-extrabold text-gray-900 dark:text-white">🪪 1. Front Side (Details / Photo)</span>
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">Primary</span>
+                                </div>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Name, ID/DL Number, Policy Ref, or single-page certificate</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                                <button type="button" onclick="openDocCameraCapture(null, null, 'front')" class="flex-1 px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[11px] font-bold transition shadow-2xs flex items-center justify-center gap-1 active:scale-95 cursor-pointer">
+                                    <span>📷 Snap Front</span>
+                                </button>
+                                <label class="flex-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition shadow-2xs flex items-center justify-center gap-1 active:scale-95 cursor-pointer">
+                                    <span>📁 Upload Front</span>
+                                    <input type="file" id="new-doc-file-input" accept="image/*,application/pdf" multiple class="sr-only" onchange="handleNewDocScanSelect(this, 'front')">
+                                </label>
                             </div>
                         </div>
-                        <button type="button" onclick="_pendingNewDocScan=null; document.getElementById('new-doc-scan-preview-box')?.classList.add('hidden');" class="text-rose-500 hover:text-rose-700 text-xs font-bold p-1">✕</button>
+
+                        <!-- Slot 2: Back Side -->
+                        <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-indigo-200 dark:border-indigo-800/70 flex flex-col justify-between gap-2">
+                            <div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-extrabold text-gray-900 dark:text-white">🔄 2. Back Side (Expiry Dates / Classes)</span>
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">2-Sided Docs (DL / ID)</span>
+                                </div>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Driving License back table (Expiry dates &amp; Class A2/B/C) or ID back</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                                <button type="button" onclick="openDocCameraCapture(null, null, 'back')" class="flex-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition shadow-2xs flex items-center justify-center gap-1 active:scale-95 cursor-pointer">
+                                    <span>📷 Snap Back</span>
+                                </button>
+                                <label class="flex-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[11px] font-bold transition shadow-2xs flex items-center justify-center gap-1 active:scale-95 cursor-pointer">
+                                    <span>📁 Upload Back</span>
+                                    <input type="file" id="new-doc-back-file-input" accept="image/*,application/pdf" class="sr-only" onchange="handleNewDocScanSelect(this, 'back')">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Attached Front & Back Thumbnails & Smart OCR Trigger -->
+                    <div id="new-doc-scan-preview-box" class="hidden p-3 bg-white dark:bg-gray-900 rounded-xl border-2 border-emerald-400 dark:border-emerald-700 text-xs shadow-sm space-y-2.5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <!-- Front Preview Slot -->
+                            <div id="new-doc-front-preview-slot" class="p-2 rounded-lg bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <img id="new-doc-front-thumb" src="" alt="Front Thumbnail" class="hidden w-16 h-14 object-cover rounded-md border border-gray-300 dark:border-gray-600 bg-gray-900 shrink-0">
+                                    <p id="new-doc-front-meta" class="text-[11px] text-gray-700 dark:text-gray-200 truncate">🪪 Front Side</p>
+                                </div>
+                                <button type="button" onclick="removePendingDocSide('front')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold px-2 py-1 rounded bg-rose-50 dark:bg-rose-950/50 shrink-0 cursor-pointer">✕</button>
+                            </div>
+
+                            <!-- Back Preview Slot -->
+                            <div id="new-doc-back-preview-slot" class="p-2 rounded-lg bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <img id="new-doc-back-thumb" src="" alt="Back Thumbnail" class="hidden w-16 h-14 object-cover rounded-md border border-gray-300 dark:border-gray-600 bg-gray-900 shrink-0">
+                                    <p id="new-doc-back-meta" class="text-[11px] text-gray-700 dark:text-gray-200 truncate">🔄 Back Side</p>
+                                </div>
+                                <button type="button" onclick="removePendingDocSide('back')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold px-2 py-1 rounded bg-rose-50 dark:bg-rose-950/50 shrink-0 cursor-pointer">✕</button>
+                            </div>
+                        </div>
+
+                        <div id="new-doc-scan-ocr-status" class="pt-1 border-t border-gray-100 dark:border-gray-800"></div>
                     </div>
                 </div>
 
@@ -3097,10 +4274,10 @@ export function renderRiderDashboard(data: any): string {
                         typeBadgeClass = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
                     }
 
-                    const safeTitle = (c.title || '').replace(/'/g, "\\'");
+                    const safeTitle = (c.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
                     return `
-                    <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border ${isUrgent ? 'border-rose-300 dark:border-rose-900 shadow-sm' : (isSoon ? 'border-amber-300 dark:border-amber-900/60' : 'border-gray-200 dark:border-gray-800')} space-y-3 flex flex-col justify-between shadow-xs" data-comp-doc-id="${c.id}" data-comp-doc-title="${c.title}">
+                    <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border ${isUrgent ? 'border-rose-300 dark:border-rose-900 shadow-sm' : (isSoon ? 'border-amber-300 dark:border-amber-900/60' : 'border-gray-200 dark:border-gray-800')} space-y-3 flex flex-col justify-between shadow-xs" data-comp-doc-id="${c.id}" data-comp-doc-title="${(c.title || '').replace(/"/g, '&quot;')}">
                         <div class="space-y-2.5">
                             <div class="flex justify-between items-start">
                                 <div class="flex items-center space-x-2.5">
@@ -3132,20 +4309,49 @@ export function renderRiderDashboard(data: any): string {
                                 </div>
                             </div>
 
-                            <!-- 📄 Digital Glovebox Status Bar -->
-                            <div class="flex items-center justify-between p-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 text-xs">
-                                <span class="glovebox-status-badge text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                                    📷 No Scan Attached
-                                </span>
-                                <div class="flex items-center gap-1">
-                                    <input type="file" id="doc-card-file-input-${c.id}" accept="image/*,application/pdf" class="hidden" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this.files[0])">
-                                    <input type="file" id="doc-card-cam-input-${c.id}" accept="image/*" capture="environment" class="hidden" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this.files[0])">
-                                    <button type="button" onclick="showGloveboxModal('${c.id}', '${safeTitle}')" class="glovebox-view-btn hidden px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition active:scale-95 shadow-2xs">
-                                        👁️ View Scan
+                            <!-- 🖼️ Direct Visible Document Image Preview on Card (Supports Front + Back Split View) -->
+                            <div onclick="showGloveboxModal('${c.id}', '${safeTitle}', 'both')" class="glovebox-card-preview hidden relative group cursor-pointer rounded-xl overflow-hidden border-2 border-emerald-400/80 dark:border-emerald-700 bg-slate-950 shadow-xs">
+                                <div class="flex w-full h-36 divide-x divide-slate-800">
+                                    <div class="relative flex-1 h-full overflow-hidden">
+                                        <img src="" alt="Front Side" class="glovebox-card-preview-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
+                                        <span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 text-amber-300 text-[9px] font-extrabold">🪪 Front</span>
+                                    </div>
+                                    <div class="glovebox-card-preview-back-wrap hidden relative flex-1 h-full overflow-hidden">
+                                        <img src="" alt="Back Side" class="glovebox-card-preview-back-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
+                                        <span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 text-indigo-300 text-[9px] font-extrabold">🔄 Back</span>
+                                    </div>
+                                </div>
+                                <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-2 flex items-center justify-between text-[10px] text-white">
+                                    <span class="glovebox-card-preview-label font-bold truncate">Attached Scan</span>
+                                    <span class="px-2 py-0.5 bg-emerald-600 rounded-md font-extrabold shrink-0">👁️ View Full</span>
+                                </div>
+                            </div>
+
+                            <!-- 📄 Digital Glovebox Status & Dual-Side Action Bar -->
+                            <div class="flex flex-col gap-1.5 p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 text-xs">
+                                <div class="flex items-center justify-between">
+                                    <span class="glovebox-status-badge text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                        📷 No Scan Attached
+                                    </span>
+                                    <button type="button" onclick="showGloveboxModal('${c.id}', '${safeTitle}', 'both')" class="glovebox-view-btn hidden px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition active:scale-95 shadow-2xs cursor-pointer">
+                                        👁️ View Scan(s)
                                     </button>
-                                    <button type="button" onclick="document.getElementById('doc-card-file-input-${c.id}')?.click()" class="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-800 dark:text-amber-200 rounded-lg text-[10px] font-bold transition active:scale-95">
-                                        📷 Attach
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <button type="button" onclick="openDocCameraCapture('${c.id}', '${safeTitle}', 'front')" class="px-2 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold transition active:scale-95 flex items-center justify-center gap-1 shadow-2xs cursor-pointer" title="Capture Front Side (Details)">
+                                        <span>📷 Front Cam</span>
                                     </button>
+                                    <label class="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-bold transition active:scale-95 flex items-center justify-center gap-1 shadow-2xs cursor-pointer" title="Upload Front Side">
+                                        <span>📁 Upload Front</span>
+                                        <input type="file" id="doc-card-file-input-${c.id}" accept="image/*,application/pdf" multiple class="sr-only" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this, 'front')">
+                                    </label>
+                                    <button type="button" onclick="openDocCameraCapture('${c.id}', '${safeTitle}', 'back')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-200 rounded-lg text-[10px] font-bold transition active:scale-95 flex items-center justify-center gap-1 cursor-pointer" title="Capture Back Side (Expiry Dates / DL Classes)">
+                                        <span>📷 +Back Cam</span>
+                                    </button>
+                                    <label class="px-2 py-1 bg-purple-700 hover:bg-purple-600 text-white rounded-lg text-[10px] font-bold transition active:scale-95 flex items-center justify-center gap-1 cursor-pointer" title="Upload Back Side (Expiry Dates / DL Classes)">
+                                        <span>📁 +Upload Back</span>
+                                        <input type="file" accept="image/*,application/pdf" class="sr-only" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this, 'back')">
+                                    </label>
                                 </div>
                             </div>
 
@@ -3162,6 +4368,24 @@ export function renderRiderDashboard(data: any): string {
 
                             <!-- Inline Renew Drawer -->
                             <div id="comp-drawer-${c.id}" class="hidden p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl space-y-2 text-xs">
+                                <div class="p-2 bg-white dark:bg-gray-900 rounded-lg border border-amber-200 dark:border-amber-800 space-y-1.5">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-[11px] font-bold text-gray-700 dark:text-gray-300">📎 Front &amp; Back Document Scans:</span>
+                                        <button type="button" onclick="runOcrOnExistingDocScans('${c.id}', '${safeTitle}')" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold cursor-pointer">🔍 Auto-Read Expiry</button>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <button type="button" onclick="openDocCameraCapture('${c.id}', '${safeTitle}', 'front')" class="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-md text-[10px] font-bold cursor-pointer">📷 Front</button>
+                                        <label class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-[10px] font-bold cursor-pointer">
+                                            <span>📁 Front</span>
+                                            <input type="file" accept="image/*,application/pdf" class="sr-only" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this, 'front')">
+                                        </label>
+                                        <button type="button" onclick="openDocCameraCapture('${c.id}', '${safeTitle}', 'back')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-200 rounded-md text-[10px] font-bold cursor-pointer">📷 Back</button>
+                                        <label class="px-2 py-1 bg-purple-700 hover:bg-purple-600 text-white rounded-md text-[10px] font-bold cursor-pointer">
+                                            <span>📁 Back</span>
+                                            <input type="file" accept="image/*,application/pdf" class="sr-only" onchange="attachScanToExistingDoc('${c.id}', '${safeTitle}', this, 'back')">
+                                        </label>
+                                    </div>
+                                </div>
                                 <form action="/rider/compliance/update/${c.id}" method="POST" class="space-y-2">
                                     <div>
                                         <label class="block font-bold text-amber-950 dark:text-amber-200 mb-0.5">Document Name</label>
@@ -3195,11 +4419,136 @@ export function renderRiderDashboard(data: any): string {
                         </div>
                     </div>`;
                 }).join('') : `
-                <div class="col-span-full p-5 text-center rounded-xl bg-white dark:bg-gray-900 border border-dashed border-amber-300 dark:border-gray-700 space-y-2">
-                    <p class="text-xs text-gray-600 dark:text-gray-400 font-medium">No documents registered yet. Tap <strong>👮 Good Conduct (DCI)</strong>, <strong>🪪 Driving License</strong>, or <strong>➕ Add Document</strong> above to track your expiry dates!</p>
+                <div class="col-span-full p-5 text-center rounded-xl bg-white dark:bg-gray-900 border border-dashed border-amber-300 dark:border-gray-700 space-y-3">
+                    <p class="text-xs text-gray-600 dark:text-gray-400 font-medium">No documents registered yet. Take a picture of your document or upload an image/PDF below!</p>
+                    <div class="flex flex-wrap justify-center gap-2">
+                        <button type="button" onclick="openNewDocWithCamera()" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer">
+                            📷 Take Picture of Document
+                        </button>
+                        <label class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer inline-flex items-center gap-1">
+                            <span>📁 Upload Document Image / PDF</span>
+                            <input type="file" accept="image/*,application/pdf" class="sr-only" onchange="handleNewDocScanSelect(this)">
+                        </label>
+                    </div>
                 </div>`}
             </div>
         </div>
+
+        <!-- 🚨 Roadside Emergency, Puncture & Fine Leak Logger Card -->
+        ${(() => {
+            const curMonthPrefix = today.slice(0, 7);
+            const monthlyIncidents = (roadside_incidents || []).filter((inc: any) => String(inc.date || '').startsWith(curMonthPrefix));
+            const monthlyLeakKes = monthlyIncidents.reduce((s: number, inc: any) => s + (Number(inc.amount) || 0), 0);
+            const totalLeakKes = (roadside_incidents || []).reduce((s: number, inc: any) => s + (Number(inc.amount) || 0), 0);
+
+            return `
+        <div id="roadside-incidents-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-rose-200 dark:border-rose-900/60 space-y-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950 border border-rose-300 dark:border-rose-800 flex items-center justify-center text-xl">
+                        🚨
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h3 class="text-base sm:text-lg font-black text-gray-900 dark:text-white">Roadside Emergency, Puncture &amp; Fine Leak Tracker</h3>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                                This Month: Ksh ${monthlyLeakKes.toLocaleString()}
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Track unexpected road money leaks (punctures, Kanjo/traffic fines, towing, emergency repairs) so you know where road cash disappears.</p>
+                    </div>
+                </div>
+
+                <button type="button" onclick="document.getElementById('add-roadside-incident-drawer').classList.toggle('hidden')" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold transition active:scale-95 shrink-0">
+                    🚨 + Log Roadside Leak
+                </button>
+            </div>
+
+            <!-- 1-Tap Quick Incident Presets -->
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mr-1">⚡ 1-Tap Presets:</span>
+                <button type="button" onclick="applyRoadsidePreset('PUNCTURE_TIRE', 'Puncture / Tube Patch', 150)" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition">
+                    🛞 Puncture / Tube (Ksh 150)
+                </button>
+                <button type="button" onclick="applyRoadsidePreset('KANJO_POLICE_FINE', 'Kanjo / Traffic Compliance Fine', 500)" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 transition">
+                    🚓 Kanjo / Police Fine
+                </button>
+                <button type="button" onclick="applyRoadsidePreset('BREAKDOWN_TOW', 'Emergency Roadside Mechanic / Tow', 400)" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition">
+                    🛠️ Emergency Breakdown / Cable
+                </button>
+                <button type="button" onclick="applyRoadsidePreset('EMERGENCY_RESCUE', 'Dead Battery / Rescue Swap', 300)" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition">
+                    🔋 Emergency Rescue
+                </button>
+            </div>
+
+            <!-- Collapsible Log Incident Form -->
+            <div id="add-roadside-incident-drawer" class="hidden p-4 rounded-2xl bg-rose-50/50 dark:bg-slate-950/90 border border-rose-300 dark:border-rose-800 space-y-3">
+                <form action="/rider/incidents/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5 text-xs">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Incident Type</label>
+                        <select name="incident_type" id="roadside_incident_type_select" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            <option value="PUNCTURE_TIRE">🛞 Puncture / Tire</option>
+                            <option value="KANJO_POLICE_FINE">🚓 Kanjo / Traffic Fine</option>
+                            <option value="BREAKDOWN_TOW">🛠️ Breakdown / Tow</option>
+                            <option value="EMERGENCY_RESCUE">🔋 Emergency Rescue</option>
+                            <option value="OTHER">⚠️ Other Road Leak</option>
+                        </select>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">What Happened?</label>
+                        <input type="text" name="title" id="roadside_incident_title_input" placeholder="e.g. Rear wheel puncture on Waiyaki Way" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white" required>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Cost / Leak (Ksh)</label>
+                        <input type="number" step="any" min="1" name="amount" id="roadside_incident_amount_input" placeholder="e.g. 200" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-black text-rose-600 dark:text-rose-400" required>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Deduct Account (Opt)</label>
+                        <select name="account_id" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-semibold text-gray-900 dark:text-white">
+                            <option value="">-- Log Only --</option>
+                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex items-end gap-1.5">
+                        <input type="hidden" name="date" value="${today}">
+                        <input type="hidden" name="bike_plate" value="${active_bike ? active_bike.plate_number : ''}">
+                        <button type="submit" class="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl transition">
+                            💾 Save Leak
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Incidents List -->
+            ${(roadside_incidents || []).length === 0 ? `
+            <div class="p-4 text-center rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-dashed border-gray-200 dark:border-gray-800 text-xs text-gray-500">
+                🛡️ Zero roadside incidents or fines logged! Use the 1-tap presets above if a puncture, fine, or breakdown happens on the road.
+            </div>
+            ` : `
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                ${(roadside_incidents || []).slice(0, 9).map((inc: any) => {
+                    const icon = inc.incident_type === 'PUNCTURE_TIRE' ? '🛞' : inc.incident_type === 'KANJO_POLICE_FINE' ? '🚓' : inc.incident_type === 'BREAKDOWN_TOW' ? '🛠️' : '🚨';
+                    return `
+                    <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 text-xs">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-lg shrink-0">${icon}</span>
+                            <div class="min-w-0">
+                                <p class="font-bold text-gray-900 dark:text-white truncate">${inc.title}</p>
+                                <p class="text-[10px] text-gray-400">${inc.date}${inc.bike_plate ? ` • ${inc.bike_plate}` : ''}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span class="font-black text-rose-600 dark:text-rose-400">-Ksh ${(Number(inc.amount) || 0).toLocaleString()}</span>
+                            <form action="/rider/incidents/delete/${inc.id}" method="POST" class="inline">
+                                <button type="submit" class="text-gray-400 hover:text-rose-500 font-bold">✕</button>
+                            </form>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+            `}
+        </div>`;
+        })()}
 
         <!-- Shift History Log Table & Mobile Feed with 5-Row Pagination -->
         <div id="shift-history-card" class="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden space-y-2">
@@ -3424,6 +4773,57 @@ export function renderRiderDashboard(data: any): string {
                 <span>Finatrack Roadside Digital Glovebox 🇰🇪</span>
                 <button type="button" onclick="document.getElementById('doc-glovebox-modal')?.classList.add('hidden')" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold rounded-xl active:scale-95">
                     Close Viewer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📷 Live Camera Capture Modal (Works on Laptop/PC Webcam & Phone Front/Rear Camera) -->
+    <div id="doc-live-camera-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5 overflow-y-auto">
+        <div class="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 max-w-lg w-full shadow-2xl border border-amber-300 dark:border-amber-800 space-y-4 my-auto">
+            <div class="flex justify-between items-center border-b dark:border-gray-800 pb-3">
+                <div class="flex items-center space-x-2.5 min-w-0">
+                    <span class="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl shrink-0">📷</span>
+                    <div class="min-w-0">
+                        <h3 class="font-extrabold text-gray-900 dark:text-white text-sm sm:text-base">Document Camera Scanner</h3>
+                        <p id="doc-live-camera-subtitle" class="text-[11px] text-gray-500 dark:text-gray-400 truncate">Position your document clearly in the frame</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeDocCameraModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center text-gray-500 hover:text-gray-900 dark:hover:text-white text-sm">✕</button>
+            </div>
+
+            <!-- 🪪 Front Side vs 🔄 Back Side Selector Pill -->
+            <div class="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
+                <button type="button" id="cam-side-btn-front" onclick="setCameraModalSide('front')" class="flex-1 py-1.5 px-3 rounded-xl text-xs font-black bg-amber-600 text-white shadow-xs transition cursor-pointer">
+                    🪪 Front Side (Details / ID #)
+                </button>
+                <button type="button" id="cam-side-btn-back" onclick="setCameraModalSide('back')" class="flex-1 py-1.5 px-3 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer">
+                    🔄 Back Side (Expiry Dates / DL Classes)
+                </button>
+            </div>
+
+            <!-- Live Video Viewfinder -->
+            <div class="relative w-full bg-slate-950 rounded-2xl overflow-hidden border-2 border-amber-400/70 dark:border-amber-700 aspect-4/3 flex items-center justify-center">
+                <video id="doc-live-camera-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+                <div class="pointer-events-none absolute inset-4 border-2 border-dashed border-amber-400/50 rounded-xl"></div>
+                <button type="button" onclick="flipDocCamera()" class="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black text-white text-xs font-bold backdrop-blur-xs border border-white/20 flex items-center gap-1 active:scale-95 cursor-pointer">
+                    <span>🔄 Flip Camera</span>
+                </button>
+            </div>
+
+            <div id="doc-live-camera-status" class="hidden p-3 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs"></div>
+
+            <!-- Camera Action Buttons + Direct Device Fallback -->
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1">
+                <button type="button" id="doc-live-camera-snap-btn" onclick="captureLiveCameraFrame()" class="w-full sm:flex-1 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black rounded-xl text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>📸 Snap Photo Now</span>
+                </button>
+                <label class="w-full sm:w-auto px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer">
+                    <span>📱 Select / Capture Photo from Device</span>
+                    <input type="file" accept="image/*,application/pdf" capture="environment" class="sr-only" onchange="handleModalFallbackFileInput(this)">
+                </label>
+                <button type="button" onclick="closeDocCameraModal()" class="w-full sm:w-auto px-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold rounded-xl text-xs">
+                    Cancel
                 </button>
             </div>
         </div>

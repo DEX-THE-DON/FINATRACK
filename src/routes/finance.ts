@@ -32,6 +32,57 @@ export function getSavedGoalSplits(c: any): Record<string, number> {
   return {};
 }
 
+export type GoalHorizon = 'SHORT_TERM' | 'LONG_TERM';
+
+export function getSavedGoalHorizons(c: any): Record<string, GoalHorizon> {
+  try {
+    const raw = getCookie(c, 'finatrack_goal_horizons');
+    if (raw) return JSON.parse(decodeURIComponent(raw));
+    const cookieHeader = c.req?.header('cookie') || '';
+    const match = cookieHeader.match(/finatrack_goal_horizons=([^;]+)/);
+    if (match) return JSON.parse(decodeURIComponent(match[1]));
+  } catch (e) {}
+  return {};
+}
+
+export function saveGoalHorizonsCookie(c: any, horizons: Record<string, GoalHorizon>): void {
+  try {
+    setCookie(c, 'finatrack_goal_horizons', encodeURIComponent(JSON.stringify(horizons)), {
+      path: '/',
+      maxAge: 31536000,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+export function resolveGoalHorizon(goal: any, savedHorizons: Record<string, GoalHorizon> = {}): GoalHorizon {
+  if (!goal) return 'SHORT_TERM';
+  const explicit =
+    savedHorizons[String(goal.id || '')] ||
+    savedHorizons[String(goal.title || '')] ||
+    goal.horizon;
+  if (explicit === 'SHORT_TERM' || explicit === 'LONG_TERM') {
+    return explicit;
+  }
+  if (goal.target_date) {
+    const targetMs = Date.parse(String(goal.target_date).slice(0, 10));
+    const nowMs = Date.parse(new Date().toISOString().slice(0, 10));
+    if (!isNaN(targetMs)) {
+      const diffDays = Math.round((targetMs - nowMs) / 86400000);
+      return diffDays <= 185 ? 'SHORT_TERM' : 'LONG_TERM';
+    }
+  }
+  const titleStr = String(goal.title || '').toLowerCase();
+  if (/malindi|vacation|resort|emergency|shield|land|plot|house|home build|car|vehicle|bike upgrade|pension|retire|college|university/i.test(titleStr)) {
+    return 'LONG_TERM';
+  }
+  if (/tire|tube|phone|gas|cooker|helmet|school|exam|rent|insurance|service|repair|festive|december|christmas|sofa|tv/i.test(titleStr)) {
+    return 'SHORT_TERM';
+  }
+  const targetAmt = Number(goal.target_amount || 0);
+  return targetAmt > 30000 ? 'LONG_TERM' : 'SHORT_TERM';
+}
+
 export const DEFAULT_ALLOCATION_RULES = [
   { id: 'rule-1', bucket_name: 'Ziidi MMF (Safaricom)', target_type: 'ACCOUNT', target_id: null, percentage: 20.0, icon: '📈', is_active: 1 },
   { id: 'rule-2', bucket_name: 'Lock / Sacco Savings', target_type: 'ACCOUNT', target_id: null, percentage: 20.0, icon: '🔒', is_active: 1 },
@@ -459,6 +510,7 @@ financeRoutes.post('/goals/create', async (c) => {
   const rawTarget = parseFloat(String(body['target_amount'] || '0.0')) || 0.0;
   const rawSplit = parseFloat(String(body['split_percentage'] || '0.0')) || 0.0;
   const targetDate = body['target_date'] ? String(body['target_date']) : null;
+  const rawHorizon = String(body['horizon'] || 'AUTO').toUpperCase();
   const addToSplit = body['add_to_split'] === '1' || body['add_to_split'] === 'on';
 
   if (!title) {
@@ -490,6 +542,18 @@ financeRoutes.post('/goals/create', async (c) => {
     return c.redirect(`/?toast=${encodeURIComponent('Failed to create goal: ' + error.message)}`, 303);
   }
 
+  const effectiveHorizon: GoalHorizon =
+    rawHorizon === 'SHORT_TERM' || rawHorizon === 'LONG_TERM'
+      ? rawHorizon
+      : resolveGoalHorizon({ title, target_amount: rawTarget, target_date: targetDate });
+
+  if (goal) {
+    const existingHorizons = getSavedGoalHorizons(c);
+    existingHorizons[String(goal.id)] = effectiveHorizon;
+    existingHorizons[title] = effectiveHorizon;
+    saveGoalHorizonsCookie(c, existingHorizons);
+  }
+
   // 2. Persist sub-split share % into finatrack_goal_splits cookie
   if (rawSplit > 0 && goal) {
     try {
@@ -512,7 +576,7 @@ financeRoutes.post('/goals/create', async (c) => {
       let guestGoalsList: any[] = [];
       const raw = getCookie(c, 'finatrack_guest_goals') || '';
       if (raw) guestGoalsList = JSON.parse(decodeURIComponent(raw));
-      guestGoalsList.push(goal);
+      guestGoalsList.push({ ...goal, horizon: effectiveHorizon });
       setCookie(c, 'finatrack_guest_goals', encodeURIComponent(JSON.stringify(guestGoalsList)), {
         path: '/',
         maxAge: 31536000,
@@ -536,7 +600,42 @@ financeRoutes.post('/goals/create', async (c) => {
     });
   }
 
-  return c.redirect('/?toast=Goal+created+successfully', 303);
+  const horizonLabel = effectiveHorizon === 'SHORT_TERM' ? 'Short-Term' : 'Long-Term';
+  return c.redirect(`/?toast=${encodeURIComponent(`${horizonLabel} goal "${title}" created!`)}#goals-card`, 303);
+});
+
+financeRoutes.post('/goals/horizon/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.parseBody().catch(() => ({} as any));
+  const title = body['title'] ? String(body['title']).trim() : '';
+  const requested = String(body['horizon'] || '').toUpperCase();
+  const nextHorizon: GoalHorizon = requested === 'LONG_TERM' ? 'LONG_TERM' : 'SHORT_TERM';
+
+  const existingHorizons = getSavedGoalHorizons(c);
+  existingHorizons[String(id)] = nextHorizon;
+  if (title) existingHorizons[title] = nextHorizon;
+  saveGoalHorizonsCookie(c, existingHorizons);
+
+  // Also update guest cookie if present
+  try {
+    const rawGuest = getCookie(c, 'finatrack_guest_goals') || '';
+    if (rawGuest) {
+      const list = JSON.parse(decodeURIComponent(rawGuest));
+      if (Array.isArray(list)) {
+        const updated = list.map((g: any) =>
+          String(g.id) === String(id) ? { ...g, horizon: nextHorizon } : g
+        );
+        setCookie(c, 'finatrack_guest_goals', encodeURIComponent(JSON.stringify(updated)), {
+          path: '/',
+          maxAge: 31536000,
+          sameSite: 'Lax',
+        });
+      }
+    }
+  } catch (e) {}
+
+  const label = nextHorizon === 'SHORT_TERM' ? '⚡ Short-Term Goal (≤ 6 Months)' : '🏔️ Long-Term Goal (> 6 Months)';
+  return c.redirect(`/?toast=${encodeURIComponent(`Categorized as ${label}`)}#goals-card`, 303);
 });
 
 financeRoutes.post('/goals/link-vault', async (c) => {
@@ -1884,5 +1983,150 @@ financeRoutes.get('/finance/statement', async (c) => {
 
   return c.html(html);
 });
+
+// ------------------------------------------------------------------------------
+// 🔁 RECURRING MONTHLY BILLS & STANDING ORDERS CHECKLIST
+// ------------------------------------------------------------------------------
+export interface RecurringBillItem {
+  id: string;
+  name: string;
+  category: string;
+  amount: number;
+  due_day: number; // 1 - 31
+  icon: string;
+  is_paid_this_month: boolean;
+  last_paid_month?: string; // YYYY-MM
+  last_paid_date?: string;  // YYYY-MM-DD
+  account_id?: string;
+}
+
+export const DEFAULT_RECURRING_BILLS: RecurringBillItem[] = [
+  { id: 'bill-rent', name: 'Monthly House Rent', category: 'Utilities & Bills', amount: 8500, due_day: 5, icon: '🏠', is_paid_this_month: false },
+  { id: 'bill-kplc', name: 'KPLC Prepaid Tokens', category: 'Utilities & Bills', amount: 1500, due_day: 10, icon: '⚡', is_paid_this_month: false },
+  { id: 'bill-wifi', name: 'Home WiFi / Monthly Data Bundle', category: 'Utilities & Bills', amount: 2500, due_day: 15, icon: '🌐', is_paid_this_month: false },
+  { id: 'bill-sha', name: 'SHA / NHIF Health Cover', category: 'Utilities & Bills', amount: 500, due_day: 9, icon: '🏥', is_paid_this_month: false },
+  { id: 'bill-water', name: 'Water & Garbage Bill', category: 'Utilities & Bills', amount: 600, due_day: 20, icon: '💧', is_paid_this_month: false },
+];
+
+export function getRecurringBills(c: any): RecurringBillItem[] {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  try {
+    const raw = getCookie(c, 'finatrack_recurring_bills') || '';
+    if (raw) {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((b: any) => ({
+          ...b,
+          amount: Number(b.amount) || 0,
+          due_day: Math.min(31, Math.max(1, Number(b.due_day) || 5)),
+          // Auto-reset paid flag if a new calendar month has started
+          is_paid_this_month: b.last_paid_month === currentMonth ? Boolean(b.is_paid_this_month) : false,
+        }));
+      }
+    }
+  } catch (e) {}
+  return DEFAULT_RECURRING_BILLS;
+}
+
+export function saveRecurringBillsCookie(c: any, bills: RecurringBillItem[]): void {
+  try {
+    const trimmed = (bills || []).slice(0, 30);
+    setCookie(c, 'finatrack_recurring_bills', encodeURIComponent(JSON.stringify(trimmed)), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+financeRoutes.post('/finance/bills/create', async (c) => {
+  const body = await c.req.parseBody();
+  const name = String(body['name'] || '').trim();
+  const amount = Math.max(0, parseFloat(String(body['amount'] || '0')) || 0);
+  const due_day = Math.min(31, Math.max(1, parseInt(String(body['due_day'] || '5'), 10) || 5));
+  const icon = String(body['icon'] || '⚡').trim() || '⚡';
+  const category = String(body['category'] || 'Utilities & Bills').trim();
+
+  if (!name || amount <= 0) {
+    return c.redirect('/?toast=Please+enter+a+valid+bill+name+and+amount#recurring-bills-card', 303);
+  }
+
+  const bills = getRecurringBills(c);
+  const newBill: RecurringBillItem = {
+    id: 'bill_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+    name,
+    category,
+    amount,
+    due_day,
+    icon,
+    is_paid_this_month: false,
+  };
+
+  saveRecurringBillsCookie(c, [...bills, newBill]);
+  return c.redirect(`/?toast=${encodeURIComponent(`✅ Added recurring bill: ${name} (Ksh ${amount.toLocaleString()}/mo)`)}#recurring-bills-card`, 303);
+});
+
+financeRoutes.post('/finance/bills/toggle-pay/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const billId = c.req.param('id');
+  const body = await c.req.parseBody().catch(() => ({} as any));
+  const accountId = String(body['account_id'] || '').trim();
+  const customAmt = parseFloat(String(body['paid_amount'] || '0'));
+
+  const bills = getRecurringBills(c);
+  const idx = bills.findIndex((b) => String(b.id) === String(billId));
+  if (idx < 0) {
+    return c.redirect('/?toast=Recurring+bill+not+found#recurring-bills-card', 303);
+  }
+
+  const target = bills[idx];
+  const nowIso = new Date().toISOString().slice(0, 10);
+  const currentMonth = nowIso.slice(0, 7);
+  const markingPaid = !target.is_paid_this_month;
+  const effectiveAmt = customAmt > 0 ? customAmt : target.amount;
+
+  bills[idx] = {
+    ...target,
+    amount: effectiveAmt,
+    is_paid_this_month: markingPaid,
+    last_paid_month: markingPaid ? currentMonth : undefined,
+    last_paid_date: markingPaid ? nowIso : undefined,
+    account_id: accountId || target.account_id,
+  };
+  saveRecurringBillsCookie(c, bills);
+
+  // If marking as paid and an account was selected, deduct balance & log expense transaction
+  if (markingPaid && accountId && effectiveAmt > 0) {
+    try {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const updatedBal = toDecimal(acc.balance).minus(effectiveAmt).toNumber();
+        await supabase.from('accounts').update({ balance: updatedBal }).eq('id', accountId);
+      }
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: accountId,
+        transaction_type: 'EXPENSE',
+        category: target.category || 'Utilities & Bills',
+        amount: effectiveAmt,
+        description: `Monthly Bill Paid: ${target.name} (${currentMonth})`,
+        date: nowIso,
+      });
+    } catch (e) {}
+  }
+
+  const msg = markingPaid
+    ? `✅ Marked "${target.name}" (Ksh ${effectiveAmt.toLocaleString()}) as PAID for ${currentMonth}!`
+    : `↺ Reopened "${target.name}" as unpaid for ${currentMonth}.`;
+  return c.redirect(`/?toast=${encodeURIComponent(msg)}#recurring-bills-card`, 303);
+});
+
+financeRoutes.post('/finance/bills/delete/:id', async (c) => {
+  const billId = c.req.param('id');
+  const bills = getRecurringBills(c).filter((b) => String(b.id) !== String(billId));
+  saveRecurringBillsCookie(c, bills);
+  return c.redirect('/?toast=Recurring+bill+removed#recurring-bills-card', 303);
+});
+
 
 

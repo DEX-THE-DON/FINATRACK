@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from './db/supabase';
-import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules } from './routes/finance';
-import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig } from './routes/rider';
+import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getRoadsideIncidents } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
-import { salariedRoutes, getSalariedConfig } from './routes/salaried';
+import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
 import { exportRoutes } from './routes/export';
 import { authRoutes } from './routes/auth';
 import { renderFinanceDashboard } from './views/financeView';
@@ -259,6 +259,8 @@ app.get('/', async (c) => {
     cookieSplits = {};
   }
 
+  const cookieHorizons = getSavedGoalHorizons(c);
+
   if (goals && goals.length > 0) {
     goals = goals.map((g: any, idx: number) => {
       let splitPct = g.split_percentage;
@@ -271,7 +273,8 @@ app.get('/', async (c) => {
       }
       return {
         ...g,
-        split_percentage: splitPct !== null && splitPct !== undefined ? Number(splitPct) : null
+        split_percentage: splitPct !== null && splitPct !== undefined ? Number(splitPct) : null,
+        horizon: resolveGoalHorizon(g, cookieHorizons),
       };
     });
   }
@@ -542,6 +545,7 @@ app.get('/', async (c) => {
     category_breakdown: categoryBreakdown,
     debts: enrichedDebts,
     bills: bills || [],
+    recurring_bills: getRecurringBills(c),
     mmf_accounts: mmfAccounts,
     total_mmf_balance: totalMmfBalance,
     total_mmf_accrued_profit: totalMmfAccruedProfit,
@@ -610,17 +614,19 @@ app.get('/rider', async (c) => {
     financing = finRes.data || [];
     allocationRules = ruleRes.data || [];
   } else {
-    maintenance = [];
     try {
-      const [guestCompRes, guestLogsRes] = await Promise.all([
+      const [guestCompRes, guestLogsRes, guestMaintRes] = await Promise.all([
         supabase.from('compliance_deadlines').select('*').is('user_id', null),
         supabase.from('rider_logs').select('*').is('user_id', null).order('date', { ascending: false }),
+        supabase.from('maintenance_schedules').select('*').is('user_id', null),
       ]);
       compliance = guestCompRes.data || [];
       logs = guestLogsRes.data || [];
+      maintenance = guestMaintRes.data || [];
     } catch (e) {
       compliance = [];
       logs = [];
+      maintenance = [];
     }
   }
 
@@ -740,8 +746,9 @@ app.get('/rider', async (c) => {
     odometer_config: odometerConfig,
     strict_saver_config: strictSaverConfig,
     time_intelligence: timeIntelligence,
-    maintenance_schedules: maintenance || [],
+    maintenance_schedules: resolveEffectiveMaintenanceSchedules(c, maintenance),
     compliance_deadlines: resolveEffectiveComplianceDeadlines(c, compliance),
+    roadside_incidents: getRoadsideIncidents(c),
     bike_financings: financing || [],
     ev_roi_stats: calculateEvRoiSavings(shiftLogs || []),
     allocation_rules: resolveEffectiveAllocationRules(c, allocationRules),
@@ -763,16 +770,19 @@ app.get('/rider', async (c) => {
 // ------------------------------------------------------------------------------
 app.get('/login', (c) => {
   const toast = c.req.query('toast') || '';
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   return c.html(renderAuthView({ mode: 'login', toast }));
 });
 
 app.get('/signup', (c) => {
   const toast = c.req.query('toast') || '';
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   return c.html(renderAuthView({ mode: 'signup', toast }));
 });
 
 app.get('/auth', (c) => {
   const toast = c.req.query('toast') || '';
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   return c.html(renderAuthView({ mode: 'signup', toast }));
 });
 
@@ -812,7 +822,9 @@ app.get('/salaried', async (c) => {
 
   const { data: accounts } = await supabase.from('accounts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
   const { data: dbRules } = await supabase.from('allocation_rules').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
+  const { data: dbDebts } = await supabase.from('debts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
   const rules = resolveEffectiveAllocationRules(c, dbRules || []);
+  const salariedLoans = resolveEffectiveSalariedLoans(c, dbDebts || []);
 
   const totalBal = (accounts || []).reduce((sum: number, a: any) => sum + Number(a.balance || 0), 0);
 
@@ -825,6 +837,7 @@ app.get('/salaried', async (c) => {
     current_currency: userCurrency,
     accounts: accounts || [],
     allocation_rules: rules,
+    salaried_loans: salariedLoans,
   });
 
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');

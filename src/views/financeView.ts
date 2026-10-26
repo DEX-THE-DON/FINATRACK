@@ -19,6 +19,7 @@ export function renderFinanceDashboard(data: any): string {
     category_budgets = [],
     debts = [],
     bills = [],
+    recurring_bills = [],
     mmf_accounts = [],
     total_mmf_balance = 0.0,
     total_mmf_accrued_profit = 0.0,
@@ -476,6 +477,41 @@ export function renderFinanceDashboard(data: any): string {
         var txCurrentPage = 1;
         var txPageSize = 5;
         var txCurrentFilter = 'ALL';
+        var txSearchQuery = '';
+        var txMonthFilter = 'ALL';
+
+        function matchesTxItem(el) {
+            var itemType = el.getAttribute('data-tx-type');
+            if (txCurrentFilter !== 'ALL' && itemType !== txCurrentFilter) return false;
+            if (txMonthFilter && txMonthFilter !== 'ALL') {
+                var itemDate = el.getAttribute('data-tx-date') || '';
+                if (itemDate.indexOf(txMonthFilter) !== 0) return false;
+            }
+            if (txSearchQuery) {
+                var hay = (el.getAttribute('data-tx-search') || '').toLowerCase();
+                if (hay.indexOf(txSearchQuery) === -1) return false;
+            }
+            return true;
+        }
+
+        function onTxSearchOrMonthChange() {
+            var sInp = document.getElementById('tx-search-input');
+            var mSel = document.getElementById('tx-month-filter');
+            txSearchQuery = sInp ? String(sInp.value || '').trim().toLowerCase() : '';
+            txMonthFilter = mSel ? String(mSel.value || 'ALL') : 'ALL';
+            txCurrentPage = 1;
+            applyTxDisplay();
+        }
+
+        function clearTxSearchFilters() {
+            var sInp = document.getElementById('tx-search-input');
+            var mSel = document.getElementById('tx-month-filter');
+            if (sInp) sInp.value = '';
+            if (mSel) mSel.value = 'ALL';
+            txSearchQuery = '';
+            txMonthFilter = 'ALL';
+            setTxFilter('ALL');
+        }
 
         function setTxFilter(type) {
             txCurrentFilter = type;
@@ -507,8 +543,7 @@ export function renderFinanceDashboard(data: any): string {
             var mobileItems = document.querySelectorAll('.tx-mobile-item');
             var matchingTotal = 0;
             mobileItems.forEach(function(el) {
-                var itemType = el.getAttribute('data-tx-type');
-                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                if (matchesTxItem(el)) {
                     matchingTotal++;
                 }
             });
@@ -522,13 +557,28 @@ export function renderFinanceDashboard(data: any): string {
             var mobileItems = document.querySelectorAll('.tx-mobile-item');
             var desktopItems = document.querySelectorAll('.tx-desktop-item');
             var matchingTotal = 0;
+            var filteredSumKes = 0;
 
             mobileItems.forEach(function(el) {
-                var itemType = el.getAttribute('data-tx-type');
-                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                if (matchesTxItem(el)) {
                     matchingTotal++;
+                    var amt = parseFloat(el.getAttribute('data-tx-amount') || '0') || 0;
+                    var tType = el.getAttribute('data-tx-type');
+                    if (tType === 'INCOME') filteredSumKes += amt;
+                    else if (tType === 'EXPENSE') filteredSumKes -= amt;
                 }
             });
+
+            var sumPill = document.getElementById('tx-filtered-summary-pill');
+            if (sumPill) {
+                if (txSearchQuery || (txMonthFilter && txMonthFilter !== 'ALL') || txCurrentFilter !== 'ALL') {
+                    sumPill.classList.remove('hidden');
+                    var sign = filteredSumKes >= 0 ? '+' : '-';
+                    sumPill.textContent = matchingTotal + ' match' + (matchingTotal === 1 ? '' : 'es') + ' • Net: ' + sign + 'Ksh ' + Math.abs(filteredSumKes).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                } else {
+                    sumPill.classList.add('hidden');
+                }
+            }
 
             var totalPages = Math.max(1, Math.ceil(matchingTotal / txPageSize));
             if (txCurrentPage > totalPages) {
@@ -543,8 +593,7 @@ export function renderFinanceDashboard(data: any): string {
 
             var mIdx = 0;
             mobileItems.forEach(function(el) {
-                var itemType = el.getAttribute('data-tx-type');
-                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                if (matchesTxItem(el)) {
                     if (mIdx >= startIdx && mIdx < endIdx) {
                         el.classList.remove('hidden');
                     } else {
@@ -558,8 +607,7 @@ export function renderFinanceDashboard(data: any): string {
 
             var dIdx = 0;
             desktopItems.forEach(function(el) {
-                var itemType = el.getAttribute('data-tx-type');
-                if (txCurrentFilter === 'ALL' || itemType === txCurrentFilter) {
+                if (matchesTxItem(el)) {
                     if (dIdx >= startIdx && dIdx < endIdx) {
                         el.classList.remove('hidden');
                     } else {
@@ -1156,6 +1204,8 @@ export function renderFinanceDashboard(data: any): string {
         window.txPrevPage = txPrevPage;
         window.txGoToPage = txGoToPage;
         window.applyTxDisplay = applyTxDisplay;
+        window.onTxSearchOrMonthChange = onTxSearchOrMonthChange;
+        window.clearTxSearchFilters = clearTxSearchFilters;
 
         function initFinanceDashboard() {
             try {
@@ -1532,7 +1582,7 @@ export function renderFinanceDashboard(data: any): string {
             updateRulesModalTotal();
         }
 
-        function applyGoalPreset(title, targetKes, splitPct, monthsAhead) {
+        function applyGoalPreset(title, targetKes, splitPct, monthsAhead, horizonType) {
             var drawer = document.getElementById('new-goal-form-container');
             if (drawer) {
                 drawer.classList.remove('hidden');
@@ -1540,17 +1590,74 @@ export function renderFinanceDashboard(data: any): string {
                 var amtInp = drawer.querySelector('input[name="target_amount"]');
                 var splitInp = drawer.querySelector('input[name="split_percentage"]');
                 var dateInp = drawer.querySelector('input[name="target_date"]');
+                var horizonSel = document.getElementById('new_goal_horizon_select');
                 if (titleInp) titleInp.value = title;
                 if (amtInp) amtInp.value = String(targetKes);
-                if (splitInp) splitInp.value = String(splitPct || 35);
+                if (splitInp) splitInp.value = String(splitPct || 25);
                 if (dateInp && monthsAhead) {
                     var d = new Date();
                     d.setMonth(d.getMonth() + Number(monthsAhead));
                     dateInp.value = d.toISOString().slice(0, 10);
                 }
+                if (horizonSel) {
+                    if (horizonType === 'SHORT_TERM' || horizonType === 'LONG_TERM') {
+                        horizonSel.value = horizonType;
+                    } else if (monthsAhead) {
+                        horizonSel.value = Number(monthsAhead) <= 6 ? 'SHORT_TERM' : 'LONG_TERM';
+                    }
+                }
                 drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
+
+        function onGoalDeadlineInputChanged(dateVal) {
+            if (!dateVal) return;
+            var horizonSel = document.getElementById('new_goal_horizon_select');
+            if (!horizonSel) return;
+            var targetMs = Date.parse(String(dateVal).slice(0, 10));
+            var nowMs = Date.parse(new Date().toISOString().slice(0, 10));
+            if (!isNaN(targetMs)) {
+                var diffDays = Math.round((targetMs - nowMs) / 86400000);
+                horizonSel.value = diffDays <= 185 ? 'SHORT_TERM' : 'LONG_TERM';
+            }
+        }
+
+        function filterGoalsByHorizon(horizonFilter) {
+            var cards = document.querySelectorAll('.goal-card-item');
+            var visibleCount = 0;
+            cards.forEach(function(card) {
+                var h = card.getAttribute('data-goal-horizon') || 'SHORT_TERM';
+                if (!horizonFilter || horizonFilter === 'ALL' || h === horizonFilter) {
+                    card.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+
+            var emptyFilterEl = document.getElementById('goals-filter-empty-state');
+            if (emptyFilterEl) {
+                if (cards.length > 0 && visibleCount === 0) {
+                    emptyFilterEl.classList.remove('hidden');
+                } else {
+                    emptyFilterEl.classList.add('hidden');
+                }
+            }
+
+            ['ALL', 'SHORT_TERM', 'LONG_TERM'].forEach(function(key) {
+                var btn = document.getElementById('goal-horizon-tab-' + key);
+                if (!btn) return;
+                if (key === horizonFilter) {
+                    btn.className = 'px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-600 text-white shadow-xs transition cursor-pointer flex items-center gap-1.5';
+                } else {
+                    btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer flex items-center gap-1.5';
+                }
+            });
+        }
+
+        window.applyGoalPreset = applyGoalPreset;
+        window.onGoalDeadlineInputChanged = onGoalDeadlineInputChanged;
+        window.filterGoalsByHorizon = filterGoalsByHorizon;
 
         function updateSplitBreakdown() {
             const curr = getCurrency();
@@ -1671,11 +1778,58 @@ export function renderFinanceDashboard(data: any): string {
 
         let _mpesaParsedList = [];
 
+        function fallbackClientParseSms(rawText) {
+            if (!rawText) return [];
+            var results = [];
+            var chunks = String(rawText).split(/(?=\\b[A-Z0-9]{8,12}\\s+Confirmed)|[\\r\\n]+/i);
+            var todayStr = new Date().toISOString().slice(0, 10);
+            chunks.forEach(function(chunk, idx) {
+                var line = (chunk || '').trim();
+                if (!line || line.length < 8) return;
+                var amtMatch = line.match(/(?:Ksh|KES)\\s*([0-9,]+(?:\\.[0-9]{1,2})?)/i);
+                if (!amtMatch) return;
+                var amount = parseFloat(amtMatch[1].replace(/,/g, '')) || 0;
+                if (amount <= 0) return;
+
+                var codeMatch = line.match(/\\b([A-Z0-9]{8,12})\\b/);
+                var code = (codeMatch && !/^(CONFIRMED|RECEIVED|CREDITED|AVAILABLE)$/i.test(codeMatch[1]))
+                    ? codeMatch[1].toUpperCase()
+                    : ('SMS' + String(idx + 1).padStart(3, '0'));
+
+                var isIncome = /received\\s+from|credited|deposit|you\\s+have\\s+received/i.test(line);
+                var type = isIncome ? 'INCOME' : 'EXPENSE';
+
+                var party = 'M-Pesa / Bank Counterparty';
+                var partyMatch = line.match(/(?:received\\s+from|paid\\s+to|sent\\s+to|from|to)\\s+([A-Za-z0-9\\s\\.\\-&]{2,35}?)(?:\\s+on\\b|\\s+Ref|\\s+at\\b|\\.|\\n|$)/i);
+                if (partyMatch && partyMatch[1]) {
+                    party = partyMatch[1].trim();
+                }
+
+                var cat = isIncome ? 'Rider & Boda Deliveries' : 'Living Expenses';
+                if (/rubis|total|shell|ola|hass|petrol|fuel|energy/i.test(line)) cat = 'Fuel & Petrol';
+                else if (/spiro|roam|ampersand|swap|battery|ev\\b/i.test(line)) cat = 'EV Battery Swap & Charging';
+                else if (/kplc|token|water|zuku|safaricom|wifi|bill/i.test(line)) cat = 'Utilities & Bills';
+                else if (/airtime|bundle/i.test(line)) cat = 'Airtime & Internet';
+
+                results.push({
+                    code: code,
+                    type: type,
+                    amount_kes: amount,
+                    party: party,
+                    date: todayStr,
+                    time: '',
+                    suggested_category: cat,
+                    description: (isIncome ? 'Received from ' : 'Paid to ') + party + ' (#' + code + ')'
+                });
+            });
+            return results;
+        }
+
         async function parseMpesaClient() {
             var input = document.getElementById('mpesa-batch-input');
             var raw = input ? input.value : '';
             if (!raw.trim()) {
-                alert('Please paste at least one M-Pesa or Kenyan Bank SMS message.');
+                alert('Please paste at least one M-Pesa or Kenyan Bank SMS message, or upload/snap a screenshot first.');
                 return;
             }
 
@@ -1685,7 +1839,7 @@ export function renderFinanceDashboard(data: any): string {
             var importBtn = document.getElementById('mpesa-import-submit-btn');
 
             if (previewDiv) previewDiv.classList.remove('hidden');
-            if (countBadge) countBadge.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">⏳ Analyzing & extracting transactions...</span>';
+            if (countBadge) countBadge.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">⏳ Analyzing &amp; extracting transactions...</span>';
 
             var txList = [];
             try {
@@ -1705,6 +1859,10 @@ export function renderFinanceDashboard(data: any): string {
                 }
             } catch (fetchErr) {
                 console.warn('Network parse error:', fetchErr);
+            }
+
+            if (txList.length === 0) {
+                txList = fallbackClientParseSms(raw);
             }
 
             if (txList.length === 0) {
@@ -2042,16 +2200,23 @@ export function renderFinanceDashboard(data: any): string {
         function isImageFile(f) {
             if (!f) return false;
             if (f.type && f.type.toLowerCase().indexOf('image/') === 0) return true;
-            return /\.(png|jpe?g|webp|gif|bmp|heic|svg)$/i.test(f.name || '');
+            return /\\.(png|jpe?g|webp|gif|bmp|heic|svg)$/i.test(f.name || '');
         }
 
         var _currentScreenshotFiles = [];
 
-        async function handleMpesaScreenshots(fileList) {
+        async function handleMpesaScreenshots(inputOrFileList) {
+            var inputElToReset = null;
+            var fileList = null;
+            if (inputOrFileList && inputOrFileList.files) {
+                inputElToReset = inputOrFileList;
+                fileList = inputOrFileList.files;
+            } else {
+                fileList = inputOrFileList;
+            }
             if (!fileList || fileList.length === 0) return;
             var files = Array.from(fileList).filter(isImageFile);
             if (files.length === 0) {
-                // If browser did not report MIME type, accept first file anyway if it looks like a file
                 if (fileList.length > 0 && fileList[0].size > 0) {
                     files = [fileList[0]];
                 } else {
@@ -2061,12 +2226,6 @@ export function renderFinanceDashboard(data: any): string {
             }
 
             _currentScreenshotFiles = files;
-
-            // Reset input values so picking the same file again works
-            var inputEl = document.getElementById('mpesa-screenshot-input');
-            if (inputEl) inputEl.value = '';
-            var camEl = document.getElementById('mpesa-camera-input');
-            if (camEl) camEl.value = '';
 
             // Ensure scanner panel is open
             setSmsInputMode('SCAN');
@@ -2085,11 +2244,11 @@ export function renderFinanceDashboard(data: any): string {
             if (statusText) statusText.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">📸 Screenshot loaded! Pre-processing image...</span>';
             if (progressBar) progressBar.style.width = '15%';
 
-            // 1. INSTANT ZERO-DELAY VISUAL PREVIEW: Read images immediately via FileReader
+            // 1. INSTANT ZERO-DELAY VISUAL PREVIEW: Read images immediately via FileReader BEFORE resetting input
             var dataUrls = [];
             for (var idx = 0; idx < files.length; idx++) {
                 var fObj = files[idx];
-                var fSizeKb = Math.round(fObj.size / 1024);
+                var fSizeKb = Math.max(1, Math.round((fObj.size || 1024) / 1024));
                 try {
                     var dUrl = await (function(file) {
                         return new Promise(function(resolve) {
@@ -2106,7 +2265,7 @@ export function renderFinanceDashboard(data: any): string {
                         card.className = 'p-3 bg-white dark:bg-gray-900 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm space-y-2 max-w-sm';
                         card.innerHTML = 
                             '<div class="flex items-center justify-between text-xs">' +
-                                '<span class="font-extrabold text-gray-900 dark:text-white truncate max-w-[200px]" title="' + fObj.name + '">📷 ' + fObj.name + '</span>' +
+                                '<span class="font-extrabold text-gray-900 dark:text-white truncate max-w-[200px]" title="' + (fObj.name || 'Screenshot') + '">📷 ' + (fObj.name || 'Screenshot') + '</span>' +
                                 '<span class="text-[10px] text-gray-400 font-mono">' + fSizeKb + ' KB</span>' +
                             '</div>' +
                             '<div class="w-full h-44 bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200 dark:border-gray-800">' +
@@ -2119,7 +2278,12 @@ export function renderFinanceDashboard(data: any): string {
                 }
             }
 
-            statusBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // Now safe to reset input value so picking the same file again works
+            if (inputElToReset) {
+                try { inputElToReset.value = ''; } catch(e) {}
+            }
+
+            if (statusBox) statusBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
             // 2. RUN OCR SCANNER
             try {
@@ -2188,6 +2352,114 @@ export function renderFinanceDashboard(data: any): string {
             }
         }
 
+        // ==========================================
+        // 📷 LIVE CAMERA MODAL FOR M-PESA / BANK SMS SCANNER
+        // ==========================================
+        var _mpesaCameraStream = null;
+        var _mpesaCameraFacingMode = 'environment';
+
+        function stopMpesaCameraStream() {
+            if (_mpesaCameraStream) {
+                try {
+                    _mpesaCameraStream.getTracks().forEach(function(t) { t.stop(); });
+                } catch(e) {}
+                _mpesaCameraStream = null;
+            }
+            var videoEl = document.getElementById('mpesa-live-camera-video');
+            if (videoEl) videoEl.srcObject = null;
+        }
+
+        async function startMpesaCameraStream() {
+            var videoEl = document.getElementById('mpesa-live-camera-video');
+            var statusEl = document.getElementById('mpesa-live-camera-status');
+            var snapBtn = document.getElementById('mpesa-live-camera-snap-btn');
+
+            stopMpesaCameraStream();
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                if (statusEl) {
+                    statusEl.innerHTML = '⚠️ Live camera viewfinder requires camera permissions or HTTPS. Tap <strong>&quot;📱 Select / Capture from Device&quot;</strong> below!';
+                    statusEl.classList.remove('hidden');
+                }
+                if (snapBtn) snapBtn.classList.add('hidden');
+                return;
+            }
+
+            if (statusEl) {
+                statusEl.innerHTML = '⏳ Starting camera... Please click <strong>Allow</strong> if your browser asks for camera permission.';
+                statusEl.classList.remove('hidden');
+            }
+
+            try {
+                var stream = null;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { ideal: _mpesaCameraFacingMode }, width: { ideal: 1280 }, height: { ideal: 960 } },
+                        audio: false
+                    });
+                } catch (e1) {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                }
+                _mpesaCameraStream = stream;
+                if (videoEl) {
+                    videoEl.srcObject = stream;
+                    await videoEl.play().catch(function() {});
+                }
+                if (statusEl) statusEl.classList.add('hidden');
+                if (snapBtn) snapBtn.classList.remove('hidden');
+            } catch (err) {
+                if (statusEl) {
+                    statusEl.innerHTML = '⚠️ Could not access live camera (' + (err && err.message ? err.message : 'Permission denied') + '). Use <strong>&quot;📱 Select / Capture from Device&quot;</strong> below!';
+                    statusEl.classList.remove('hidden');
+                }
+                if (snapBtn) snapBtn.classList.add('hidden');
+            }
+        }
+
+        function openMpesaCameraModal() {
+            var modal = document.getElementById('mpesa-live-camera-modal');
+            if (modal) modal.classList.remove('hidden');
+            startMpesaCameraStream();
+        }
+
+        function closeMpesaCameraModal() {
+            stopMpesaCameraStream();
+            var modal = document.getElementById('mpesa-live-camera-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function flipMpesaCamera() {
+            _mpesaCameraFacingMode = (_mpesaCameraFacingMode === 'environment') ? 'user' : 'environment';
+            startMpesaCameraStream();
+        }
+
+        function captureMpesaCameraFrame() {
+            var videoEl = document.getElementById('mpesa-live-camera-video');
+            if (!videoEl || !videoEl.videoWidth) {
+                alert('Camera stream is not ready yet. Please wait a moment or use the upload button.');
+                return;
+            }
+            var w = videoEl.videoWidth;
+            var h = videoEl.videoHeight;
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(videoEl, 0, 0, w, h);
+            closeMpesaCameraModal();
+            canvas.toBlob(function(blob) {
+                if (!blob) return;
+                var file = new File([blob], 'Camera_SMS_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.jpg', { type: 'image/jpeg' });
+                handleMpesaScreenshots([file]);
+            }, 'image/jpeg', 0.88);
+        }
+
+        function handleMpesaCameraFallbackInput(inputEl) {
+            closeMpesaCameraModal();
+            handleMpesaScreenshots(inputEl);
+        }
+
         function handleMpesaDrop(ev) {
             ev.preventDefault();
             ev.stopPropagation();
@@ -2199,13 +2471,37 @@ export function renderFinanceDashboard(data: any): string {
         }
 
         function handleMpesaPasteEvent(ev) {
-            if (!ev.clipboardData || !ev.clipboardData.files || ev.clipboardData.files.length === 0) return;
-            var imgFiles = Array.from(ev.clipboardData.files).filter(isImageFile);
-            if (imgFiles.length > 0) {
-                ev.preventDefault();
-                handleMpesaScreenshots(imgFiles);
+            if (ev.clipboardData && ev.clipboardData.files && ev.clipboardData.files.length > 0) {
+                var imgFiles = Array.from(ev.clipboardData.files).filter(isImageFile);
+                if (imgFiles.length > 0) {
+                    ev.preventDefault();
+                    handleMpesaScreenshots(imgFiles);
+                    return;
+                }
             }
+            setTimeout(function() {
+                var el = document.getElementById('mpesa-batch-input');
+                if (el && el.value.trim().length > 8) {
+                    parseMpesaClient();
+                }
+            }, 80);
         }
+
+        window.parseMpesaClient = parseMpesaClient;
+        window.setSmsInputMode = setSmsInputMode;
+        window.pasteSampleMpesa = pasteSampleMpesa;
+        window.handleMpesaScreenshots = handleMpesaScreenshots;
+        window.handleMpesaDrop = handleMpesaDrop;
+        window.handleMpesaPasteEvent = handleMpesaPasteEvent;
+        window.openMpesaCameraModal = openMpesaCameraModal;
+        window.closeMpesaCameraModal = closeMpesaCameraModal;
+        window.flipMpesaCamera = flipMpesaCamera;
+        window.captureMpesaCameraFrame = captureMpesaCameraFrame;
+        window.handleMpesaCameraFallbackInput = handleMpesaCameraFallbackInput;
+        window.toggleMpesaItem = toggleMpesaItem;
+        window.updateMpesaCategory = updateMpesaCategory;
+        window.removeMpesaItem = removeMpesaItem;
+        window.toggleAllMpesaReview = toggleAllMpesaReview;
     </script>
 </head>
 <body class="bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 min-h-screen antialiased flex flex-col justify-between font-sans">
@@ -3249,9 +3545,9 @@ export function renderFinanceDashboard(data: any): string {
             <form action="/finance/mpesa/import" method="POST" id="mpesa-import-form" class="space-y-4">
                 <input type="hidden" id="mpesa-reviewed-json" name="reviewed_transactions" value="">
 
-                <!-- Hidden File Inputs for Phone Gallery/PC & Phone Camera -->
-                <input type="file" id="mpesa-screenshot-input" accept="image/*" multiple class="hidden" onchange="handleMpesaScreenshots(this.files)">
-                <input type="file" id="mpesa-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleMpesaScreenshots(this.files)">
+                <!-- Fallback File Inputs for Phone Gallery/PC & Phone Camera -->
+                <input type="file" id="mpesa-screenshot-input" accept="image/*" multiple class="sr-only" onchange="handleMpesaScreenshots(this)">
+                <input type="file" id="mpesa-camera-input" accept="image/*" capture="environment" class="sr-only" onchange="handleMpesaScreenshots(this)">
 
                 <!-- 📸 Option B: Screenshot Scanner / Drag-and-Drop Box (Phone & PC) -->
                 <div id="mpesa-screenshot-scanner-panel" class="hidden space-y-3">
@@ -3264,14 +3560,15 @@ export function renderFinanceDashboard(data: any): string {
                             <span class="text-3xl">📸</span>
                             <h3 class="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-white">Upload or Snap M-Pesa / Bank SMS Screenshot(s)</h3>
                             <p class="text-[11px] text-gray-500 dark:text-gray-400 max-w-lg">
-                                Works with <strong>Phone Gallery</strong> (1 or multiple screenshots), <strong>Phone Camera</strong>, <strong>PC Drag &amp; Drop</strong>, or <strong>Ctrl+V</strong> paste. Supports both Dark Mode &amp; Light Mode screenshots!
+                                Works with <strong>Phone Gallery</strong> (1 or multiple screenshots), <strong>Live Camera</strong>, <strong>PC Drag &amp; Drop</strong>, or <strong>Ctrl+V</strong> paste. Supports both Dark Mode &amp; Light Mode screenshots!
                             </p>
                         </div>
                         <div class="flex flex-wrap items-center justify-center gap-2.5 pt-1">
-                            <button type="button" onclick="document.getElementById('mpesa-screenshot-input')?.click()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                            <label class="cursor-pointer px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
                                 <span>🖼️ Upload Screenshot(s) (Phone / PC)</span>
-                            </button>
-                            <button type="button" onclick="document.getElementById('mpesa-camera-input')?.click()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                                <input type="file" accept="image/*" multiple class="sr-only" onchange="handleMpesaScreenshots(this)">
+                            </label>
+                            <button type="button" onclick="openMpesaCameraModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
                                 <span>📷 Snap Photo with Camera</span>
                             </button>
                         </div>
@@ -3296,10 +3593,11 @@ export function renderFinanceDashboard(data: any): string {
                             📋 Paste SMS Text OR Review Scanned Screenshot Text:
                         </label>
                         <div class="flex items-center gap-1.5">
-                            <button type="button" onclick="document.getElementById('mpesa-screenshot-input')?.click()" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg text-[11px] font-extrabold transition flex items-center gap-1 active:scale-95">
+                            <label class="cursor-pointer px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg text-[11px] font-extrabold transition flex items-center gap-1 active:scale-95">
                                 <span>📸 Upload Screenshot</span>
-                            </button>
-                            <button type="button" onclick="document.getElementById('mpesa-camera-input')?.click()" class="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 rounded-lg text-[11px] font-bold transition flex items-center gap-1 active:scale-95 sm:hidden">
+                                <input type="file" accept="image/*" multiple class="sr-only" onchange="handleMpesaScreenshots(this)">
+                            </label>
+                            <button type="button" onclick="openMpesaCameraModal()" class="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 rounded-lg text-[11px] font-bold transition flex items-center gap-1 active:scale-95">
                                 <span>📷 Camera</span>
                             </button>
                             <button type="button" onclick="var el=document.getElementById('mpesa-batch-input'); if(el){el.value='';}" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-500 dark:text-gray-400 rounded-lg text-[10px] font-semibold transition">
@@ -3318,7 +3616,7 @@ export function renderFinanceDashboard(data: any): string {
                     <div class="flex items-center gap-2 w-full sm:w-auto">
                         <select name="account_id" class="p-2 border dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-xs font-semibold" required>
                             <option value="">-- Select Target Account --</option>
-                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join("")}
+                            ${accounts.map((a: any, idx: number) => `<option value="${a.id}" ${idx === 0 ? 'selected' : ''}>${a.name} (#${a.account_number || a.account_type})</option>`).join("")}
                         </select>
                         <button type="submit" id="mpesa-import-submit-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap">
                             <span>📥 1-Tap Import to Ledger</span>
@@ -3585,41 +3883,68 @@ export function renderFinanceDashboard(data: any): string {
                     <button type="button" onclick="document.getElementById('new-goal-form-container')?.classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">✕</button>
                 </div>
 
-                <!-- 🏖️ 1-Tap Goal Blueprints (Malindi Vacation & Wealth Shields) -->
-                <div class="space-y-1.5 bg-indigo-50/50 dark:bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
-                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">⚡ 1-Tap Goal Blueprints (Auto-fill Target, Sub-Split % &amp; Deadline):</span>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button type="button" onclick="applyGoalPreset('Malindi Vacation 2027 (Mid-Range)', 45000, 40, 10)" class="px-2.5 py-1 bg-cyan-50 dark:bg-cyan-950/70 hover:bg-cyan-100 dark:hover:bg-cyan-900 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 rounded-lg text-[11px] font-extrabold transition active:scale-95">
-                            🏖️ Malindi Vacation (Ksh 45k • ~Ksh 150/day)
-                        </button>
-                        <button type="button" onclick="applyGoalPreset('Malindi Solo Getaway 2027', 36000, 35, 10)" class="px-2.5 py-1 bg-teal-50 dark:bg-teal-950/70 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-300 dark:border-teal-800 text-teal-800 dark:text-teal-300 rounded-lg text-[11px] font-bold transition active:scale-95">
-                            🏖️ Malindi Solo Comfort (Ksh 36k)
-                        </button>
-                        <button type="button" onclick="applyGoalPreset('Malindi Couple Resort Trip 2027', 65000, 45, 12)" class="px-2.5 py-1 bg-purple-50 dark:bg-purple-950/70 hover:bg-purple-100 dark:hover:bg-purple-900 border border-purple-300 dark:border-purple-800 text-purple-800 dark:text-purple-300 rounded-lg text-[11px] font-bold transition active:scale-95">
-                            🌴 Malindi Couple Luxury (Ksh 65k)
-                        </button>
-                        <button type="button" onclick="applyGoalPreset('6-Month Emergency Shield', 75000, 35, 12)" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-lg text-[11px] font-bold transition active:scale-95">
-                            🛡️ Emergency Shield (Ksh 75k)
-                        </button>
+                <!-- ⚡ Short-Term vs 🏔️ Long-Term 1-Tap Goal Blueprints -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    <div class="space-y-1.5 bg-amber-50/60 dark:bg-amber-950/25 p-2.5 rounded-xl border border-amber-200/80 dark:border-amber-900/50">
+                        <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300 block">⚡ Short-Term Basis (1–6 Months • Quick Milestones):</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button type="button" onclick="applyGoalPreset('Tires &amp; Major Service Reserve', 8000, 20, 2, 'SHORT_TERM')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-amber-100/70 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                                🛞 Tires / Service (Ksh 8k • 2m)
+                            </button>
+                            <button type="button" onclick="applyGoalPreset('4-Burner Gas Cooker &amp; Home Upgrade', 15000, 25, 3, 'SHORT_TERM')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-amber-100/70 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                                🍳 Home / Cooker (Ksh 15k • 3m)
+                            </button>
+                            <button type="button" onclick="applyGoalPreset('Work Smartphone Upgrade', 18000, 25, 3, 'SHORT_TERM')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-amber-100/70 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                                📱 Smartphone (Ksh 18k • 3m)
+                            </button>
+                            <button type="button" onclick="applyGoalPreset('School Fees / Term Sinking Fund', 25000, 30, 4, 'SHORT_TERM')" class="px-2.5 py-1 bg-white dark:bg-gray-900 hover:bg-amber-100/70 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                                🎓 School Fees (Ksh 25k • 4m)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5 bg-indigo-50/50 dark:bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-200/80 dark:border-indigo-900/50">
+                        <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">🏔️ Long-Term Basis (&gt; 6 Months • Vacations, Shields &amp; Assets):</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button type="button" onclick="applyGoalPreset('Malindi Vacation 2027 (Mid-Range)', 45000, 40, 10, 'LONG_TERM')" class="px-2.5 py-1 bg-cyan-50 dark:bg-cyan-950/70 hover:bg-cyan-100 dark:hover:bg-cyan-900 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 rounded-lg text-[11px] font-extrabold transition active:scale-95">
+                                🏖️ Malindi Vacation (Ksh 45k • 10m)
+                            </button>
+                            <button type="button" onclick="applyGoalPreset('6-Month Emergency Shield', 75000, 35, 12, 'LONG_TERM')" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                                🛡️ Emergency Shield (Ksh 75k • 12m)
+                            </button>
+                            <button type="button" onclick="applyGoalPreset('Next Vehicle / Bike Asset Deposit', 120000, 45, 18, 'LONG_TERM')" class="px-2.5 py-1 bg-purple-50 dark:bg-purple-950/70 hover:bg-purple-100 dark:hover:bg-purple-900 border border-purple-300 dark:border-purple-800 text-purple-800 dark:text-purple-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                                🏍️ Asset Deposit (Ksh 120k • 18m)
+                            </button>
+                            <button type="button" onclick="applyGoalPreset('Plot / Land Deposit Vault', 250000, 50, 24, 'LONG_TERM')" class="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-300 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 rounded-lg text-[11px] font-bold transition active:scale-95">
+                                🏡 Land / Plot (Ksh 250k • 24m)
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <form action="/goals/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <form action="/goals/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                     <div class="sm:col-span-2 lg:col-span-1">
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Goal Title</label>
-                        <input type="text" name="title" placeholder="e.g. Malindi Vacation 2027, 55&quot; Smart TV" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold" required>
+                        <input type="text" name="title" placeholder="e.g. Malindi Vacation 2027, Smart TV" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Horizon (Short / Long)</label>
+                        <select name="horizon" id="new_goal_horizon_select" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-indigo-200 dark:border-indigo-800 text-gray-900 dark:text-white rounded-xl text-xs font-extrabold">
+                            <option value="SHORT_TERM">⚡ Short-Term (≤ 6 Months)</option>
+                            <option value="LONG_TERM" selected>🏔️ Long-Term (&gt; 6 Months)</option>
+                        </select>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Amount (<span class="curr-symbol-label">Ksh</span>)</label>
                         <input type="number" step="any" inputmode="decimal" name="target_amount" placeholder="45000" data-placeholder-base="45000" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold convertible-placeholder" required>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Sub-Split Share % (Optional)</label>
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Sub-Split Share % (Opt)</label>
                         <input type="number" step="0.1" name="split_percentage" placeholder="40" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Deadline (Optional)</label>
-                        <input type="date" name="target_date" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
+                        <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Target Deadline (Opt)</label>
+                        <input type="date" name="target_date" onchange="onGoalDeadlineInputChanged(this.value)" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-semibold">
                     </div>
                     <div class="flex flex-col justify-end space-y-2">
                         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs active:scale-95">
@@ -3629,18 +3954,60 @@ export function renderFinanceDashboard(data: any): string {
                 </form>
             </div>
 
-            <!-- Total Goals Progress Bar -->
-            <div class="bg-white dark:bg-gray-900 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div class="flex items-center gap-2.5 w-full sm:w-auto">
-                    <span class="text-xs font-black text-indigo-700 dark:text-indigo-300">Overall Milestone:</span>
-                    <span class="text-xs font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">${overallGoalsPercent}% Complete</span>
+            <!-- Total Goals Progress Bar & Short-Term vs Long-Term Filter Bar -->
+            ${(() => {
+              const shortTermGoals = goals.filter((g: any) => (g.horizon || 'SHORT_TERM') === 'SHORT_TERM');
+              const longTermGoals = goals.filter((g: any) => g.horizon === 'LONG_TERM');
+              const shortSaved = shortTermGoals.reduce((s: number, g: any) => s + (Number(g.current_amount) || 0), 0);
+              const shortTarget = shortTermGoals.reduce((s: number, g: any) => s + (Number(g.target_amount) || 0), 0);
+              const longSaved = longTermGoals.reduce((s: number, g: any) => s + (Number(g.current_amount) || 0), 0);
+              const longTarget = longTermGoals.reduce((s: number, g: any) => s + (Number(g.target_amount) || 0), 0);
+              return `
+            <div class="bg-white dark:bg-gray-900 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs space-y-3">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5 w-full sm:w-auto">
+                        <span class="text-xs font-black text-indigo-700 dark:text-indigo-300">Overall Milestone:</span>
+                        <span class="text-xs font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">${overallGoalsPercent}% Complete</span>
+                    </div>
+                    <div class="w-full sm:flex-1 bg-gray-100 dark:bg-gray-800 h-2.5 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" style="width: ${overallGoalsPercent}%;"></div>
+                    </div>
+                    <div class="text-xs text-gray-500 font-semibold text-right w-full sm:w-auto">
+                        <span class="convertible-amount font-bold text-indigo-600 dark:text-indigo-400" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)}</span> of <span class="convertible-amount" data-kes="${totalGoalsTarget}">${formatKes(totalGoalsTarget)}</span>
+                    </div>
                 </div>
-                <div class="w-full sm:flex-1 bg-gray-100 dark:bg-gray-800 h-2.5 rounded-full overflow-hidden">
-                    <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" style="width: ${overallGoalsPercent}%;"></div>
+
+                <!-- Short-Term vs Long-Term Filter Tabs & KPI Summary -->
+                <div class="pt-2.5 border-t border-gray-100 dark:border-gray-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button type="button" id="goal-horizon-tab-ALL" onclick="filterGoalsByHorizon('ALL')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-600 text-white shadow-xs transition cursor-pointer flex items-center gap-1.5">
+                            <span>🎯 All Goals</span>
+                            <span class="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">${goals.length}</span>
+                        </button>
+                        <button type="button" id="goal-horizon-tab-SHORT_TERM" onclick="filterGoalsByHorizon('SHORT_TERM')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer flex items-center gap-1.5">
+                            <span>⚡ Short-Term (≤ 6m)</span>
+                            <span class="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-extrabold">${shortTermGoals.length}</span>
+                        </button>
+                        <button type="button" id="goal-horizon-tab-LONG_TERM" onclick="filterGoalsByHorizon('LONG_TERM')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer flex items-center gap-1.5">
+                            <span>🏔️ Long-Term (&gt; 6m)</span>
+                            <span class="px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 text-[10px] font-extrabold">${longTermGoals.length}</span>
+                        </button>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span class="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 font-bold">
+                            ⚡ Short-Term: <strong class="convertible-amount" data-kes="${shortSaved}">${formatKes(shortSaved)}</strong> / <span class="convertible-amount" data-kes="${shortTarget}">${formatKes(shortTarget)}</span>
+                        </span>
+                        <span class="px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300 font-bold">
+                            🏔️ Long-Term: <strong class="convertible-amount" data-kes="${longSaved}">${formatKes(longSaved)}</strong> / <span class="convertible-amount" data-kes="${longTarget}">${formatKes(longTarget)}</span>
+                        </span>
+                    </div>
                 </div>
-                <div class="text-xs text-gray-500 font-semibold text-right w-full sm:w-auto">
-                    <span class="convertible-amount font-bold text-indigo-600 dark:text-indigo-400" data-kes="${totalGoalsSaved}">${formatKes(totalGoalsSaved)}</span> of <span class="convertible-amount" data-kes="${totalGoalsTarget}">${formatKes(totalGoalsTarget)}</span>
-                </div>
+            </div>`;
+            })()}
+
+            <div id="goals-filter-empty-state" class="hidden p-5 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-xs text-gray-500">
+                No goals in this horizon category yet. Click <strong>"➕ New Goal"</strong> above or switch the filter tab!
             </div>
 
             <!-- Goals Grid -->
@@ -3653,6 +4020,9 @@ export function renderFinanceDashboard(data: any): string {
                     const icon = getGoalIcon(g.title);
                     const splitPct = g.split_percentage !== null && g.split_percentage !== undefined ? Number(g.split_percentage) : (Math.floor((100 / Math.max(1, goals.length)) * 10) / 10);
                     const perThousand = Math.round(splitPct * 10);
+                    const isLongTerm = g.horizon === 'LONG_TERM';
+                    const horizonCode = isLongTerm ? 'LONG_TERM' : 'SHORT_TERM';
+                    const oppositeHorizon = isLongTerm ? 'SHORT_TERM' : 'LONG_TERM';
 
                     let daysLeft = 30;
                     if (g.target_date) {
@@ -3665,16 +4035,23 @@ export function renderFinanceDashboard(data: any): string {
                     const weeklyNeeded = dailyNeeded * 7;
 
                     return `
-                    <div class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-xs space-y-3 flex flex-col justify-between">
+                    <div data-goal-horizon="${horizonCode}" class="goal-card-item bg-white dark:bg-gray-900 p-4 rounded-xl border ${isLongTerm ? 'border-purple-200 dark:border-purple-900/60' : 'border-amber-200 dark:border-amber-900/60'} shadow-xs space-y-3 flex flex-col justify-between">
                         <div class="space-y-2.5">
                             <div class="flex justify-between items-start">
                                 <div class="flex items-center space-x-2.5">
-                                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl shadow-xs shrink-0">
+                                    <div class="w-10 h-10 rounded-xl ${isLongTerm ? 'bg-gradient-to-tr from-indigo-600 to-purple-600' : 'bg-gradient-to-tr from-amber-500 to-teal-600'} text-white flex items-center justify-center text-xl shadow-xs shrink-0">
                                         ${icon}
                                     </div>
                                     <div>
                                         <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug">${g.title}</h3>
-                                        <div class="flex items-center gap-1.5 mt-0.5">
+                                        <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                            <form action="/goals/horizon/${g.id}" method="POST" class="inline">
+                                                <input type="hidden" name="title" value="${String(g.title || '').replace(/"/g, '&quot;')}">
+                                                <input type="hidden" name="horizon" value="${oppositeHorizon}">
+                                                <button type="submit" title="Click to switch between Short-Term and Long-Term" class="text-[10px] font-extrabold px-1.5 py-0.5 rounded border cursor-pointer transition ${isLongTerm ? 'bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100' : 'bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100'}">
+                                                    ${isLongTerm ? '🏔️ Long-Term ⇄' : '⚡ Short-Term ⇄'}
+                                                </button>
+                                            </form>
                                             ${g.target_date ? `<span class="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">📅 ${g.target_date}</span>` : '<span class="text-[10px] text-gray-400">Open Goal</span>'}
                                             <span class="text-[10px] font-black text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800/40">⚡ ${splitPct}% Split</span>
                                         </div>
@@ -4514,6 +4891,151 @@ export function renderFinanceDashboard(data: any): string {
             </div>
         </div>
 
+        <!-- 🔁 Monthly Recurring Bills & Standing Orders Checklist Card -->
+        ${(() => {
+            const totalBillsKes = (recurring_bills || []).reduce((s: number, b: any) => s + (Number(b.amount) || 0), 0);
+            const paidBillsKes = (recurring_bills || []).filter((b: any) => b.is_paid_this_month).reduce((s: number, b: any) => s + (Number(b.amount) || 0), 0);
+            const unpaidBillsKes = Math.max(0, totalBillsKes - paidBillsKes);
+            const paidCount = (recurring_bills || []).filter((b: any) => b.is_paid_this_month).length;
+            const billsPct = totalBillsKes > 0 ? Math.min(100, Math.round((paidBillsKes / totalBillsKes) * 100)) : 0;
+            const curMonthLabel = today.slice(0, 7);
+
+            return `
+        <div id="recurring-bills-card" class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-indigo-100 dark:border-indigo-900/60 p-6 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xl">
+                        🔁
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-lg font-bold text-gray-900 dark:text-white">Monthly Recurring Bills &amp; Standing Orders Checklist</h2>
+                            <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full ${paidCount === recurring_bills.length && recurring_bills.length > 0 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'}">
+                                ${paidCount}/${recurring_bills.length} Paid (${curMonthLabel})
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Tick off Rent, KPLC tokens, WiFi, SHA/NHIF &amp; water as you settle them from your Bills Reserve Bucket.</p>
+                    </div>
+                </div>
+                <button type="button" onclick="document.getElementById('add-recurring-bill-drawer').classList.toggle('hidden')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition active:scale-95 shrink-0">
+                    ➕ Add Monthly Bill
+                </button>
+            </div>
+
+            <!-- 3-Column KPI Strip -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700">
+                    <span class="text-[10px] font-bold uppercase text-gray-500 block">📋 Total Monthly Bills</span>
+                    <span class="text-xl font-black text-gray-900 dark:text-white convertible-amount" data-kes="${totalBillsKes}">${formatKes(totalBillsKes)}</span>
+                    <span class="text-[10px] text-gray-400 block">${recurring_bills.length} fixed monthly obligations</span>
+                </div>
+                <div class="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
+                    <span class="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">✅ Settled This Month</span>
+                    <span class="text-xl font-black text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${paidBillsKes}">${formatKes(paidBillsKes)} (${billsPct}%)</span>
+                    <span class="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 block">${paidCount} bill${paidCount === 1 ? '' : 's'} cleared for ${curMonthLabel}</span>
+                </div>
+                <div class="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
+                    <span class="text-[10px] font-bold uppercase text-rose-700 dark:text-rose-300 block">⏳ Remaining Unpaid</span>
+                    <span class="text-xl font-black text-rose-600 dark:text-rose-400 convertible-amount" data-kes="${unpaidBillsKes}">${formatKes(unpaidBillsKes)}</span>
+                    <span class="text-[10px] text-gray-500 block">${recurring_bills.length - paidCount} bill${recurring_bills.length - paidCount === 1 ? '' : 's'} still pending</span>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all" style="width: ${billsPct}%"></div>
+            </div>
+
+            <!-- Collapsible Add New Bill Drawer -->
+            <div id="add-recurring-bill-drawer" class="hidden p-4 rounded-xl bg-indigo-50/50 dark:bg-slate-950/80 border border-indigo-200 dark:border-indigo-800 space-y-3">
+                <h3 class="text-xs font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">➕ Add New Fixed Monthly Bill</h3>
+                <form action="/finance/bills/create" method="POST" class="grid grid-cols-1 sm:grid-cols-5 gap-2.5 text-xs">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Icon</label>
+                        <input type="text" name="icon" value="⚡" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-center">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Bill Name</label>
+                        <input type="text" name="name" placeholder="e.g. House Rent, KPLC Token, Zuku WiFi, SHA" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-gray-900 dark:text-white" required>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Monthly Amount (Ksh)</label>
+                        <input type="number" step="any" min="1" name="amount" placeholder="e.g. 2500" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-black text-indigo-600 dark:text-indigo-400" required>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Due Day (1–31)</label>
+                        <div class="flex gap-1.5">
+                            <input type="number" min="1" max="31" name="due_day" value="5" class="w-16 p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-center text-gray-900 dark:text-white" required>
+                            <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-3 py-2 rounded-lg transition">Save</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Checklist Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                ${(recurring_bills || []).map((b: any) => {
+                    const safeBillDomId = String(b.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const isPaid = Boolean(b.is_paid_this_month);
+                    return `
+                    <div class="p-3.5 rounded-xl border ${isPaid ? 'border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/40 dark:bg-emerald-950/20' : 'border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40'} flex flex-col justify-between gap-2.5">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex items-center gap-2.5">
+                                <span class="text-xl p-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">${b.icon || '⚡'}</span>
+                                <div>
+                                    <h4 class="text-xs font-extrabold ${isPaid ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}">${b.name}</h4>
+                                    <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Due every <strong>${b.due_day}th</strong> • <strong class="text-indigo-600 dark:text-indigo-400">${formatKes(b.amount)}</strong></span>
+                                </div>
+                            </div>
+                            <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${isPaid ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}">
+                                ${isPaid ? '✅ Paid' : '⏳ Pending'}
+                            </span>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-1.5 pt-2 border-t border-gray-200/70 dark:border-gray-700/60">
+                            ${!isPaid ? `
+                            <button type="button" onclick="document.getElementById('pay-bill-drawer-${safeBillDomId}').classList.toggle('hidden')" class="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-extrabold transition active:scale-95">
+                                ✓ Pay / Mark Settled
+                            </button>
+                            ` : `
+                            <form action="/finance/bills/toggle-pay/${b.id}" method="POST" class="flex-1">
+                                <button type="submit" class="w-full py-1 px-2.5 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">
+                                    ↺ Undo Paid (${b.last_paid_date || curMonthLabel})
+                                </button>
+                            </form>
+                            `}
+                            <form action="/finance/bills/delete/${b.id}" method="POST" class="inline">
+                                <button type="submit" class="p-1.5 text-gray-400 hover:text-rose-500 text-xs transition" title="Delete bill">🗑️</button>
+                            </form>
+                        </div>
+
+                        <!-- Inline Pay & Account Sync Drawer -->
+                        <div id="pay-bill-drawer-${safeBillDomId}" class="hidden pt-2 border-t border-dashed border-gray-300 dark:border-gray-700">
+                            <form action="/finance/bills/toggle-pay/${b.id}" method="POST" class="space-y-2 text-[11px]">
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="block text-[9px] font-bold text-gray-500">Amount Paid (Ksh)</label>
+                                        <input type="number" step="any" name="paid_amount" value="${b.amount}" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded font-bold text-gray-900 dark:text-white" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[9px] font-bold text-gray-500">Deduct Account (Opt)</label>
+                                        <select name="account_id" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded font-semibold text-gray-900 dark:text-white">
+                                            <option value="">-- Checkbox Only --</option>
+                                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                </div>
+                                <button type="submit" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg transition">
+                                    ✅ Confirm Paid for ${curMonthLabel}
+                                </button>
+                            </form>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`;
+        })()}
+
         <!-- ➕ Transactions & Ledger Card -->
         <div id="tx-card" class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
@@ -4619,6 +5141,27 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                 </div>
 
+                <!-- 🔍 Instant Keyword Search & Month Filter Bar -->
+                ${(() => {
+                    const uniqueMonths = Array.from(new Set((transactions || []).map((t: any) => String(t.date || '').slice(0, 7)).filter((m: string) => m.length === 7))).sort().reverse();
+                    return `
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/80 dark:border-gray-700/70">
+                    <div class="relative flex-1">
+                        <input type="text" id="tx-search-input" oninput="onTxSearchOrMonthChange()" placeholder="🔍 Search transactions by party, category, M-Pesa ref, memo, or amount (e.g. Rubis, Ziidi, Fuel)..." class="w-full pl-3 pr-8 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <select id="tx-month-filter" onchange="onTxSearchOrMonthChange()" class="p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200">
+                            <option value="ALL">📅 All Months</option>
+                            ${uniqueMonths.map((m) => `<option value="${m}">${m}</option>`).join('')}
+                        </select>
+                        <button type="button" onclick="clearTxSearchFilters()" class="px-2.5 py-2 bg-gray-200/80 dark:bg-gray-700 hover:bg-gray-300 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold transition shrink-0">
+                            Reset
+                        </button>
+                        <span id="tx-filtered-summary-pill" class="hidden px-2.5 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[11px] font-black shrink-0"></span>
+                    </div>
+                </div>`;
+                })()}
+
                 ${(() => {
                     const sortedTxs = sortTransactionsLatestFirst(transactions);
                     const totalTxs = sortedTxs.length;
@@ -4649,8 +5192,9 @@ export function renderFinanceDashboard(data: any): string {
                                 } catch {}
                             }
                             const isHidden = idx >= initialLimit;
+                            const searchBlob = `${t.category || ''} ${t.description || ''} ${acc ? acc.name : ''} ${t.date || ''} ${t.amount || ''}`.replace(/"/g, '&quot;');
                             return `
-                            <div class="tx-item tx-mobile-item p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100/70 dark:hover:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${itemFilterType}">
+                            <div class="tx-item tx-mobile-item p-3 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100/70 dark:hover:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${itemFilterType}" data-tx-date="${t.date || ''}" data-tx-amount="${t.amount || 0}" data-tx-search="${searchBlob}">
                                 <div class="flex items-center gap-2.5 min-w-0">
                                     <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm font-black ${isTransfer ? 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300' : (isIncome ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-300')}">
                                         ${isTransfer ? '⇄' : (isIncome ? '↓' : '↑')}
@@ -4709,8 +5253,9 @@ export function renderFinanceDashboard(data: any): string {
                                         } catch {}
                                     }
                                     const isHidden = idx >= initialLimit;
+                                    const searchBlob = `${t.category || ''} ${t.description || ''} ${acc ? acc.name : ''} ${t.date || ''} ${t.amount || ''}`.replace(/"/g, '&quot;');
                                     return `
-                                    <tr class="tx-item tx-desktop-item hover:bg-gray-50 dark:hover:bg-gray-800/40 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${itemFilterType}">
+                                    <tr class="tx-item tx-desktop-item hover:bg-gray-50 dark:hover:bg-gray-800/40 transition ${isHidden ? 'hidden' : ''}" data-tx-type="${itemFilterType}" data-tx-date="${t.date || ''}" data-tx-amount="${t.amount || 0}" data-tx-search="${searchBlob}">
                                         <td class="py-2.5 px-3 whitespace-nowrap">
                                             <div class="font-bold text-gray-800 dark:text-gray-200">${t.date}</div>
                                             ${timeStr ? `<div class="text-[10px] text-gray-400 dark:text-gray-500 font-mono">${timeStr}</div>` : ''}
@@ -5098,6 +5643,44 @@ export function renderFinanceDashboard(data: any): string {
                 </div>
             </div>
             <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95">Got it!</button>
+        </div>
+    </div>
+
+    <!-- 📷 Live Camera Modal for M-Pesa & Bank SMS Scanner -->
+    <div id="mpesa-live-camera-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-3xl max-w-lg w-full p-5 space-y-4 shadow-2xl text-white">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <div class="flex items-center space-x-2.5">
+                    <span class="text-2xl">📷</span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-white">Snap M-Pesa / Bank SMS Photo</h3>
+                        <p class="text-[11px] text-emerald-400 font-semibold">Point camera at receipt or SMS screen &amp; tap Capture</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeMpesaCameraModal()" class="w-8 h-8 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center justify-center font-bold">✕</button>
+            </div>
+
+            <div class="relative bg-black rounded-2xl overflow-hidden border border-gray-800 aspect-[4/3] flex items-center justify-center">
+                <video id="mpesa-live-camera-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+                <div id="mpesa-live-camera-status" class="hidden absolute inset-0 bg-gray-950/90 p-6 flex flex-col items-center justify-center text-center text-xs text-amber-300 space-y-2">
+                    ⏳ Starting camera...
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <button type="button" onclick="flipMpesaCamera()" class="px-3.5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                    <span>🔄 Flip Camera</span>
+                </button>
+
+                <button type="button" id="mpesa-live-camera-snap-btn" onclick="captureMpesaCameraFrame()" class="flex-1 py-2.5 px-5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-black rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1.5 active:scale-95">
+                    <span>📸 Capture &amp; Scan SMS</span>
+                </button>
+
+                <label class="cursor-pointer px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                    <span>📱 Select / Capture from Device</span>
+                    <input type="file" accept="image/*" capture="environment" class="sr-only" onchange="handleMpesaCameraFallbackInput(this)">
+                </label>
+            </div>
         </div>
     </div>
 

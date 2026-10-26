@@ -61,3 +61,4 @@ export function setActiveProfile(c: any, mode: ProfileMode): void {
     });
   } catch (e) {}
 }
+

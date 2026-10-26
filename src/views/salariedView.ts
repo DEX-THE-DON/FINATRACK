@@ -1,4 +1,5 @@
-import { SalariedConfig, calculateDaysUntilPayday } from '../routes/salaried';
+import { SalariedConfig, SalariedLoanRecord, calculateDaysUntilPayday } from '../routes/salaried';
+import { calculateDebtDeadline } from '../utils/math';
 
 export function renderSalariedDashboard(data: {
   username?: string;
@@ -11,6 +12,7 @@ export function renderSalariedDashboard(data: {
   current_currency?: string;
   accounts?: any[];
   allocation_rules?: any[];
+  salaried_loans?: SalariedLoanRecord[];
 }): string {
   const {
     username = 'Dennis',
@@ -21,10 +23,31 @@ export function renderSalariedDashboard(data: {
     toast = '',
     accounts = [],
     allocation_rules = [],
+    salaried_loans = [],
   } = data;
 
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const { daysRemaining, nextPaydayDate } = calculateDaysUntilPayday(salaried_config.payday_day);
+
+  // Loans Borrowed (I_OWE) vs Credited / Money Lent Out (OWED_TO_ME) Calculations
+  const activeBorrowedLoans = salaried_loans.filter((l) => l.debt_type === 'I_OWE' && l.status === 'ACTIVE');
+  const activeCreditedLoans = salaried_loans.filter((l) => l.debt_type === 'OWED_TO_ME' && l.status === 'ACTIVE');
+
+  const totalBorrowedRemaining = activeBorrowedLoans.reduce(
+    (sum, l) => sum + Math.max(0, (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0)),
+    0
+  );
+  const totalBorrowedMonthlyCheckoff = activeBorrowedLoans.reduce(
+    (sum, l) => sum + (Number(l.monthly_installment) || 0),
+    0
+  );
+  const totalCreditedRemaining = activeCreditedLoans.reduce(
+    (sum, l) => sum + Math.max(0, (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0)),
+    0
+  );
+  const netCreditPosition = totalCreditedRemaining - totalBorrowedRemaining;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const defaultDueIso = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
   // Safe daily spend calculation
   const remainingDiscretionary = Math.max(0, salaried_config.living_budget_monthly - monthly_expenses);
@@ -132,7 +155,10 @@ export function renderSalariedDashboard(data: {
                     <h1 class="text-2xl sm:text-3xl font-black text-white">Monthly Payday &amp; Salary Runway Command</h1>
                     <p class="text-xs text-indigo-200/80">Automate your Payday Ritual: Pay yourself first before lifestyle expenses and avoid the mid-month cash crash.</p>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <a href="#salaried-loans-card" class="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 rounded-xl text-xs font-extrabold text-rose-200 transition active:scale-95 flex items-center gap-1.5">
+                        💳 Loans &amp; Credit (${salaried_loans.filter((l) => l.status === 'ACTIVE').length})
+                    </a>
                     <button type="button" onclick="document.getElementById('salaried-settings-modal').classList.remove('hidden')" class="px-3 py-1.5 bg-slate-900/80 hover:bg-slate-800 border border-indigo-500/40 rounded-xl text-xs font-bold text-indigo-300 transition active:scale-95 flex items-center gap-1.5">
                         ⚙️ Payday Settings
                     </button>
@@ -324,6 +350,348 @@ export function renderSalariedDashboard(data: {
 
             </div>
         </div>
+
+        <!-- 💳 SALARIED LOANS BORROWED & CREDITED (MONEY LENT OUT) HUB -->
+        <div id="salaried-loans-card" class="bg-white dark:bg-gray-900 border-2 border-indigo-200 dark:border-indigo-900/70 p-6 rounded-3xl shadow-sm space-y-5">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 dark:border-gray-800 pb-4">
+                <div class="flex items-start space-x-3">
+                    <span class="text-3xl p-2.5 bg-indigo-50 dark:bg-indigo-950/80 rounded-2xl border border-indigo-200 dark:border-indigo-800">💳</span>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-lg sm:text-xl font-black text-gray-900 dark:text-white">Loans Borrowed &amp; Money Credited (Lent Out)</h2>
+                            <span class="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800">
+                                Checkoff &amp; Personal Credit Ledger
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Track SACCO loans, employer salary advances, bank checkoffs, HELB &amp; mobile loans you owe—plus money you credited/lent to colleagues, friends, or clients.
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 w-full md:w-auto">
+                    <button type="button" onclick="openSalariedLoanForm('I_OWE')" class="flex-1 md:flex-initial px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5">
+                        <span>📉 + Log Loan Borrowed</span>
+                    </button>
+                    <button type="button" onclick="openSalariedLoanForm('OWED_TO_ME')" class="flex-1 md:flex-initial px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5">
+                        <span>📈 + Log Money Credited</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3-Column Summary KPI Strip -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div class="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300">📉 Total Loans Borrowed (I Owe)</span>
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-200/70 dark:bg-rose-900/70 text-rose-800 dark:text-rose-200">${activeBorrowedLoans.length} Active</span>
+                    </div>
+                    <div class="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">${formatKes(totalBorrowedRemaining)}</div>
+                    <div class="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                        ${totalBorrowedMonthlyCheckoff > 0
+                          ? `Monthly Checkoff / Installments: <strong class="text-rose-600 dark:text-rose-400">${formatKes(totalBorrowedMonthlyCheckoff)}/mo</strong>`
+                          : 'SACCO, Salary Advance, Bank, HELB &amp; Mobile Loans'}
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">📈 Total Credited / Lent (Owed to Me)</span>
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200/70 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200">${activeCreditedLoans.length} Active</span>
+                    </div>
+                    <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">${formatKes(totalCreditedRemaining)}</div>
+                    <div class="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                        Money lent to colleagues, friends, family &amp; side-hustle clients
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-indigo-50/70 dark:bg-slate-950/60 border border-indigo-200 dark:border-indigo-900/60">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">⚖️ Net Credit / Debt Position</span>
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full ${netCreditPosition >= 0 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200'}">
+                            ${netCreditPosition >= 0 ? 'Net Creditor' : 'Net Borrower'}
+                        </span>
+                    </div>
+                    <div class="text-2xl font-black ${netCreditPosition >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'} mt-1">
+                        ${netCreditPosition >= 0 ? '+' : '-'}${formatKes(Math.abs(netCreditPosition))}
+                    </div>
+                    <div class="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                        Credited (${formatKes(totalCreditedRemaining)}) minus Borrowed (${formatKes(totalBorrowedRemaining)})
+                    </div>
+                </div>
+            </div>
+
+            <!-- Collapsible New Loan Borrowed / Money Credited Drawer -->
+            <div id="salaried-loan-form-drawer" class="hidden p-5 rounded-2xl bg-gray-50 dark:bg-slate-950/90 border-2 border-indigo-400/60 dark:border-indigo-700 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
+                    <div>
+                        <h3 id="salaried-loan-form-title" class="text-sm font-black text-gray-900 dark:text-white">📉 Log a Loan Borrowed or 📈 Money Credited / Lent Out</h3>
+                        <p class="text-[11px] text-gray-500">Select a quick preset or fill in counterparty, amount, checkoff installment, and due date.</p>
+                    </div>
+                    <button type="button" onclick="closeSalariedLoanForm()" class="text-xs font-bold text-gray-400 hover:text-gray-700 dark:hover:text-white px-2 py-1 rounded-lg">✕ Close</button>
+                </div>
+
+                <!-- Quick Preset Pills -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 dark:text-gray-400 block">⚡ Quick Salaried Presets:</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button type="button" onclick="applySalariedLoanPreset('I_OWE', 'SACCO Loan', 'SACCO Checkoff / Development Loan')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100/80 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 hover:bg-rose-200 transition">
+                            🏦 SACCO Loan (Borrowed)
+                        </button>
+                        <button type="button" onclick="applySalariedLoanPreset('I_OWE', 'Salary Advance', 'Employer Salary Advance')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100/80 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 hover:bg-rose-200 transition">
+                            💼 Salary Advance (Borrowed)
+                        </button>
+                        <button type="button" onclick="applySalariedLoanPreset('I_OWE', 'Bank Checkoff Loan', 'Bank Personal / Checkoff Loan')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100/80 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 hover:bg-rose-200 transition">
+                            🏛️ Bank Checkoff Loan
+                        </button>
+                        <button type="button" onclick="applySalariedLoanPreset('I_OWE', 'HELB Loan', 'HELB Higher Education Loan')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100/80 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 hover:bg-rose-200 transition">
+                            🎓 HELB Loan
+                        </button>
+                        <button type="button" onclick="applySalariedLoanPreset('I_OWE', 'Mobile Loan', 'M-Shwari / Fuliza / KCB M-Pesa')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100/80 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 hover:bg-rose-200 transition">
+                            📱 Mobile Loan (Fuliza/M-Shwari)
+                        </button>
+                        <button type="button" onclick="applySalariedLoanPreset('OWED_TO_ME', 'Colleague / Friend Credit', 'Colleague')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-200 transition">
+                            🤝 Lent to Colleague / Friend
+                        </button>
+                        <button type="button" onclick="applySalariedLoanPreset('OWED_TO_ME', 'Side-Hustle Client Credit', 'Client Invoice / Credit')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-200 transition">
+                            ⚡ Side-Hustle Client Credit
+                        </button>
+                    </div>
+                </div>
+
+                <form action="/salaried/loans/create" method="POST" class="space-y-4 text-xs">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Transaction Direction</label>
+                            <select name="debt_type" id="salaried_loan_type_select" onchange="syncSalariedLoanDirectionUI()" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-extrabold text-gray-900 dark:text-white">
+                                <option value="I_OWE">📉 I Borrowed a Loan (I Owe)</option>
+                                <option value="OWED_TO_ME">📈 I Credited / Lent Money (Owed to Me)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Category / Facility Type</label>
+                            <input type="text" name="loan_category" id="salaried_loan_category_input" value="SACCO Loan" placeholder="e.g. SACCO Loan, Salary Advance, Lent Cash" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                        </div>
+
+                        <div>
+                            <label id="salaried_counterparty_label" class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Lender / Institution or Person Name</label>
+                            <input type="text" name="person_name" id="salaried_person_name_input" placeholder="e.g. Stima SACCO, Employer HR, John Kamau" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white" required>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Total Loan / Credit Amount (Ksh)</label>
+                            <input type="number" step="any" min="1" name="total_amount" placeholder="e.g. 50000" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-black text-sm text-indigo-600 dark:text-indigo-400" required>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Amount Already Paid / Repaid (Ksh)</label>
+                            <input type="number" step="any" min="0" name="paid_amount" value="0" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Monthly Checkoff / Installment (Ksh)</label>
+                            <input type="number" step="any" min="0" name="monthly_installment" value="0" placeholder="Optional monthly deduction" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Date Issued / Borrowed</label>
+                            <input type="date" name="issued_at" value="${todayIso}" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white" required>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Due Date / Final Payoff Date</label>
+                            <input type="date" name="due_at" value="${defaultDueIso}" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white" required>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Notes / Purpose</label>
+                            <input type="text" name="description" placeholder="e.g. 12% p.a. checkoff, emergency advance" class="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-medium text-gray-900 dark:text-white">
+                        </div>
+                    </div>
+
+                    <!-- Optional Account Sync -->
+                    <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" name="link_account" onchange="document.getElementById('salaried_loan_acc_wrap').classList.toggle('hidden', !this.checked)" class="rounded text-indigo-600 focus:ring-indigo-500">
+                            <span class="font-bold text-gray-700 dark:text-gray-300">Sync with Bank / M-Pesa Account Balance (+ for Borrowed received, - for Money Lent out)</span>
+                        </label>
+                        <div id="salaried_loan_acc_wrap" class="hidden sm:w-64">
+                            <select name="account_id" class="w-full p-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-xs text-gray-900 dark:text-white">
+                                <option value="">-- Select Account --</option>
+                                ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (${formatKes(a.balance)})</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closeSalariedLoanForm()" class="px-4 py-2.5 rounded-xl font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-md transition active:scale-95">
+                            💾 Save Loan / Credit Record
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Filter Tabs -->
+            <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <button type="button" id="sal-tab-ALL" onclick="filterSalariedLoans('ALL')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-600 text-white transition">
+                        All (${salaried_loans.length})
+                    </button>
+                    <button type="button" id="sal-tab-I_OWE" onclick="filterSalariedLoans('I_OWE')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
+                        📉 Loans Borrowed (${salaried_loans.filter((l) => l.debt_type === 'I_OWE').length})
+                    </button>
+                    <button type="button" id="sal-tab-OWED_TO_ME" onclick="filterSalariedLoans('OWED_TO_ME')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition">
+                        📈 Money Credited / Lent (${salaried_loans.filter((l) => l.debt_type === 'OWED_TO_ME').length})
+                    </button>
+                    <button type="button" id="sal-tab-PAID" onclick="filterSalariedLoans('PAID')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 transition">
+                        ✅ Settled (${salaried_loans.filter((l) => l.status === 'PAID').length})
+                    </button>
+                </div>
+                <span class="text-[11px] text-gray-400">Synced with your unified Finatrack Debt &amp; Credit Ledger</span>
+            </div>
+
+            <!-- Loans & Credits List -->
+            ${salaried_loans.length === 0 ? `
+            <div class="p-8 text-center rounded-2xl border border-dashed border-gray-300 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/40 space-y-2">
+                <div class="text-3xl">💳</div>
+                <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200">No Borrowed Loans or Credited Money Logged Yet</h3>
+                <p class="text-xs text-gray-500 max-w-md mx-auto">
+                    Have a SACCO loan, employer salary advance, HELB, or bank checkoff? Or did you credit/lend money to a colleague or friend? Log it above to track every shilling until settled.
+                </p>
+                <div class="pt-2 flex justify-center gap-2">
+                    <button type="button" onclick="openSalariedLoanForm('I_OWE')" class="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition">
+                        📉 + Log Loan Borrowed
+                    </button>
+                    <button type="button" onclick="openSalariedLoanForm('OWED_TO_ME')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition">
+                        📈 + Log Money Credited
+                    </button>
+                </div>
+            </div>
+            ` : `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                ${salaried_loans.map((loan) => {
+                  const totalAmt = Number(loan.total_amount) || 0;
+                  const paidAmt = Number(loan.paid_amount) || 0;
+                  const remainingAmt = Math.max(0, totalAmt - paidAmt);
+                  const pctPaid = totalAmt > 0 ? Math.min(100, Math.round((paidAmt / totalAmt) * 100)) : 0;
+                  const isBorrowed = loan.debt_type === 'I_OWE';
+                  const isPaid = loan.status === 'PAID' || remainingAmt <= 0;
+                  const deadlineInfo = calculateDebtDeadline(loan.due_at || defaultDueIso);
+                  const safeDomId = String(loan.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+
+                  const badgeColors = isPaid
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                    : deadlineInfo.isOverdue || deadlineInfo.isDangerZone
+                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                      : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800';
+
+                  return `
+                  <div class="salaried-loan-item p-4 rounded-2xl border ${isPaid ? 'border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 opacity-80' : isBorrowed ? 'border-rose-200 dark:border-rose-900/60 bg-white dark:bg-gray-900' : 'border-emerald-200 dark:border-emerald-900/60 bg-white dark:bg-gray-900'} shadow-2xs space-y-3"
+                       data-debt-type="${loan.debt_type}"
+                       data-status="${loan.status}">
+                      <div class="flex items-start justify-between gap-2">
+                          <div class="space-y-0.5">
+                              <div class="flex items-center gap-1.5 flex-wrap">
+                                  <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${isBorrowed ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'}">
+                                      ${isBorrowed ? '📉 Borrowed (I Owe)' : '📈 Credited / Lent (Owed to Me)'}
+                                  </span>
+                                  ${loan.loan_category ? `
+                                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                                      ${loan.loan_category}
+                                  </span>` : ''}
+                              </div>
+                              <h4 class="text-sm font-black text-gray-900 dark:text-white pt-0.5">${loan.person_name}</h4>
+                              ${loan.description ? `<p class="text-[11px] text-gray-500 dark:text-gray-400">${loan.description}</p>` : ''}
+                          </div>
+
+                          <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${badgeColors}">
+                              ${isPaid ? '✅ SETTLED' : deadlineInfo.isOverdue ? `🚨 OVERDUE (${Math.abs(deadlineInfo.daysRemaining)}d)` : `⏳ Due in ${deadlineInfo.daysRemaining}d`}
+                          </span>
+                      </div>
+
+                      <!-- Financial Amounts Row -->
+                      <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 text-xs">
+                          <div>
+                              <span class="text-[10px] text-gray-400 block">Principal</span>
+                              <span class="font-bold text-gray-800 dark:text-gray-200">${formatKes(totalAmt)}</span>
+                          </div>
+                          <div>
+                              <span class="text-[10px] text-gray-400 block">${isBorrowed ? 'Repaid So Far' : 'Collected So Far'}</span>
+                              <span class="font-bold text-emerald-600 dark:text-emerald-400">${formatKes(paidAmt)} (${pctPaid}%)</span>
+                          </div>
+                          <div>
+                              <span class="text-[10px] text-gray-400 block">Remaining Balance</span>
+                              <span class="font-black ${isBorrowed ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-600 dark:text-indigo-400'}">${formatKes(remainingAmt)}</span>
+                          </div>
+                      </div>
+
+                      <!-- Progress Bar -->
+                      <div class="w-full h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                          <div class="h-full ${isBorrowed ? 'bg-rose-500' : 'bg-emerald-500'} rounded-full transition-all" style="width: ${pctPaid}%"></div>
+                      </div>
+
+                      <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                          <span>Issued: <strong>${loan.issued_at}</strong> • Due: <strong>${loan.due_at}</strong></span>
+                          ${Number(loan.monthly_installment) > 0 ? `<span class="font-bold text-indigo-600 dark:text-indigo-400">Checkoff: ${formatKes(loan.monthly_installment || 0)}/mo</span>` : ''}
+                      </div>
+
+                      <!-- Action Buttons -->
+                      <div class="flex items-center justify-between gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+                          ${!isPaid ? `
+                          <button type="button" onclick="document.getElementById('sal-repay-drawer-${safeDomId}').classList.toggle('hidden')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold ${isBorrowed ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} transition active:scale-95">
+                              💸 ${isBorrowed ? 'Record Repayment' : 'Collect Credit'}
+                          </button>
+                          ` : `
+                          <span class="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">🎉 Fully Settled</span>
+                          `}
+
+                          <div class="flex items-center gap-1.5">
+                              <form action="/salaried/loans/toggle-status/${loan.id}" method="POST" class="inline">
+                                  <button type="submit" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-700 dark:text-gray-300 transition">
+                                      ${isPaid ? '↺ Reopen' : '✓ Mark Paid'}
+                                  </button>
+                              </form>
+                              <form action="/salaried/loans/delete/${loan.id}" method="POST" class="inline">
+                                  <button type="submit" class="px-2 py-1 rounded-lg text-[11px] font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition" title="Delete record">
+                                      🗑️
+                                  </button>
+                              </form>
+                          </div>
+                      </div>
+
+                      <!-- Inline Repayment / Collection Drawer -->
+                      <div id="sal-repay-drawer-${safeDomId}" class="hidden pt-3 border-t border-dashed border-gray-200 dark:border-gray-700">
+                          <form action="/salaried/loans/repay/${loan.id}" method="POST" class="space-y-2.5 text-xs">
+                              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                      <label class="block text-[10px] font-bold text-gray-500 mb-0.5">${isBorrowed ? 'Repayment Amount (Ksh)' : 'Amount Collected (Ksh)'}</label>
+                                      <input type="number" step="any" min="1" name="repayment_amount" value="${Number(loan.monthly_installment) > 0 && Number(loan.monthly_installment) < remainingAmt ? loan.monthly_installment : remainingAmt}" class="w-full p-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg font-black text-gray-900 dark:text-white" required>
+                                  </div>
+                                  <div>
+                                      <label class="block text-[10px] font-bold text-gray-500 mb-0.5">${isBorrowed ? 'Deduct From Account (Optional)' : 'Deposit Into Account (Optional)'}</label>
+                                      <select name="account_id" class="w-full p-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-gray-900 dark:text-white">
+                                          <option value="">-- Do Not Sync Account --</option>
+                                          ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (${formatKes(a.balance)})</option>`).join('')}
+                                      </select>
+                                  </div>
+                              </div>
+                              <button type="submit" class="w-full py-2 rounded-lg font-extrabold text-white ${isBorrowed ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'} transition">
+                                  ✓ Confirm ${isBorrowed ? 'Loan Repayment' : 'Credit Collection'}
+                              </button>
+                          </form>
+                      </div>
+                  </div>`;
+                }).join('')}
+            </div>
+            `}
+        </div>
     </main>
 
     <!-- Payday Settings Modal -->
@@ -433,6 +801,10 @@ export function renderSalariedDashboard(data: {
             <span class="text-xl">👑</span>
             <span class="text-[10px] tracking-tight">Payday</span>
         </a>
+        <a href="#salaried-loans-card" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-rose-500 active:scale-90 transition-transform font-medium">
+            <span class="text-xl">💳</span>
+            <span class="text-[10px] tracking-tight">Loans</span>
+        </a>
         <a href="/#waterfall-card" class="flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400 hover:text-amber-500 active:scale-90 transition-transform font-medium">
             <span class="text-xl">🌊</span>
             <span class="text-[10px] tracking-tight">Split</span>
@@ -452,9 +824,81 @@ export function renderSalariedDashboard(data: {
             document.getElementById('profile-switcher-modal')?.classList.add('hidden');
         }
 
+        function syncSalariedLoanDirectionUI() {
+            const sel = document.getElementById('salaried_loan_type_select');
+            const label = document.getElementById('salaried_counterparty_label');
+            const title = document.getElementById('salaried-loan-form-title');
+            if (!sel) return;
+            if (sel.value === 'OWED_TO_ME') {
+                if (label) label.textContent = 'Borrower Name (Colleague / Friend / Client who owes you)';
+                if (title) title.textContent = '📈 Log Money Credited / Lent Out (Owed to You)';
+            } else {
+                if (label) label.textContent = 'Lender / Institution Name (SACCO / Employer / Bank)';
+                if (title) title.textContent = '📉 Log a Loan Borrowed (I Owe)';
+            }
+        }
+
+        function openSalariedLoanForm(direction) {
+            const drawer = document.getElementById('salaried-loan-form-drawer');
+            const sel = document.getElementById('salaried_loan_type_select');
+            const catInput = document.getElementById('salaried_loan_category_input');
+            if (drawer) drawer.classList.remove('hidden');
+            if (sel && direction) {
+                sel.value = direction;
+                if (catInput) {
+                    catInput.value = direction === 'OWED_TO_ME' ? 'Personal Credit / Lent' : 'SACCO Loan';
+                }
+                syncSalariedLoanDirectionUI();
+            }
+            drawer?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function closeSalariedLoanForm() {
+            document.getElementById('salaried-loan-form-drawer')?.classList.add('hidden');
+        }
+
+        function applySalariedLoanPreset(direction, category, placeholderHint) {
+            const sel = document.getElementById('salaried_loan_type_select');
+            const catInput = document.getElementById('salaried_loan_category_input');
+            const personInput = document.getElementById('salaried_person_name_input');
+            if (sel) sel.value = direction;
+            if (catInput) catInput.value = category;
+            if (personInput && !personInput.value) personInput.placeholder = placeholderHint;
+            syncSalariedLoanDirectionUI();
+        }
+
+        function filterSalariedLoans(filterKey) {
+            const items = document.querySelectorAll('.salaried-loan-item');
+            items.forEach((el) => {
+                const dtype = el.getAttribute('data-debt-type');
+                const st = el.getAttribute('data-status');
+                let show = true;
+                if (filterKey === 'I_OWE') show = dtype === 'I_OWE';
+                else if (filterKey === 'OWED_TO_ME') show = dtype === 'OWED_TO_ME';
+                else if (filterKey === 'PAID') show = st === 'PAID';
+                el.classList.toggle('hidden', !show);
+            });
+
+            ['ALL', 'I_OWE', 'OWED_TO_ME', 'PAID'].forEach((k) => {
+                const btn = document.getElementById('sal-tab-' + k);
+                if (!btn) return;
+                if (k === filterKey) {
+                    btn.className = 'px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-600 text-white transition';
+                } else {
+                    btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 transition';
+                }
+            });
+        }
+
         window.openProfileModal = openProfileModal;
         window.closeProfileModal = closeProfileModal;
+        window.openSalariedLoanForm = openSalariedLoanForm;
+        window.closeSalariedLoanForm = closeSalariedLoanForm;
+        window.applySalariedLoanPreset = applySalariedLoanPreset;
+        window.syncSalariedLoanDirectionUI = syncSalariedLoanDirectionUI;
+        window.filterSalariedLoans = filterSalariedLoans;
     </script>
 </body>
 </html>`;
 }
+

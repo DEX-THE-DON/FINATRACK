@@ -50,6 +50,52 @@ export function resolveEffectiveComplianceDeadlines(c: any, dbDocs: any[]): any[
   return Array.from(merged.values());
 }
 
+export function getSavedMaintenanceSchedules(c: any): any[] {
+  try {
+    const raw = getCookie(c, 'finatrack_maint_schedules') || '';
+    if (raw) {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
+export function saveMaintenanceSchedulesCookie(c: any, list: any[]): void {
+  try {
+    const trimmed = (list || []).slice(0, 30);
+    setCookie(c, 'finatrack_maint_schedules', encodeURIComponent(JSON.stringify(trimmed)), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+export function resolveEffectiveMaintenanceSchedules(c: any, dbSchedules: any[]): any[] {
+  const cookieList = getSavedMaintenanceSchedules(c);
+  const merged = new Map<string, any>();
+  for (const m of (dbSchedules || [])) {
+    if (m && m.id) merged.set(String(m.id), m);
+  }
+  for (const m of cookieList) {
+    if (!m || !m.id) continue;
+    const existing = merged.get(String(m.id));
+    if (existing) {
+      merged.set(String(m.id), {
+        ...existing,
+        cost_kes: m.cost_kes ?? existing.cost_kes ?? existing.brake_pad_cost_last ?? 0,
+        service_odometer: m.service_odometer ?? existing.service_odometer,
+      });
+    } else {
+      merged.set(String(m.id), m);
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) =>
+    String(b.last_service_date || '').localeCompare(String(a.last_service_date || ''))
+  );
+}
+
 export function getSavedRiderLogs(c: any): any[] {
   try {
     const raw = getCookie(c, 'finatrack_rider_logs') || '';
@@ -79,7 +125,22 @@ export function resolveEffectiveRiderLogs(c: any, dbLogs: any[]): any[] {
     if (l && l.id) merged.set(String(l.id), l);
   }
   for (const l of cookieLogs) {
-    if (l && l.id && !merged.has(String(l.id))) merged.set(String(l.id), l);
+    if (!l || !l.id) continue;
+    const existing = merged.get(String(l.id));
+    if (existing) {
+      merged.set(String(l.id), {
+        ...existing,
+        uber_earned: l.uber_earned ?? existing.uber_earned,
+        bolt_earned: l.bolt_earned ?? existing.bolt_earned,
+        little_earned: l.little_earned ?? existing.little_earned,
+        direct_cash_earned: l.direct_cash_earned ?? existing.direct_cash_earned,
+        cash_in_hand: l.cash_in_hand ?? existing.cash_in_hand,
+        app_wallet_balance: l.app_wallet_balance ?? existing.app_wallet_balance,
+        channel: l.channel ?? existing.channel,
+      });
+    } else {
+      merged.set(String(l.id), l);
+    }
   }
   return Array.from(merged.values()).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 }
@@ -306,8 +367,31 @@ riderRoutes.post('/rider/logs', async (c) => {
 
   const earningsAccId = body['earnings_account_id'] ? String(body['earnings_account_id']) : null;
   const expenseAccId = body['expense_account_id'] ? String(body['expense_account_id']) : null;
+  const channel = body['channel'] ? String(body['channel']).trim() : 'ALL';
 
-  const totalEarnedKes = rawEarned;
+  // Optional Platform Split & Cash-in-Hand vs App Wallet Reconciliation
+  const uberEarned = Math.max(0, parseFloat(String(body['uber_earned'] || '0')) || 0);
+  const boltEarned = Math.max(0, parseFloat(String(body['bolt_earned'] || '0')) || 0);
+  const littleEarned = Math.max(0, parseFloat(String(body['little_earned'] || '0')) || 0);
+  const directCashEarned = Math.max(0, parseFloat(String(body['direct_cash_earned'] || '0')) || 0);
+  const platformSum = uberEarned + boltEarned + littleEarned + directCashEarned;
+
+  const totalEarnedKes = rawEarned > 0 ? rawEarned : platformSum;
+  const rawCashInHand = parseFloat(String(body['cash_in_hand'] || '0')) || 0;
+  const rawAppWallet = parseFloat(String(body['app_wallet_balance'] || '0')) || 0;
+  const cashInHandKes = rawCashInHand > 0 || rawAppWallet > 0 ? rawCashInHand : totalEarnedKes;
+  const appWalletKes = rawAppWallet > 0 ? rawAppWallet : Math.max(0, totalEarnedKes - cashInHandKes);
+
+  const platformMeta = {
+    channel,
+    uber_earned: uberEarned,
+    bolt_earned: boltEarned,
+    little_earned: littleEarned,
+    direct_cash_earned: directCashEarned,
+    cash_in_hand: cashInHandKes,
+    app_wallet_balance: appWalletKes,
+  };
+
   const fuelCostKes = rawFuelCost;
   const foodSpentKes = rawFood;
   const maintCostKes = rawMaint;
@@ -365,7 +449,7 @@ riderRoutes.post('/rider/logs', async (c) => {
       if (!stintRes) {
         stintRes = { id: `shift-${Date.now()}-${i}`, ...stintPayload };
       }
-      savedCookieLogs.unshift(stintRes);
+      savedCookieLogs.unshift({ ...stintRes, ...(i === 0 ? platformMeta : { channel }) });
       if (stintRes && !primaryLogId) {
         primaryLogId = stintRes.id;
       }
@@ -412,7 +496,7 @@ riderRoutes.post('/rider/logs', async (c) => {
     if (!newLog) {
       newLog = { id: `shift-${Date.now()}`, ...insertPayload, power_type: powerType, swaps_count: swapsCount };
     }
-    savedCookieLogs.unshift(newLog);
+    savedCookieLogs.unshift({ ...newLog, ...platformMeta });
     if (newLog) primaryLogId = newLog.id;
   }
 
@@ -762,7 +846,9 @@ riderRoutes.post('/rider/odometer/update', async (c) => {
 riderRoutes.post('/rider/maintenance/log', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
-  const bikeId = body['bike_id'] ? String(body['bike_id']) : null;
+  const rawBikeId = body['bike_id'] ? String(body['bike_id']).trim() : '';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawBikeId);
+  const bikeId = isUuid ? rawBikeId : null;
   const serviceType = String(body['service_type'] || 'Oil Change & Brake Service').trim();
   const serviceDate = String(body['service_date'] || new Date().toISOString().slice(0, 10));
   const intervalWeeks = parseInt(String(body['interval_weeks'] || '3'), 10) || 3;
@@ -794,48 +880,78 @@ riderRoutes.post('/rider/maintenance/log', async (c) => {
     });
   }
 
+  const effectiveNotes = notes || `Service on ${serviceDate}: Oil (Ksh ${oilCost}), Pads (Ksh ${brakePadCost}), Labor (Ksh ${laborCost})` + (finalTotalCost > 0 ? ` • Total: Ksh ${finalTotalCost.toLocaleString()}` : '');
+
   // Insert or record in maintenance_schedules
   const insertPayload: any = {
-    bike_id: bikeId || null,
+    bike_id: bikeId,
     service_type: serviceType,
     interval_weeks: intervalWeeks,
     last_service_date: serviceDate,
     next_due_date: nextDueDate,
     last_brake_pad_date: brakePadCost > 0 ? serviceDate : null,
-    brake_pad_cost_last: brakePadCost,
-    notes: notes || `Service on ${serviceDate}: Oil (Ksh ${oilCost}), Pads (Ksh ${brakePadCost}), Labor (Ksh ${laborCost})`,
+    brake_pad_cost_last: brakePadCost > 0 ? brakePadCost : finalTotalCost,
+    notes: effectiveNotes,
   };
   if (userId) {
     insertPayload.user_id = userId;
   }
 
-  const { error } = await supabase.from('maintenance_schedules').insert(insertPayload);
-  if (error) {
-    console.error('Failed to log maintenance schedule:', error);
-  }
+  let createdMaint: any = null;
+  try {
+    const { data, error } = await supabase.from('maintenance_schedules').insert(insertPayload).select().single();
+    if (!error && data) {
+      createdMaint = data;
+    } else if (error) {
+      console.error('Failed to log maintenance schedule in DB:', error);
+    }
+  } catch (e) {}
+
+  const fallbackMaint = {
+    id: createdMaint?.id || ('maint_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)),
+    user_id: userId || 'demo',
+    bike_id: rawBikeId || null,
+    service_type: serviceType,
+    interval_weeks: intervalWeeks,
+    last_service_date: serviceDate,
+    next_due_date: nextDueDate,
+    last_brake_pad_date: brakePadCost > 0 ? serviceDate : null,
+    brake_pad_cost_last: brakePadCost > 0 ? brakePadCost : finalTotalCost,
+    cost_kes: finalTotalCost,
+    service_odometer: serviceOdometer > 0 ? serviceOdometer : undefined,
+    notes: effectiveNotes,
+    created_at: new Date().toISOString(),
+  };
+  const savedMaintList = getSavedMaintenanceSchedules(c);
+  savedMaintList.unshift(fallbackMaint);
+  saveMaintenanceSchedulesCookie(c, savedMaintList);
 
   // Deduct from account & sync to finance ledger automatically
   if (finalTotalCost > 0) {
     if (accountId) {
-      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
-      if (acc) {
-        const newBal = toDecimal(acc.balance).minus(finalTotalCost).toNumber();
-        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
-      }
+      try {
+        const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+        if (acc) {
+          const newBal = toDecimal(acc.balance).minus(finalTotalCost).toNumber();
+          await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+        }
+      } catch (e) {}
     }
 
-    await supabase.from('transactions').insert({
-      ...(userId ? { user_id: userId } : {}),
-      account_id: accountId || null,
-      transaction_type: 'EXPENSE',
-      category: 'Vehicle Maintenance & Repairs',
-      amount: finalTotalCost,
-      date: serviceDate,
-      description: `Vehicle Service: ${serviceType} (${notes || 'Oil, Brake Pads & Labor'})`,
-    });
+    try {
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: accountId || null,
+        transaction_type: 'EXPENSE',
+        category: 'Vehicle Maintenance & Repairs',
+        amount: finalTotalCost,
+        date: serviceDate,
+        description: `Vehicle Service: ${serviceType} (${notes || 'Oil, Brake Pads & Labor'})`,
+      });
+    } catch (e) {}
   }
 
-  return c.redirect('/rider?toast=Maintenance+service+recorded+and+ledger+updated', 303);
+  return c.redirect('/rider?toast=' + encodeURIComponent(`Service & repair logged (${serviceType}${finalTotalCost > 0 ? ' • Ksh ' + finalTotalCost.toLocaleString() : ''})#maint-card`), 303);
 });
 
 riderRoutes.post('/rider/maintenance/create', async (c) => {
@@ -845,30 +961,83 @@ riderRoutes.post('/rider/maintenance/create', async (c) => {
   const intervalWeeks = parseInt(String(body['interval_weeks'] || '3'), 10) || 3;
   const lastDate = body['last_service_date'] ? String(body['last_service_date']) : new Date().toISOString().slice(0, 10);
   const nextDate = new Date(new Date(lastDate).getTime() + intervalWeeks * 7 * 86400000).toISOString().slice(0, 10);
+  const notes = body['notes'] ? String(body['notes']).trim() : null;
 
-  const { error } = await supabase.from('maintenance_schedules').insert({
-    ...(userId ? { user_id: userId } : {}),
+  let createdMaint: any = null;
+  try {
+    const { data, error } = await supabase.from('maintenance_schedules').insert({
+      ...(userId ? { user_id: userId } : {}),
+      service_type: serviceType,
+      interval_weeks: intervalWeeks,
+      last_service_date: lastDate,
+      next_due_date: nextDate,
+      notes,
+    }).select().single();
+    if (!error && data) createdMaint = data;
+  } catch (e) {}
+
+  const savedMaintList = getSavedMaintenanceSchedules(c);
+  savedMaintList.unshift(createdMaint || {
+    id: 'maint_' + Date.now(),
+    user_id: userId || 'demo',
     service_type: serviceType,
     interval_weeks: intervalWeeks,
     last_service_date: lastDate,
     next_due_date: nextDate,
-    notes: body['notes'] ? String(body['notes']).trim() : null,
+    notes,
   });
+  saveMaintenanceSchedulesCookie(c, savedMaintList);
 
-  if (error) {
-    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to create schedule: ' + error.message)}`, 303);
+  return c.redirect('/rider?toast=Maintenance+schedule+added#maint-card', 303);
+});
+
+riderRoutes.post('/rider/maintenance/service/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const savedMaintList = getSavedMaintenanceSchedules(c);
+  let intervalWeeks = 3;
+  const targetCookie = savedMaintList.find((m: any) => String(m.id) === String(id));
+  if (targetCookie && targetCookie.interval_weeks) {
+    intervalWeeks = Number(targetCookie.interval_weeks) || 3;
+  } else {
+    try {
+      const { data: existing } = await supabase.from('maintenance_schedules').select('*').eq('id', id).single();
+      if (existing && existing.interval_weeks) intervalWeeks = Number(existing.interval_weeks) || 3;
+    } catch (e) {}
   }
-  return c.redirect('/rider?toast=Maintenance+schedule+added', 303);
+
+  const nextDueDate = new Date(Date.now() + intervalWeeks * 7 * 86400000).toISOString().slice(0, 10);
+
+  try {
+    await supabase.from('maintenance_schedules').update({
+      last_service_date: todayStr,
+      next_due_date: nextDueDate,
+    }).eq('id', id);
+  } catch (e) {}
+
+  const updatedCookieList = savedMaintList.map((m: any) =>
+    String(m.id) === String(id)
+      ? { ...m, last_service_date: todayStr, next_due_date: nextDueDate }
+      : m
+  );
+  saveMaintenanceSchedulesCookie(c, updatedCookieList);
+
+  return c.redirect('/rider?toast=Service+marked+done+today#maint-card', 303);
 });
 
 riderRoutes.post('/rider/maintenance/delete/:id', async (c) => {
   const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const { error } = await supabase.from('maintenance_schedules').delete().eq('id', id);
-  if (error) {
-    return c.redirect(`/rider?toast=${encodeURIComponent('Failed to delete schedule: ' + error.message)}`, 303);
-  }
-  return c.redirect('/rider?toast=Maintenance+schedule+removed', 303);
+  try {
+    await supabase.from('maintenance_schedules').delete().eq('id', id);
+  } catch (e) {}
+
+  const savedMaintList = getSavedMaintenanceSchedules(c).filter((m: any) => String(m.id) !== String(id));
+  saveMaintenanceSchedulesCookie(c, savedMaintList);
+
+  return c.redirect('/rider?toast=Maintenance+schedule+removed#maint-card', 303);
 });
 
 riderRoutes.post('/rider/compliance/create', async (c) => {
@@ -1129,5 +1298,105 @@ riderRoutes.post('/rider/financing/delete/:id', async (c) => {
   }
   return c.redirect('/rider?toast=Lease+record+deleted', 303);
 });
+
+// ------------------------------------------------------------------------------
+// 🚨 ROADSIDE EMERGENCY, PUNCTURE & FINE LEAK LOGGER
+// ------------------------------------------------------------------------------
+export interface RoadsideIncidentRecord {
+  id: string;
+  date: string;
+  incident_type: 'PUNCTURE_TIRE' | 'KANJO_POLICE_FINE' | 'BREAKDOWN_TOW' | 'EMERGENCY_RESCUE' | 'OTHER';
+  title: string;
+  amount: number;
+  location?: string;
+  bike_plate?: string;
+  account_id?: string;
+  notes?: string;
+}
+
+export function getRoadsideIncidents(c: any): RoadsideIncidentRecord[] {
+  try {
+    const raw = getCookie(c, 'finatrack_roadside_incidents') || '';
+    if (raw) {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
+export function saveRoadsideIncidentsCookie(c: any, list: RoadsideIncidentRecord[]): void {
+  try {
+    const trimmed = (list || []).slice(0, 40);
+    setCookie(c, 'finatrack_roadside_incidents', encodeURIComponent(JSON.stringify(trimmed)), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+riderRoutes.post('/rider/incidents/create', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+
+  const incident_type = (String(body['incident_type'] || 'PUNCTURE_TIRE').toUpperCase() as RoadsideIncidentRecord['incident_type']);
+  const title = String(body['title'] || 'Roadside Incident / Repair').trim();
+  const amount = Math.max(0, parseFloat(String(body['amount'] || '0')) || 0);
+  const date = String(body['date'] || new Date().toISOString().slice(0, 10));
+  const location = String(body['location'] || '').trim();
+  const bike_plate = String(body['bike_plate'] || '').trim();
+  const account_id = String(body['account_id'] || '').trim();
+  const notes = String(body['notes'] || '').trim();
+
+  if (!title || amount <= 0) {
+    return c.redirect('/rider?toast=Please+enter+incident+description+and+valid+amount#roadside-incidents-card', 303);
+  }
+
+  const newRecord: RoadsideIncidentRecord = {
+    id: 'inc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+    date,
+    incident_type,
+    title,
+    amount,
+    location,
+    bike_plate,
+    account_id: account_id || undefined,
+    notes,
+  };
+
+  const current = getRoadsideIncidents(c);
+  saveRoadsideIncidentsCookie(c, [newRecord, ...current]);
+
+  // Optional Account Deduction & Ledger Sync
+  if (account_id && amount > 0) {
+    try {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', account_id).single();
+      if (acc) {
+        const newBal = toDecimal(acc.balance).minus(amount).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', account_id);
+      }
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id,
+        transaction_type: 'EXPENSE',
+        category: incident_type === 'KANJO_POLICE_FINE' ? 'Fines & Road Compliance' : 'Bike Maintenance & Repairs',
+        amount,
+        date,
+        description: `Roadside Leak (${incident_type.replace(/_/g, ' ')}): ${title}${location ? ` @ ${location}` : ''}`,
+      });
+    } catch (e) {}
+  }
+
+  return c.redirect(`/rider?toast=${encodeURIComponent(`🚨 Logged roadside leak: ${title} (Ksh ${amount.toLocaleString()})`)}#roadside-incidents-card`, 303);
+});
+
+riderRoutes.post('/rider/incidents/delete/:id', async (c) => {
+  const id = c.req.param('id');
+  const updated = getRoadsideIncidents(c).filter((inc) => String(inc.id) !== String(id));
+  saveRoadsideIncidentsCookie(c, updated);
+  return c.redirect('/rider?toast=Roadside+incident+record+removed#roadside-incidents-card', 303);
+});
+
 
 

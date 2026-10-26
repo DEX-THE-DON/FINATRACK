@@ -288,3 +288,4 @@ traderRoutes.post('/trader/config', async (c) => {
   saveTraderConfigCookie(c, updated);
   return c.redirect('/trader?toast=Stall+and+Soko+settings+updated+successfully', 303);
 });
+
