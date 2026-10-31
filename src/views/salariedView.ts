@@ -76,6 +76,9 @@ export function renderSalariedDashboard(data: {
             } else {
                 document.documentElement.classList.remove('dark');
             }
+            if (localStorage.getItem('finatrack_privacy_blur') === '1') {
+                document.documentElement.classList.add('privacy-blur');
+            }
         })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -116,6 +119,14 @@ export function renderSalariedDashboard(data: {
         .backdrop-blur-xs { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
         .rounded-xs { border-radius: 0.125rem; }
         .active\:scale-98:active { transform: scale(0.98); }
+        html.privacy-blur .privacy-amount {
+            filter: blur(7px);
+            user-select: none;
+            transition: filter 0.2s ease;
+        }
+        html.privacy-blur .privacy-amount:hover {
+            filter: blur(0px);
+        }
         @supports (padding: max(0px)) {
             .safe-area-bottom {
                 padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
@@ -172,6 +183,10 @@ export function renderSalariedDashboard(data: {
                     <span class="hidden sm:inline">Sign In</span>
                 </a>`}
 
+                <button onclick="togglePrivacyBlur()" class="privacy-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Hide or Show Balances">
+                    👁️
+                </button>
+
                 <button onclick="toggleDarkMode()" class="dark-mode-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Toggle Dark/Light Mode">
                     🌙
                 </button>
@@ -226,17 +241,17 @@ export function renderSalariedDashboard(data: {
                 </div>
                 <div class="p-3 bg-slate-950/75 border border-emerald-500/30 rounded-2xl">
                     <span class="text-[10px] font-bold text-emerald-300 uppercase block">💵 Safe Daily Spend</span>
-                    <span class="text-base sm:text-2xl font-black text-emerald-400 break-words">${formatKes(safeDailySpend)}/d</span>
+                    <span class="text-base sm:text-2xl font-black text-emerald-400 break-words privacy-amount">${formatKes(safeDailySpend)}/d</span>
                     <span class="text-[9px] block mt-0.5 ${paceStatus.color} px-1.5 py-0.5 rounded-full inline-block font-extrabold border">${paceStatus.label}</span>
                 </div>
                 <div class="p-3 bg-slate-950/75 border border-cyan-500/30 rounded-2xl">
                     <span class="text-[10px] font-bold text-cyan-300 uppercase block">🏦 Net Take-Home</span>
-                    <span class="text-base sm:text-2xl font-black text-cyan-400 break-words">${formatKes(salaried_config.monthly_net_salary)}</span>
+                    <span class="text-base sm:text-2xl font-black text-cyan-400 break-words privacy-amount">${formatKes(salaried_config.monthly_net_salary)}</span>
                     <span class="text-[10px] text-gray-400 block mt-0.5">After PAYE &amp; deductions</span>
                 </div>
                 <div class="p-3 bg-slate-950/75 border border-amber-500/30 rounded-2xl">
                     <span class="text-[10px] font-bold text-amber-300 uppercase block">⚡ Blended Inflows</span>
-                    <span class="text-base sm:text-2xl font-black text-amber-400 break-words">${formatKes(totalBlendedMonthly)}</span>
+                    <span class="text-base sm:text-2xl font-black text-amber-400 break-words privacy-amount">${formatKes(totalBlendedMonthly)}</span>
                     <span class="text-[10px] text-amber-300 block mt-0.5">${salaried_config.side_hustle_estimate > 0 ? `+${formatKes(salaried_config.side_hustle_estimate)} hustle` : 'Salary + side hustle'}</span>
                 </div>
             </div>
@@ -871,6 +886,11 @@ export function renderSalariedDashboard(data: {
                 btn.innerHTML = isDark ? '☀️' : '🌙';
                 btn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
             });
+            const isBlurred = document.documentElement.classList.contains('privacy-blur');
+            document.querySelectorAll('.privacy-toggle-btn').forEach(btn => {
+                btn.innerHTML = isBlurred ? '🙈' : '👁️';
+                btn.title = isBlurred ? 'Show Balances (Privacy Mode On)' : 'Hide Balances (Privacy Mode)';
+            });
         }
 
         function toggleDarkMode() {
@@ -878,6 +898,13 @@ export function renderSalariedDashboard(data: {
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
             updateThemeIcon();
         }
+
+        function togglePrivacyBlur() {
+            const isBlurred = document.documentElement.classList.toggle('privacy-blur');
+            localStorage.setItem('finatrack_privacy_blur', isBlurred ? '1' : '0');
+            updateThemeIcon();
+        }
+        window.togglePrivacyBlur = togglePrivacyBlur;
 
         document.addEventListener('DOMContentLoaded', () => {
             updateThemeIcon();

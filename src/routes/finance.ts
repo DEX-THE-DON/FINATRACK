@@ -1935,17 +1935,24 @@ financeRoutes.get('/finance/statement', async (c) => {
   let accQuery = supabase.from('accounts').select('*').order('created_at', { ascending: true });
   let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false }).order('created_at', { ascending: false });
   let debtQuery = supabase.from('debts').select('*').order('due_at', { ascending: true });
+  let goalQuery = supabase.from('goals').select('*').order('created_at', { ascending: true });
 
   if (userId) {
     accQuery = accQuery.eq('user_id', userId);
     txQuery = txQuery.eq('user_id', userId);
     debtQuery = debtQuery.eq('user_id', userId);
+    goalQuery = goalQuery.eq('user_id', userId);
   }
 
-  const [accRes, txRes, debtRes] = await Promise.all([accQuery, txQuery, debtQuery]);
+  const [accRes, txRes, debtRes, goalRes] = await Promise.all([accQuery, txQuery, debtQuery, goalQuery]);
   const accounts = accRes.data || [];
   const transactions = sortTransactionsLatestFirst(txRes.data || []);
   const debts = debtRes.data || [];
+  const savedHorizons = getSavedGoalHorizons(c);
+  const goals = (goalRes.data || []).map((g: any) => ({
+    ...g,
+    horizon: resolveGoalHorizon(g, savedHorizons),
+  }));
 
   const totalBalance = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
   
@@ -1971,6 +1978,8 @@ financeRoutes.get('/finance/statement', async (c) => {
     username: username || 'Dennis',
     accounts,
     transactions,
+    goals,
+    debts,
     total_balance: totalBalance,
     monthly_income: monthlyIncome,
     monthly_expenses: monthlyExpenses,

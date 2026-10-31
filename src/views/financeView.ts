@@ -213,6 +213,9 @@ export function renderFinanceDashboard(data: any): string {
             } else {
                 document.documentElement.classList.remove('dark');
             }
+            if (localStorage.getItem('finatrack_privacy_blur') === '1') {
+                document.documentElement.classList.add('privacy-blur');
+            }
         })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -241,6 +244,15 @@ export function renderFinanceDashboard(data: any): string {
             max-width: 100vw;
         }
         .convertible-amount { transition: all 0.2s ease-in-out; }
+        html.privacy-blur .convertible-amount,
+        html.privacy-blur .privacy-amount {
+            filter: blur(7px);
+            user-select: none;
+        }
+        html.privacy-blur .convertible-amount:hover,
+        html.privacy-blur .privacy-amount:hover {
+            filter: blur(0px);
+        }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
         .dark ::-webkit-scrollbar-thumb { background: #334155; }
@@ -1192,6 +1204,11 @@ export function renderFinanceDashboard(data: any): string {
                 btn.innerHTML = isDark ? '☀️' : '🌙';
                 btn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
             });
+            const isBlurred = document.documentElement.classList.contains('privacy-blur');
+            document.querySelectorAll('.privacy-toggle-btn').forEach(btn => {
+                btn.innerHTML = isBlurred ? '🙈' : '👁️';
+                btn.title = isBlurred ? 'Show Balances (Privacy Mode On)' : 'Hide Balances (Privacy Mode)';
+            });
         }
 
         function toggleDarkMode() {
@@ -1199,6 +1216,13 @@ export function renderFinanceDashboard(data: any): string {
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
             updateThemeIcon();
         }
+
+        function togglePrivacyBlur() {
+            const isBlurred = document.documentElement.classList.toggle('privacy-blur');
+            localStorage.setItem('finatrack_privacy_blur', isBlurred ? '1' : '0');
+            updateThemeIcon();
+        }
+        window.togglePrivacyBlur = togglePrivacyBlur;
 
         // Expose pagination & filter functions globally to guarantee inline button clicks always work
         window.accNextPage = accNextPage;
@@ -2587,6 +2611,10 @@ export function renderFinanceDashboard(data: any): string {
                     <span class="hidden sm:inline">Sign In</span>
                 </a>
                 `}
+
+                <button onclick="togglePrivacyBlur()" class="privacy-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Hide or Show Balances">
+                    👁️
+                </button>
 
                 <button onclick="toggleDarkMode()" class="dark-mode-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Toggle Dark/Light Mode">
                     🌙

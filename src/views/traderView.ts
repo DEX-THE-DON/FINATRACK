@@ -50,6 +50,9 @@ export function renderTraderDashboard(data: {
             } else {
                 document.documentElement.classList.remove('dark');
             }
+            if (localStorage.getItem('finatrack_privacy_blur') === '1') {
+                document.documentElement.classList.add('privacy-blur');
+            }
         })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -90,6 +93,14 @@ export function renderTraderDashboard(data: {
         .backdrop-blur-xs { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
         .rounded-xs { border-radius: 0.125rem; }
         .active\:scale-98:active { transform: scale(0.98); }
+        html.privacy-blur .privacy-amount {
+            filter: blur(7px);
+            user-select: none;
+            transition: filter 0.2s ease;
+        }
+        html.privacy-blur .privacy-amount:hover {
+            filter: blur(0px);
+        }
         @supports (padding: max(0px)) {
             .safe-area-bottom {
                 padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
@@ -146,6 +157,10 @@ export function renderTraderDashboard(data: {
                     <span class="hidden sm:inline">Sign In</span>
                 </a>`}
 
+                <button onclick="togglePrivacyBlur()" class="privacy-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Hide or Show Balances">
+                    👁️
+                </button>
+
                 <button onclick="toggleDarkMode()" class="dark-mode-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Toggle Dark/Light Mode">
                     🌙
                 </button>
@@ -192,22 +207,22 @@ export function renderTraderDashboard(data: {
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
                 <div class="p-3 bg-slate-950/75 border border-emerald-500/30 rounded-2xl">
                     <span class="text-[10px] font-bold text-emerald-300 uppercase block">🎯 Daily Net Target</span>
-                    <span class="text-base sm:text-xl font-black text-white break-words">${formatKes(targetFloor)}</span>
+                    <span class="text-base sm:text-xl font-black text-white break-words privacy-amount">${formatKes(targetFloor)}</span>
                     <span class="text-[10px] text-emerald-400 block mt-0.5">${isTargetHit ? '🟢 Target Met' : '⏳ Floor to Hit Today'}</span>
                 </div>
                 <div class="p-3 bg-slate-950/75 border border-amber-500/30 rounded-2xl">
                     <span class="text-[10px] font-bold text-amber-300 uppercase block">📦 Restock Fund</span>
-                    <span class="text-base sm:text-xl font-black text-amber-400 break-words">${formatKes(trader_config.default_restock_kes)}</span>
+                    <span class="text-base sm:text-xl font-black text-amber-400 break-words privacy-amount">${formatKes(trader_config.default_restock_kes)}</span>
                     <span class="text-[10px] text-gray-400 block mt-0.5">Protected Soko Capital</span>
                 </div>
                 <div class="p-3 bg-slate-950/75 border border-rose-500/30 rounded-2xl">
                     <span class="text-[10px] font-bold text-rose-300 uppercase block">📒 Daftari (Owed)</span>
-                    <span class="text-base sm:text-xl font-black text-rose-400 break-words">${formatKes(totalUnpaidCredit)}</span>
+                    <span class="text-base sm:text-xl font-black text-rose-400 break-words privacy-amount">${formatKes(totalUnpaidCredit)}</span>
                     <span class="text-[10px] text-rose-300 block mt-0.5">${unpaidCount} customer${unpaidCount === 1 ? '' : 's'}</span>
                 </div>
                 <div class="p-3 bg-slate-950/75 border border-cyan-500/30 rounded-2xl">
                     <span class="text-[10px] font-bold text-cyan-300 uppercase block">🚀 Latest Net Profit</span>
-                    <span class="text-base sm:text-xl font-black text-cyan-400 break-words">${formatKes(latestNet)}</span>
+                    <span class="text-base sm:text-xl font-black text-cyan-400 break-words privacy-amount">${formatKes(latestNet)}</span>
                     <span class="text-[10px] text-cyan-300 block mt-0.5">${latestOverflow > 0 ? `+${formatKes(latestOverflow)} swept` : 'Last closeout'}</span>
                 </div>
             </div>
@@ -593,6 +608,11 @@ export function renderTraderDashboard(data: {
                 btn.innerHTML = isDark ? '☀️' : '🌙';
                 btn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
             });
+            var isBlurred = document.documentElement.classList.contains('privacy-blur');
+            document.querySelectorAll('.privacy-toggle-btn').forEach(function(btn) {
+                btn.innerHTML = isBlurred ? '🙈' : '👁️';
+                btn.title = isBlurred ? 'Show Balances (Privacy Mode On)' : 'Hide Balances (Privacy Mode)';
+            });
         }
 
         function toggleDarkMode() {
@@ -600,6 +620,13 @@ export function renderTraderDashboard(data: {
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
             updateThemeIcon();
         }
+
+        function togglePrivacyBlur() {
+            var isBlurred = document.documentElement.classList.toggle('privacy-blur');
+            localStorage.setItem('finatrack_privacy_blur', isBlurred ? '1' : '0');
+            updateThemeIcon();
+        }
+        window.togglePrivacyBlur = togglePrivacyBlur;
 
         document.addEventListener('DOMContentLoaded', function() {
             updateThemeIcon();
