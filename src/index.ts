@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
-import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getRoadsideIncidents } from './routes/rider';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
 import { exportRoutes } from './routes/export';
@@ -738,6 +738,7 @@ app.get('/rider', async (c) => {
 
   const primaryActiveBike = (activeBikes || []).find((b: any) => b.is_active === 1) || activeBikes[0] || null;
   const strictSaverConfig = getStrictSaverConfig(c, primaryActiveBike);
+  const platformRemittanceConfig = getPlatformRemittanceConfig(c);
 
   const html = renderRiderDashboard({
     active_bike: primaryActiveBike,
@@ -745,6 +746,7 @@ app.get('/rider', async (c) => {
     rider_logs: shiftLogs,
     odometer_config: odometerConfig,
     strict_saver_config: strictSaverConfig,
+    platform_remittance: platformRemittanceConfig,
     time_intelligence: timeIntelligence,
     maintenance_schedules: resolveEffectiveMaintenanceSchedules(c, maintenance),
     compliance_deadlines: resolveEffectiveComplianceDeadlines(c, compliance),

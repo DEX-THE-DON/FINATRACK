@@ -301,6 +301,70 @@ export function saveStrictSaverConfigCookie(
   } catch (e) {}
 }
 
+// ------------------------------------------------------------------------------
+// 🚗 PLATFORM CASH REMITTANCE & LOCKOUT THRESHOLD CONFIG (UBER / BOLT)
+// ------------------------------------------------------------------------------
+export interface PlatformRemittanceConfig {
+  uber_owed: number;
+  bolt_owed: number;
+  other_owed: number;
+  total_owed: number;
+  lockout_threshold_kes: number; // default 6000 KES (Uber Kenya lockout threshold)
+  last_remitted_date?: string;
+  last_remitted_amount?: number;
+  last_remitted_platform?: string;
+  notes?: string;
+}
+
+export function getPlatformRemittanceConfig(c: any): PlatformRemittanceConfig {
+  let uberOwed = 0;
+  let boltOwed = 0;
+  let otherOwed = 0;
+  let lockoutThreshold = 6000;
+  let lastRemittedDate = '';
+  let lastRemittedAmt = 0;
+  let lastRemittedPlatform = '';
+  let notes = '';
+
+  try {
+    const raw = getCookie(c, 'finatrack_platform_remittance') || '';
+    if (raw) {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      if (typeof parsed.uber_owed === 'number' && !isNaN(parsed.uber_owed)) uberOwed = Math.max(0, parsed.uber_owed);
+      if (typeof parsed.bolt_owed === 'number' && !isNaN(parsed.bolt_owed)) boltOwed = Math.max(0, parsed.bolt_owed);
+      if (typeof parsed.other_owed === 'number' && !isNaN(parsed.other_owed)) otherOwed = Math.max(0, parsed.other_owed);
+      if (typeof parsed.lockout_threshold_kes === 'number' && parsed.lockout_threshold_kes > 0) lockoutThreshold = parsed.lockout_threshold_kes;
+      if (parsed.last_remitted_date) lastRemittedDate = String(parsed.last_remitted_date);
+      if (typeof parsed.last_remitted_amount === 'number') lastRemittedAmt = parsed.last_remitted_amount;
+      if (parsed.last_remitted_platform) lastRemittedPlatform = String(parsed.last_remitted_platform);
+      if (parsed.notes) notes = String(parsed.notes);
+    }
+  } catch (e) {}
+
+  const totalOwed = Math.round((uberOwed + boltOwed + otherOwed) * 100) / 100;
+  return {
+    uber_owed: uberOwed,
+    bolt_owed: boltOwed,
+    other_owed: otherOwed,
+    total_owed: totalOwed,
+    lockout_threshold_kes: lockoutThreshold,
+    last_remitted_date: lastRemittedDate,
+    last_remitted_amount: lastRemittedAmt,
+    last_remitted_platform: lastRemittedPlatform,
+    notes,
+  };
+}
+
+export function savePlatformRemittanceConfigCookie(c: any, cfg: Partial<PlatformRemittanceConfig>): void {
+  try {
+    setCookie(c, 'finatrack_platform_remittance', encodeURIComponent(JSON.stringify(cfg)), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
 
 
 // ------------------------------------------------------------------------------
@@ -382,6 +446,22 @@ riderRoutes.post('/rider/logs', async (c) => {
   const cashInHandKes = rawCashInHand > 0 || rawAppWallet > 0 ? rawCashInHand : totalEarnedKes;
   const appWalletKes = rawAppWallet > 0 ? rawAppWallet : Math.max(0, totalEarnedKes - cashInHandKes);
 
+  // Unremitted Cash Commission (e.g. Uber commission on cash trips held by driver)
+  const unremittedUber = Math.max(0, parseFloat(String(body['unremitted_uber_commission'] || '0')) || 0);
+  const unremittedBolt = Math.max(0, parseFloat(String(body['unremitted_bolt_commission'] || '0')) || 0);
+  const totalUnremittedCommission = unremittedUber + unremittedBolt;
+
+  if (totalUnremittedCommission > 0) {
+    const curPlat = getPlatformRemittanceConfig(c);
+    const updatedPlat: PlatformRemittanceConfig = {
+      ...curPlat,
+      uber_owed: Math.round((curPlat.uber_owed + unremittedUber) * 100) / 100,
+      bolt_owed: Math.round((curPlat.bolt_owed + unremittedBolt) * 100) / 100,
+      total_owed: Math.round((curPlat.total_owed + totalUnremittedCommission) * 100) / 100,
+    };
+    savePlatformRemittanceConfigCookie(c, updatedPlat);
+  }
+
   const platformMeta = {
     channel,
     uber_earned: uberEarned,
@@ -390,6 +470,9 @@ riderRoutes.post('/rider/logs', async (c) => {
     direct_cash_earned: directCashEarned,
     cash_in_hand: cashInHandKes,
     app_wallet_balance: appWalletKes,
+    unremitted_uber_commission: unremittedUber,
+    unremitted_bolt_commission: unremittedBolt,
+    total_unremitted_commission: totalUnremittedCommission,
   };
 
   const fuelCostKes = rawFuelCost;
@@ -770,6 +853,98 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
   const reqGross = netFloorKes + fuelAllowanceKes + personalCapKes + dailyKodiKes;
   return c.redirect(
     `/rider?toast=${encodeURIComponent(`Strict Saver Contract locked! Net Target: Ksh ${netFloorKes.toLocaleString()} • Fuel: Ksh ${fuelAllowanceKes.toLocaleString()} • Lunch: Ksh ${lunchAllowanceKes.toLocaleString()} • Airtime: Ksh ${airtimeAllowanceKes.toLocaleString()} • Required Gross: Ksh ${reqGross.toLocaleString()}`)}#shift-briefing-card`,
+    303
+  );
+});
+
+riderRoutes.post('/rider/platform-remittance/remit', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const platform = String(body['platform'] || 'uber').toLowerCase(); // 'uber' | 'bolt' | 'other'
+  const amount = Math.max(0, parseFloat(String(body['amount'] || '0')) || 0);
+  const payDate = String(body['payment_date'] || new Date().toISOString().slice(0, 10));
+  const accountId = body['account_id'] ? String(body['account_id']).trim() : null;
+  const syncFinanceLedger = body['sync_finance_ledger'] === '1' || body['sync_finance_ledger'] === 'true' || Boolean(accountId);
+
+  if (amount <= 0) {
+    return c.redirect('/rider?toast=' + encodeURIComponent('Please enter a valid remittance amount.') + '#platform-remittance-card', 303);
+  }
+
+  const curConfig = getPlatformRemittanceConfig(c);
+  let newUber = curConfig.uber_owed;
+  let newBolt = curConfig.bolt_owed;
+  let newOther = curConfig.other_owed;
+
+  if (platform === 'uber') {
+    newUber = Math.max(0, Math.round((newUber - amount) * 100) / 100);
+  } else if (platform === 'bolt') {
+    newBolt = Math.max(0, Math.round((newBolt - amount) * 100) / 100);
+  } else {
+    newOther = Math.max(0, Math.round((newOther - amount) * 100) / 100);
+  }
+
+  const newTotal = Math.round((newUber + newBolt + newOther) * 100) / 100;
+
+  savePlatformRemittanceConfigCookie(c, {
+    ...curConfig,
+    uber_owed: newUber,
+    bolt_owed: newBolt,
+    other_owed: newOther,
+    total_owed: newTotal,
+    last_remitted_date: payDate,
+    last_remitted_amount: amount,
+    last_remitted_platform: platform.toUpperCase(),
+  });
+
+  // If driver opted to sync to FinanceHub ledger or selected an account
+  if (syncFinanceLedger && accountId) {
+    try {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const newBal = toDecimal(acc.balance).minus(amount).toNumber();
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
+      }
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: accountId,
+        transaction_type: 'EXPENSE',
+        category: 'Platform Commission Remittance',
+        amount: amount,
+        date: payDate,
+        description: `Platform Remittance: ${platform.toUpperCase()} Commission (Paybill 898998) - Ksh ${amount.toLocaleString()}`,
+      });
+    } catch (e) {}
+  }
+
+  return c.redirect(
+    `/rider?toast=${encodeURIComponent(`Remitted Ksh ${amount.toLocaleString()} to ${platform.toUpperCase()}! Remaining balance owed: Ksh ${newTotal.toLocaleString()}.`)}#platform-remittance-card`,
+    303
+  );
+});
+
+riderRoutes.post('/rider/platform-remittance/update', async (c) => {
+  const body = await c.req.parseBody();
+  const uberOwed = Math.max(0, parseFloat(String(body['uber_owed'] || '0')) || 0);
+  const boltOwed = Math.max(0, parseFloat(String(body['bolt_owed'] || '0')) || 0);
+  const otherOwed = Math.max(0, parseFloat(String(body['other_owed'] || '0')) || 0);
+  const lockoutThreshold = Math.max(500, parseFloat(String(body['lockout_threshold_kes'] || '6000')) || 6000);
+  const notes = body['notes'] ? String(body['notes']).trim() : '';
+
+  const totalOwed = Math.round((uberOwed + boltOwed + otherOwed) * 100) / 100;
+  const curConfig = getPlatformRemittanceConfig(c);
+
+  savePlatformRemittanceConfigCookie(c, {
+    ...curConfig,
+    uber_owed: uberOwed,
+    bolt_owed: boltOwed,
+    other_owed: otherOwed,
+    total_owed: totalOwed,
+    lockout_threshold_kes: lockoutThreshold,
+    notes,
+  });
+
+  return c.redirect(
+    `/rider?toast=${encodeURIComponent(`Platform balances updated: Total owed Ksh ${totalOwed.toLocaleString()} (Lockout threshold: Ksh ${lockoutThreshold.toLocaleString()})`)}#platform-remittance-card`,
     303
   );
 });

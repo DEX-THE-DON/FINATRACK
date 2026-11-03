@@ -5,6 +5,7 @@ export function renderRiderDashboard(data: any): string {
     rider_logs = [],
     odometer_config = null,
     strict_saver_config = null,
+    platform_remittance = null,
     time_intelligence = {},
     maintenance_schedules = [],
     compliance_deadlines = [],
@@ -134,6 +135,32 @@ export function renderRiderDashboard(data: any): string {
   const lastShiftShortfall = lastShift ? Math.max(0, lastShiftStrictTarget - Math.max(0, lastShiftNet)) : 0;
   const lastShiftOverflow = lastShift ? Math.max(0, lastShiftNet - lastShiftStrictTarget) : 0;
   const requiredGrossBeforeHome = strictNetFloor + strictFuelAllowance + strictPersonalCap + strictDailyKodi + cumulativeOverdueKes;
+  const platRemit = platform_remittance || {
+    uber_owed: 0,
+    bolt_owed: 0,
+    other_owed: 0,
+    total_owed: 0,
+    lockout_threshold_kes: 6000,
+    last_remitted_date: '',
+    last_remitted_amount: 0,
+    last_remitted_platform: '',
+    notes: '',
+  };
+  const platLockoutThreshold = Number(platRemit.lockout_threshold_kes || 6000);
+  const platUberOwed = Number(platRemit.uber_owed || 0);
+  const platBoltOwed = Number(platRemit.bolt_owed || 0);
+  const platOtherOwed = Number(platRemit.other_owed || 0);
+  const platTotalOwed = Number(platRemit.total_owed || (platUberOwed + platBoltOwed + platOtherOwed));
+  const platRemainingBuffer = Math.max(0, platLockoutThreshold - platTotalOwed);
+  const platThresholdPct = Math.min(100, Math.round((platTotalOwed / platLockoutThreshold) * 100));
+  const platIsCritical = platThresholdPct >= 85 || platRemainingBuffer <= 900;
+  const platIsCaution = !platIsCritical && platThresholdPct >= 50;
+  const platStatusClass = platIsCritical
+    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+    : platIsCaution
+      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+      : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+
   const closeoutSplitAmount = todayNetEarned > 0 ? todayNetEarned : (latestShiftNet > 0 ? latestShiftNet : strictNetFloor);
   const dailyTarget = Number(active_bike?.daily_target || strictNetFloor);
   const dailyTargetMetPct = Math.min(100, Math.round((todayNetEarned / (dailyTarget || 1)) * 100));
@@ -851,9 +878,13 @@ export function renderRiderDashboard(data: any): string {
             var airtime = Math.max(0, parseFloat(document.querySelector('input[name="airtime_spent"]')?.value) || 0);
             var misc = Math.max(0, parseFloat(document.querySelector('input[name="misc_expenses"]')?.value) || 0);
 
+            var unremittedUber = Math.max(0, parseFloat(document.getElementById('shift_unremitted_uber')?.value) || 0);
+            var unremittedBolt = Math.max(0, parseFloat(document.getElementById('shift_unremitted_bolt')?.value) || 0);
+            var unremittedTotal = unremittedUber + unremittedBolt;
+
             var personalSpend = food + airtime + misc;
             var totalExp = fuel + personalSpend;
-            var pureNet = gross - totalExp;
+            var pureNet = Math.max(0, gross - totalExp - unremittedTotal);
             var lunchSaved = STRICT_SAVE_UNSPENT_LUNCH ? Math.max(0, STRICT_LUNCH_ALLOWANCE - food) : 0;
             var strictTargetToday = STRICT_NET_FLOOR + lunchSaved;
             var projectedAccBalance = STRICT_EXPECTED_ACC_BALANCE + Math.max(0, pureNet);
@@ -920,6 +951,10 @@ export function renderRiderDashboard(data: any): string {
             var misc = Math.max(0, parseFloat(document.querySelector('input[name="misc_expenses"]')?.value) || 0);
             var totalExp = fuel + food + airtime + misc;
 
+            var unremittedUber = Math.max(0, parseFloat(document.getElementById('shift_unremitted_uber')?.value) || 0);
+            var unremittedBolt = Math.max(0, parseFloat(document.getElementById('shift_unremitted_bolt')?.value) || 0);
+            var unremittedTotal = unremittedUber + unremittedBolt;
+
             var cashInp = document.getElementById('shift_cash_in_hand');
             var walletInp = document.getElementById('shift_app_wallet_balance');
             var summaryEl = document.getElementById('shift_wallet_reconcile_summary');
@@ -937,9 +972,13 @@ export function renderRiderDashboard(data: any): string {
             }
 
             var effectiveCash = (cashVal > 0 || walletVal > 0) ? cashVal : gross;
-            var liquidPocketNet = Math.max(0, effectiveCash - totalExp);
+            var liquidPocketNet = Math.max(0, effectiveCash - totalExp - unremittedTotal);
             if (summaryEl) {
-                summaryEl.innerHTML = '💵 Liquid Cash in Pocket (After Expenses): <strong class="text-emerald-600 dark:text-emerald-400">Ksh ' + liquidPocketNet.toLocaleString() + '</strong> • 📱 Stuck in App Wallet: <strong class="text-amber-600 dark:text-amber-400">Ksh ' + walletVal.toLocaleString() + '</strong>';
+                var sumHtml = '💵 Liquid Pocket Cash (After Expenses): <strong class="text-emerald-600 dark:text-emerald-400">Ksh ' + liquidPocketNet.toLocaleString() + '</strong> • 📱 Stuck in App Wallet: <strong class="text-amber-600 dark:text-amber-400">Ksh ' + walletVal.toLocaleString() + '</strong>';
+                if (unremittedTotal > 0) {
+                    sumHtml += ' • 🚗 Held for Uber/Bolt: <strong class="text-rose-500 font-bold">Ksh ' + unremittedTotal.toLocaleString() + ' (Protected from Split)</strong>';
+                }
+                summaryEl.innerHTML = sumHtml;
             }
         }
 
@@ -2834,6 +2873,9 @@ export function renderRiderDashboard(data: any): string {
             <a href="/?pay_yourself_amount=${closeoutSplitAmount.toFixed(2)}#waterfall-card" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 active:scale-95 text-slate-950 text-xs font-black rounded-xl shadow-xs shrink-0 transition">
                 <span>👑 Pay Yourself (23:50)</span>
             </a>
+            <button onclick="document.getElementById('platform-remittance-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 ${platTotalOwed > 0 ? (platIsCritical ? 'bg-rose-600 animate-pulse text-white' : 'bg-slate-800 text-amber-300 border border-amber-600/50') : 'bg-slate-800 text-gray-300 border border-slate-700'} text-xs font-bold rounded-xl shadow-xs shrink-0 transition active:scale-95">
+                <span>🚗 Uber: Ksh ${platTotalOwed.toLocaleString()}</span>
+            </button>
             <button onclick="document.getElementById('shift-log-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition">
                 <span>⏱️ Log Shift</span>
             </button>
@@ -3597,6 +3639,23 @@ export function renderRiderDashboard(data: any): string {
                             </div>
                         </div>
 
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-200/50 dark:border-gray-800/80 bg-gray-50/50 dark:bg-slate-900/40 p-2.5 rounded-xl border">
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">
+                                    🚗 Unremitted Uber Cash Commission (Ksh)
+                                    <span class="text-[9px] font-normal text-gray-500 block">Commission on cash trips held in hand (Ksh 6,000 lockout ceiling)</span>
+                                </label>
+                                <input type="number" step="any" min="0" name="unremitted_uber_commission" id="shift_unremitted_uber" oninput="syncCashVsWalletSplit(false); updateStrictSaverAudit()" placeholder="e.g. 400" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">
+                                    ⚡ Unremitted Bolt Cash Commission (Ksh)
+                                    <span class="text-[9px] font-normal text-gray-500 block">Bolt commission on cash trips held in pocket</span>
+                                </label>
+                                <input type="number" step="any" min="0" name="unremitted_bolt_commission" id="shift_unremitted_bolt" oninput="syncCashVsWalletSplit(false); updateStrictSaverAudit()" placeholder="e.g. 0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                        </div>
+
                         <div id="shift_wallet_reconcile_summary" class="p-2.5 rounded-xl bg-white/90 dark:bg-gray-900/90 border border-emerald-200 dark:border-gray-800 text-[11px] font-semibold text-gray-700 dark:text-gray-300">
                             💵 Liquid Cash in Pocket (After Expenses): <strong class="text-emerald-600 dark:text-emerald-400">Ksh 0</strong> • 📱 Stuck in App Wallet: <strong class="text-amber-600 dark:text-amber-400">Ksh 0</strong>
                         </div>
@@ -3624,6 +3683,216 @@ export function renderRiderDashboard(data: any): string {
                     </button>
                 </div>
             </form>
+        </div>
+
+        <!-- 🚗 Uber & Bolt Cash Remittance & Lockout Safety Tracker Card -->
+        <div id="platform-remittance-card" class="bg-gradient-to-br from-slate-900 via-gray-950 to-slate-900 rounded-3xl p-6 shadow-xl border ${platIsCritical ? 'border-rose-500/80 ring-2 ring-rose-500/30' : platIsCaution ? 'border-amber-500/60' : 'border-emerald-600/40'} space-y-5 text-white">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-800 pb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-11 h-11 rounded-2xl ${platIsCritical ? 'bg-rose-600 animate-pulse' : platIsCaution ? 'bg-amber-600' : 'bg-emerald-600'} flex items-center justify-center text-2xl shadow-lg">
+                        🚗
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-lg font-black text-white">Uber &amp; Bolt Cash Remittance &amp; Lockout Safety</h2>
+                            <span class="text-[10px] ${platStatusClass} font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider border">
+                                ${platIsCritical ? '🚨 CRITICAL LOCKOUT ALERT' : platIsCaution ? '⚠️ NEARING 6,000 LIMIT' : '🟢 SAFE BUFFER'}
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-300 mt-0.5">
+                            Uber allows cash trip commission to accrue up to <strong>Ksh ${platLockoutThreshold.toLocaleString()}</strong> before halting cash requests. Remit via M-Pesa Paybill <strong>898998</strong>.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="document.getElementById('platform-remit-drawer')?.classList.toggle('hidden'); document.getElementById('platform-adjust-drawer')?.classList.add('hidden')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-black rounded-xl transition shadow-xs flex items-center gap-1.5">
+                        <span>💳 Remit via M-Pesa</span>
+                    </button>
+                    <button type="button" onclick="document.getElementById('platform-adjust-drawer')?.classList.toggle('hidden'); document.getElementById('platform-remit-drawer')?.classList.add('hidden')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-gray-300 text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 active:scale-95">
+                        <span>⚙️ Adjust Balance</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Banner Alert if Nearing or at Lockout Threshold -->
+            ${platIsCritical ? `
+            <div class="p-3.5 bg-rose-950/60 border border-rose-500/50 rounded-2xl flex items-start sm:items-center gap-3">
+                <span class="text-2xl shrink-0">🚨</span>
+                <div class="text-xs text-rose-200">
+                    <strong class="text-white font-black text-sm block">Urgent Action Required: Cash Requests At Risk!</strong>
+                    You owe <strong>Ksh ${platTotalOwed.toLocaleString()}</strong>. You only have <strong>Ksh ${platRemainingBuffer.toLocaleString()} buffer</strong> before Uber suspends cash trips. Remit Ksh ${(Math.min(platTotalOwed, 2000)).toLocaleString()} to Ksh ${platTotalOwed.toLocaleString()} to keep receiving cash passengers.
+                </div>
+            </div>
+            ` : platIsCaution ? `
+            <div class="p-3 bg-amber-950/50 border border-amber-500/40 rounded-2xl flex items-start sm:items-center gap-3">
+                <span class="text-xl shrink-0">⚠️</span>
+                <div class="text-xs text-amber-200">
+                    <strong class="text-white font-bold block">Commission Balance Growing</strong>
+                    You have reached <strong>${platThresholdPct}%</strong> of the Ksh ${platLockoutThreshold.toLocaleString()} cash lockout threshold. Remaining headroom: <strong>Ksh ${platRemainingBuffer.toLocaleString()}</strong>.
+                </div>
+            </div>
+            ` : `
+            <div class="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-2xl flex items-center gap-3">
+                <span class="text-lg shrink-0">🛡️</span>
+                <div class="text-xs text-emerald-200">
+                    <strong class="text-white font-bold">Independent Platform Account:</strong> You have <strong>Ksh ${platRemainingBuffer.toLocaleString()} safe buffer</strong> remaining. This platform commission is kept distinct from your personal loans and won't penalize your Financial Health score.
+                </div>
+            </div>
+            `}
+
+            <!-- Gauges & Metrics Grid -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-gray-800 space-y-1">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Running Platform Owed</span>
+                    <div class="text-xl font-black ${platTotalOwed > 0 ? (platIsCritical ? 'text-rose-400' : 'text-amber-400') : 'text-emerald-400'}">
+                        Ksh ${platTotalOwed.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </div>
+                    <div class="text-[10px] text-gray-400 flex items-center justify-between">
+                        <span>Uber: Ksh ${platUberOwed.toLocaleString()}</span>
+                        <span>Bolt: Ksh ${platBoltOwed.toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-gray-800 space-y-1">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Remaining Buffer</span>
+                    <div class="text-xl font-black ${platIsCritical ? 'text-rose-400' : 'text-emerald-400'}">
+                        Ksh ${platRemainingBuffer.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </div>
+                    <div class="text-[10px] text-gray-400">
+                        Ceiling: Ksh ${platLockoutThreshold.toLocaleString()}
+                    </div>
+                </div>
+
+                <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-gray-800 space-y-1">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Lockout Risk Meter</span>
+                    <div class="text-xl font-black ${platIsCritical ? 'text-rose-400' : platIsCaution ? 'text-amber-400' : 'text-blue-400'}">
+                        ${platThresholdPct}% Used
+                    </div>
+                    <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden mt-1">
+                        <div class="h-full rounded-full transition-all duration-500 ${platIsCritical ? 'bg-rose-500' : platIsCaution ? 'bg-amber-500' : 'bg-emerald-500'}" style="width: ${platThresholdPct}%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-gray-800 space-y-1">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Last Remitted</span>
+                    <div class="text-sm font-black text-emerald-400 truncate">
+                        ${platRemit.last_remitted_amount ? `Ksh ${platRemit.last_remitted_amount.toLocaleString()} (${platRemit.last_remitted_platform || 'Uber'})` : 'No remittance recorded yet'}
+                    </div>
+                    <div class="text-[10px] text-gray-400">
+                        ${platRemit.last_remitted_date ? `Date: ${platRemit.last_remitted_date}` : 'Remit via Paybill 898998'}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Drawer 1: Record Remittance (Collapsible) -->
+            <div id="platform-remit-drawer" class="hidden p-5 bg-slate-950 rounded-2xl border border-emerald-600/50 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">💳</span>
+                        <h3 class="text-sm font-black text-white">Record Remittance via M-Pesa Paybill</h3>
+                    </div>
+                    <button type="button" onclick="document.getElementById('platform-remit-drawer')?.classList.add('hidden')" class="text-xs text-gray-400 hover:text-white">✕ Close</button>
+                </div>
+
+                <div class="p-3 bg-gray-900 rounded-xl border border-gray-800 text-[11px] text-gray-300 space-y-1">
+                    <p class="font-bold text-emerald-400">📱 Kenya Paybill Instructions:</p>
+                    <p>• <strong>Uber Paybill</strong>: <code class="bg-black px-1.5 py-0.5 rounded text-white font-mono font-bold">898998</code> | <strong>Account No</strong>: Your Driver Phone No or Partner ID</p>
+                    <p>• <strong>Bolt</strong>: Use in-app M-Pesa STK push or Bolt Paybill from your Bolt Driver App</p>
+                </div>
+
+                <form action="/rider/platform-remittance/remit" method="POST" class="space-y-4 text-xs">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Platform</label>
+                            <select name="platform" class="w-full p-2.5 bg-slate-900 border border-gray-700 rounded-xl font-bold text-white">
+                                <option value="uber" ${platUberOwed >= platBoltOwed ? 'selected' : ''}>🚗 Uber</option>
+                                <option value="bolt" ${platBoltOwed > platUberOwed ? 'selected' : ''}>⚡ Bolt</option>
+                                <option value="other">🚕 Other Platform</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Amount Remitted (Ksh)</label>
+                            <input type="number" step="any" min="1" name="amount" id="platform_remit_amount_input" value="${platTotalOwed > 0 ? platTotalOwed : 500}" placeholder="Amount paid via M-Pesa" class="w-full p-2.5 bg-slate-900 border border-emerald-500 rounded-xl font-black text-emerald-400 text-sm" required>
+                            <div class="flex gap-1.5 mt-1.5">
+                                ${platTotalOwed > 0 ? `<button type="button" onclick="document.getElementById('platform_remit_amount_input').value = '${platTotalOwed}'" class="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-[10px] font-bold text-emerald-300 rounded-md">Pay Full (Ksh ${platTotalOwed.toLocaleString()})</button>` : ''}
+                                <button type="button" onclick="document.getElementById('platform_remit_amount_input').value = '1000'" class="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-[10px] font-bold text-gray-300 rounded-md">1,000</button>
+                                <button type="button" onclick="document.getElementById('platform_remit_amount_input').value = '2000'" class="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-[10px] font-bold text-gray-300 rounded-md">2,000</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">Payment Date</label>
+                            <input type="date" name="payment_date" value="${today}" class="w-full p-2.5 bg-slate-900 border border-gray-700 rounded-xl font-bold text-white">
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/80 rounded-xl border border-gray-800 space-y-2">
+                        <label class="block font-bold text-gray-300">
+                            Sync with FinanceHub Ledger? (Optional)
+                            <span class="block text-[10px] font-normal text-gray-400">If you paid from your M-Pesa account, selecting it will record an expense in your FinanceHub transactions ledger to keep your real bank/M-Pesa balance exact.</span>
+                        </label>
+                        <select name="account_id" class="w-full p-2.5 bg-slate-950 border border-indigo-700/60 rounded-xl text-white font-bold text-xs">
+                            <option value="">📱 Paid via separate pocket cash / Do not touch bank ledger</option>
+                            ${accounts.map((a: any) => `
+                                <option value="${a.id}">💳 Deduct from ${a.name} (Current Bal: Ksh ${(Number(a.balance) || 0).toLocaleString()})</option>
+                            `).join('')}
+                        </select>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" onclick="document.getElementById('platform-remit-drawer')?.classList.add('hidden')" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold">Cancel</button>
+                        <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl font-black shadow-md flex items-center gap-1.5">
+                            <span>🚀 Confirm Remittance</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Drawer 2: Adjust App Balance & Lockout Limit (Collapsible) -->
+            <div id="platform-adjust-drawer" class="hidden p-5 bg-slate-950 rounded-2xl border border-slate-700 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">⚙️</span>
+                        <h3 class="text-sm font-black text-white">Sync Driver App Balance &amp; Lockout Ceiling</h3>
+                    </div>
+                    <button type="button" onclick="document.getElementById('platform-adjust-drawer')?.classList.add('hidden')" class="text-xs text-gray-400 hover:text-white">✕ Close</button>
+                </div>
+
+                <form action="/rider/platform-remittance/update" method="POST" class="space-y-4 text-xs">
+                    <p class="text-[11px] text-gray-300">
+                        Check your Uber Driver or Bolt Driver app. Enter the exact figures shown so your buffer calculations match your app at all times.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">🚗 Uber Balance Owed (Ksh)</label>
+                            <input type="number" step="any" min="0" name="uber_owed" value="${platUberOwed}" placeholder="0" class="w-full p-2.5 bg-slate-900 border border-gray-700 rounded-xl font-bold text-white">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">⚡ Bolt Balance Owed (Ksh)</label>
+                            <input type="number" step="any" min="0" name="bolt_owed" value="${platBoltOwed}" placeholder="0" class="w-full p-2.5 bg-slate-900 border border-gray-700 rounded-xl font-bold text-white">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-300 mb-1">🛑 Cash Lockout Threshold (Ksh)</label>
+                            <input type="number" step="any" min="500" name="lockout_threshold_kes" value="${platLockoutThreshold}" placeholder="6000" class="w-full p-2.5 bg-slate-900 border border-amber-600 rounded-xl font-black text-amber-400">
+                            <span class="text-[9px] text-gray-400 mt-1 block">Default: 6,000 KES (Uber Kenya threshold)</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-gray-300 mb-1">Notes</label>
+                        <input type="text" name="notes" value="${platRemit.notes || ''}" placeholder="e.g. Checked Uber balance after drop-off" class="w-full p-2 bg-slate-900 border border-gray-700 rounded-xl text-white">
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" onclick="document.getElementById('platform-adjust-drawer')?.classList.add('hidden')" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold">Cancel</button>
+                        <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl font-bold shadow-md">
+                            <span>💾 Save Adjustments</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <!-- 🤝 Owner Remittance & Daily Lease Tracker (Kodi / Hire-Purchase) Card -->
