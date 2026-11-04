@@ -422,6 +422,10 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                             <button type="submit" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white text-sm font-bold shadow-lg shadow-emerald-600/25 transition">
                                 Log In to Finatrack
                             </button>
+
+                            <button type="button" onclick="openQuickPinModal()" class="w-full py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 text-indigo-300 text-xs font-extrabold flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                                <span>🔢</span> 2-Second Quick PIN Unlock (Roadside / Gloves Mode)
+                            </button>
                         </form>
 
                         <div class="mt-5 pt-4 border-t border-slate-800 text-center space-y-2">
@@ -519,12 +523,205 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
         </div>
     </main>
 
+    <!-- 4-DIGIT QUICK PIN (HELPER UNLOCK) MODAL -->
+    <div id="quick-pin-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="w-full max-w-sm rounded-3xl bg-slate-900 border border-indigo-500/30 p-6 shadow-2xl text-center relative">
+            <button type="button" onclick="closeQuickPinModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">
+                Use Email ✕
+            </button>
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-2xl mb-2">
+                🔢
+            </div>
+            <h3 class="text-lg font-extrabold text-white tracking-tight">Quick PIN Unlock</h3>
+            <p id="quick-pin-subtitle" class="text-xs text-slate-400 mt-1">Enter your 4-digit roadside helper PIN</p>
+
+            <!-- 4 PIN Dots -->
+            <div class="flex items-center justify-center gap-4 my-5" id="quick-pin-dots">
+                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+            </div>
+
+            <div id="quick-pin-error" class="hidden mb-3 px-3 py-1.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-rose-300 text-xs font-bold"></div>
+
+            <!-- Big Gloves-Friendly Numeric Keypad -->
+            <div class="grid grid-cols-3 gap-2.5 select-none">
+                <button type="button" onclick="pressPinDigit('1')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">1</button>
+                <button type="button" onclick="pressPinDigit('2')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">2</button>
+                <button type="button" onclick="pressPinDigit('3')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">3</button>
+                <button type="button" onclick="pressPinDigit('4')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">4</button>
+                <button type="button" onclick="pressPinDigit('5')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">5</button>
+                <button type="button" onclick="pressPinDigit('6')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">6</button>
+                <button type="button" onclick="pressPinDigit('7')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">7</button>
+                <button type="button" onclick="pressPinDigit('8')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">8</button>
+                <button type="button" onclick="pressPinDigit('9')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">9</button>
+                <button type="button" onclick="clearPinDigits()" class="py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-extrabold border border-slate-800 transition">CLR</button>
+                <button type="button" onclick="pressPinDigit('0')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">0</button>
+                <button type="button" onclick="backspacePinDigit()" class="py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-amber-400 text-base font-extrabold border border-slate-800 transition">⌫</button>
+            </div>
+
+            <form id="quick-pin-verify-form" action="/auth/pin/verify" method="POST" class="hidden">
+                <input type="hidden" name="pin" id="quick-pin-hidden-input" value="">
+                <input type="hidden" name="redirect_to" value="/rider">
+            </form>
+
+            <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                <span id="quick-pin-strikes-label">3 attempts before password fallback</span>
+                <button type="button" onclick="fallbackToMasterLogin('Forgot PIN — Switched to master Email + Password')" class="text-indigo-400 hover:text-indigo-300 font-bold underline">
+                    Forgot PIN?
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer Copyright -->
     <footer class="w-full text-center py-4 text-xs text-slate-500">
         &copy; ${new Date().getFullYear()} Finatrack. Built for Kenya's Finance, Mobility, Trader &amp; Salaried Pros.
     </footer>
 
     <script>
+        var currentPinBuffer = '';
+        var pinStrikes = 0;
+        var MAX_PIN_STRIKES = 3;
+
+        function getSavedQuickPin() {
+            try {
+                var localPin = localStorage.getItem('finatrack_quick_pin');
+                if (localPin && /^\\d{4}$/.test(localPin)) return localPin;
+                var match = document.cookie.match(/(?:^|;\\s*)finatrack_quick_pin=(\\d{4})/);
+                return match ? match[1] : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function updatePinDotsUI() {
+            var dots = document.querySelectorAll('#quick-pin-dots .pin-dot');
+            for (var i = 0; i < dots.length; i++) {
+                if (i < currentPinBuffer.length) {
+                    dots[i].className = 'pin-dot w-4 h-4 rounded-full border-2 border-emerald-400 bg-emerald-400 scale-110 transition-all';
+                } else {
+                    dots[i].className = 'pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all';
+                }
+            }
+        }
+
+        function openQuickPinModal() {
+            var modal = document.getElementById('quick-pin-modal');
+            if (!modal) return;
+            currentPinBuffer = '';
+            updatePinDotsUI();
+            var savedPin = getSavedQuickPin();
+            var subtitle = document.getElementById('quick-pin-subtitle');
+            if (subtitle) {
+                subtitle.textContent = savedPin
+                    ? 'Enter your 4-digit roadside helper PIN'
+                    : 'Enter your 4-digit PIN (or set one inside Rider Hub)';
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function closeQuickPinModal() {
+            var modal = document.getElementById('quick-pin-modal');
+            if (modal) modal.classList.add('hidden');
+            currentPinBuffer = '';
+            updatePinDotsUI();
+        }
+
+        function fallbackToMasterLogin(reasonMsg) {
+            closeQuickPinModal();
+            switchAuthTab('login');
+            var emailInput = document.getElementById('login-email');
+            if (emailInput) emailInput.focus();
+            var statusLabel = document.getElementById('auth-status-label');
+            if (statusLabel && reasonMsg) {
+                statusLabel.textContent = reasonMsg;
+                statusLabel.className = 'text-xs font-bold text-amber-400';
+            }
+        }
+
+        function pressPinDigit(digit) {
+            if (currentPinBuffer.length >= 4) return;
+            currentPinBuffer += String(digit);
+            updatePinDotsUI();
+            if (currentPinBuffer.length === 4) {
+                setTimeout(verifyPinAttempt, 120);
+            }
+        }
+
+        function backspacePinDigit() {
+            if (currentPinBuffer.length > 0) {
+                currentPinBuffer = currentPinBuffer.slice(0, -1);
+                updatePinDotsUI();
+            }
+        }
+
+        function clearPinDigits() {
+            currentPinBuffer = '';
+            updatePinDotsUI();
+        }
+
+        function verifyPinAttempt() {
+            var savedPin = getSavedQuickPin();
+            var errEl = document.getElementById('quick-pin-error');
+            var strikesLabel = document.getElementById('quick-pin-strikes-label');
+
+            if (savedPin && currentPinBuffer === savedPin) {
+                if (errEl) errEl.classList.add('hidden');
+                var hiddenInput = document.getElementById('quick-pin-hidden-input');
+                var form = document.getElementById('quick-pin-verify-form');
+                if (hiddenInput && form) {
+                    hiddenInput.value = currentPinBuffer;
+                    form.submit();
+                    return;
+                }
+                window.location.href = '/rider';
+                return;
+            }
+
+            if (!savedPin) {
+                // Verify with server cookie if localStorage wasn't populated
+                var hiddenInputServer = document.getElementById('quick-pin-hidden-input');
+                var formServer = document.getElementById('quick-pin-verify-form');
+                if (hiddenInputServer && formServer && document.cookie.indexOf('finatrack_quick_pin=') !== -1) {
+                    hiddenInputServer.value = currentPinBuffer;
+                    formServer.submit();
+                    return;
+                }
+            }
+
+            pinStrikes += 1;
+            currentPinBuffer = '';
+            updatePinDotsUI();
+            var remaining = MAX_PIN_STRIKES - pinStrikes;
+
+            if (pinStrikes >= MAX_PIN_STRIKES) {
+                fallbackToMasterLogin('⚠️ 3 wrong PIN attempts — Please sign in with Email + Password.');
+                return;
+            }
+
+            if (errEl) {
+                errEl.textContent = !savedPin
+                    ? 'No PIN saved on this device yet. Log in with Email + Password first to set your 4-digit PIN.'
+                    : 'Incorrect PIN (' + remaining + ' attempt' + (remaining === 1 ? '' : 's') + ' left)';
+                errEl.classList.remove('hidden');
+            }
+            if (strikesLabel) {
+                strikesLabel.textContent = remaining + ' attempt' + (remaining === 1 ? '' : 's') + ' remaining before password fallback';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('pin_fallback') === '1') {
+                fallbackToMasterLogin('⚠️ PIN verification failed — Please sign in with Email + Password.');
+                return;
+            }
+            if (getSavedQuickPin()) {
+                openQuickPinModal();
+            }
+        });
         function switchAuthTab(tab) {
             var container = document.getElementById('auth-card-container');
             var tabSignupBtn = document.getElementById('tab-signup-btn');

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import { AppEnv, getSupabaseClient } from '../db/supabase';
 
 export const authRoutes = new Hono<{ Bindings: AppEnv }>();
@@ -88,4 +89,55 @@ authRoutes.post('/auth/logout', async (c) => {
   c.header('Set-Cookie', 'finatrack_user=; Path=/; Max-Age=0', { append: true });
   return c.redirect(`${redirectTo}?toast=Logged+out+successfully`, 303);
 });
+
+// ------------------------------------------------------------------------------
+// 🔢 4-DIGIT QUICK PIN (ROADSIDE HELPER UNLOCK)
+// ------------------------------------------------------------------------------
+authRoutes.post('/auth/pin/set', async (c) => {
+  const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
+  const rawPin = String(body['pin'] || '').replace(/[^0-9]/g, '').slice(0, 4);
+  const redirectTo = String(body['redirect_to'] || '/rider');
+
+  if (rawPin.length !== 4) {
+    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('Please enter a valid 4-digit numeric PIN.')}`, 303);
+  }
+
+  setCookie(c, 'finatrack_quick_pin', rawPin, {
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: 'Lax',
+  });
+
+  return c.redirect(
+    `${redirectTo}?toast=${encodeURIComponent('🔒 4-Digit Quick PIN saved! You can now unlock in 2 seconds with the big numeric keypad.')}`,
+    303
+  );
+});
+
+authRoutes.post('/auth/pin/clear', async (c) => {
+  const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
+  const redirectTo = String(body['redirect_to'] || '/rider');
+
+  setCookie(c, 'finatrack_quick_pin', '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'Lax',
+  });
+
+  return c.redirect(`${redirectTo}?toast=${encodeURIComponent('🔓 4-Digit Quick PIN removed.')}`, 303);
+});
+
+authRoutes.post('/auth/pin/verify', async (c) => {
+  const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
+  const enteredPin = String(body['pin'] || '').replace(/[^0-9]/g, '').slice(0, 4);
+  const savedPin = getCookie(c, 'finatrack_quick_pin') || '';
+  const redirectTo = String(body['redirect_to'] || '/rider');
+
+  if (savedPin && enteredPin === savedPin) {
+    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚡ Quick PIN Unlocked!')}`, 303);
+  }
+
+  return c.redirect(`/login?pin_fallback=1&toast=${encodeURIComponent('PIN mismatch or expired. Please sign in with your master Email + Password.')}`, 303);
+});
+
 

@@ -6,6 +6,8 @@ export function renderRiderDashboard(data: any): string {
     odometer_config = null,
     strict_saver_config = null,
     platform_remittance = null,
+    weekly_batch_pot = [],
+    has_quick_pin = false,
     time_intelligence = {},
     maintenance_schedules = [],
     compliance_deadlines = [],
@@ -135,6 +137,66 @@ export function renderRiderDashboard(data: any): string {
   const lastShiftShortfall = lastShift ? Math.max(0, lastShiftStrictTarget - Math.max(0, lastShiftNet)) : 0;
   const lastShiftOverflow = lastShift ? Math.max(0, lastShiftNet - lastShiftStrictTarget) : 0;
   const requiredGrossBeforeHome = strictNetFloor + strictFuelAllowance + strictPersonalCap + strictDailyKodi + cumulativeOverdueKes;
+
+  // 🏆 Weekly Target & Streak Challenge (Connected to Daily Floor)
+  const workDaysPerWeek = Math.min(7, Math.max(1, Number(strict_saver_config?.work_days_per_week || 6)));
+  const weeklyFloorKes = strictNetFloor * workDaysPerWeek;
+  const survivorTargetKes = Math.round(weeklyFloorKes * 0.8);
+  const proRiderTargetKes = weeklyFloorKes;
+  const ironRiderTargetKes = Math.round(weeklyFloorKes * 1.2);
+
+  const nowDateObj = new Date(today + 'T12:00:00Z');
+  const currentDayOfWeek = (nowDateObj.getUTCDay() + 6) % 7; // 0 = Mon, 6 = Sun
+  const mondayDateObj = new Date(nowDateObj);
+  mondayDateObj.setUTCDate(nowDateObj.getUTCDate() - currentDayOfWeek);
+  const currentWeekMondayStr = mondayDateObj.toISOString().slice(0, 10);
+
+  const thisWeekShifts = (rider_logs || []).filter((l: any) => String(l.date || '') >= currentWeekMondayStr);
+  const thisWeekNetEarned = thisWeekShifts.reduce((acc: number, l: any) => {
+    const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
+    return acc + Math.max(0, Number(l.total_earned || 0) - exp);
+  }, 0);
+  const uniqueDaysLoggedThisWeek = new Set(thisWeekShifts.map((l: any) => String(l.date || ''))).size;
+  const remainingWorkDaysThisWeek = Math.max(1, workDaysPerWeek - uniqueDaysLoggedThisWeek);
+  const remainingWeeklyTargetKes = Math.max(0, weeklyFloorKes - thisWeekNetEarned);
+  const dynamicDailyPaceKes = remainingWeeklyTargetKes > 0
+    ? Math.ceil(remainingWeeklyTargetKes / remainingWorkDaysThisWeek)
+    : strictNetFloor;
+  const weeklyProgressPct = weeklyFloorKes > 0 ? Math.min(140, Math.round((thisWeekNetEarned / weeklyFloorKes) * 100)) : 0;
+
+  const weeklyBadgeTier = thisWeekNetEarned >= ironRiderTargetKes
+    ? { icon: '👑', label: 'Iron Rider / Beast Mode (120%+)', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-400/50' }
+    : thisWeekNetEarned >= proRiderTargetKes
+      ? { icon: '🥈', label: 'Pro Rider (100% Weekly Floor)', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50' }
+      : thisWeekNetEarned >= survivorTargetKes
+        ? { icon: '🥉', label: 'Survivor Tier (80%+ Reached)', badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/50' }
+        : { icon: '🔥', label: `Building Streak (${weeklyProgressPct}%)`, badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40' };
+
+  // 📦 Sunday Batch Waterfall Holding Pot (Avoid Daily M-Pesa Charges)
+  const batchPotEntries: any[] = Array.isArray(weekly_batch_pot) ? weekly_batch_pot : [];
+  const batchPotTotalKes = batchPotEntries.reduce((sum: number, e: any) => sum + Number(e.net_amount || 0), 0);
+  const batchBucketMap = new Map<string, { bucket_name: string; target_type: string; percentage: number; amount: number }>();
+  for (const entry of batchPotEntries) {
+    for (const sp of (entry.splits || [])) {
+      const prev = batchBucketMap.get(sp.bucket_name);
+      if (prev) {
+        prev.amount = Math.round((prev.amount + Number(sp.amount || 0)) * 100) / 100;
+      } else {
+        batchBucketMap.set(sp.bucket_name, {
+          bucket_name: sp.bucket_name,
+          target_type: sp.target_type,
+          percentage: Number(sp.percentage || 0),
+          amount: Math.round(Number(sp.amount || 0) * 100) / 100,
+        });
+      }
+    }
+  }
+  const batchBucketList = Array.from(batchBucketMap.values());
+  const bucketCountForFeeCalc = Math.max(3, batchBucketList.length || 3);
+  const transfersAvoidedCount = batchPotEntries.length > 1
+    ? (batchPotEntries.length * bucketCountForFeeCalc) - bucketCountForFeeCalc
+    : (7 * bucketCountForFeeCalc) - bucketCountForFeeCalc;
+  const estMpesaFeesSavedKes = transfersAvoidedCount * 11;
   const platRemit = platform_remittance || {
     uber_owed: 0,
     bolt_owed: 0,
@@ -2978,6 +3040,11 @@ export function renderRiderDashboard(data: any): string {
                 </a>
                 `}
 
+                <button type="button" onclick="openRiderPinModal()" class="px-2 sm:px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center gap-1" title="4-Digit Quick PIN (Roadside Gloves Unlock & Screen Lock)">
+                    <span>🔢</span>
+                    <span class="hidden md:inline">${has_quick_pin ? 'PIN Lock' : 'Set PIN'}</span>
+                </button>
+
                 <button onclick="togglePrivacyBlur()" class="privacy-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Hide or Show Balances">
                     👁️
                 </button>
@@ -3129,10 +3196,18 @@ export function renderRiderDashboard(data: any): string {
                         <label class="block text-[11px] font-bold text-purple-300 mb-1">💰 7. Opening Balance Before Shifts</label>
                         <input type="number" step="any" name="starting_savings_balance" value="${startingSavingsBalance}" class="w-full p-2 bg-slate-900 border border-purple-800 rounded-xl font-bold text-purple-300 text-sm">
                     </div>
-                    <div class="flex gap-2 items-end">
+                    <div>
+                        <label class="block text-[11px] font-bold text-amber-300 mb-1">📅 8. Work Days / Week (Weekly Floor)</label>
+                        <select name="work_days_per_week" class="w-full p-2 bg-slate-900 border border-amber-700 rounded-xl font-bold text-amber-300 text-xs">
+                            <option value="5" ${workDaysPerWeek === 5 ? 'selected' : ''}>5 Days / Week (Ksh ${(strictNetFloor * 5).toLocaleString()} Floor)</option>
+                            <option value="6" ${workDaysPerWeek === 6 ? 'selected' : ''}>6 Days / Week (Ksh ${(strictNetFloor * 6).toLocaleString()} Floor)</option>
+                            <option value="7" ${workDaysPerWeek === 7 ? 'selected' : ''}>7 Days / Week (Ksh ${(strictNetFloor * 7).toLocaleString()} Floor)</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2 items-end sm:col-span-2 lg:col-span-4">
                         <input type="hidden" id="strict_daily_kodi_input" name="daily_kodi_kes" value="${strictDailyKodi}">
                         <button type="submit" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs transition shadow-md active:scale-95">
-                            🔒 Lock Strict Contract
+                            🔒 Lock Strict Daily &amp; Weekly Contract
                         </button>
                     </div>
                 </form>
@@ -3241,6 +3316,168 @@ export function renderRiderDashboard(data: any): string {
                         ${cumulativeOverdueKes > 0
                           ? `⚠️ Includes <strong class="text-rose-400">+Ksh ${cumulativeOverdueKes.toLocaleString()} overdue catch-up</strong> on top of Ksh ${(strictNetFloor + strictFuelAllowance + strictPersonalCap + strictDailyKodi).toLocaleString()} standard gross`
                           : `Ksh ${strictNetFloor.toLocaleString()} Target + Ksh ${strictFuelAllowance.toLocaleString()} Fuel + Ksh ${strictLunchAllowance.toLocaleString()} Lunch + Ksh ${strictAirtimeAllowance.toLocaleString()} Airtime`}
+                    </p>
+                </div>
+            </div>
+
+            <!-- 🏆 4. Weekly Target & Streak Challenge (Connected to Daily Floor + Dynamic Pace Buffer) -->
+            <div class="p-4 bg-slate-950/90 border border-indigo-500/40 rounded-2xl space-y-3">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-xs font-black uppercase tracking-wider text-indigo-300">🏆 Weekly Target &amp; Streak Challenge (${workDaysPerWeek}-Day Work Week)</span>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black border ${weeklyBadgeTier.badgeClass}">
+                                ${weeklyBadgeTier.icon} ${weeklyBadgeTier.label}
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-gray-300 mt-0.5">
+                            ${remainingWeeklyTargetKes > 0
+                              ? `⚡ <strong>Dynamic Pace Buffer:</strong> Weekly goal needs <strong class="text-amber-300">Ksh ${remainingWeeklyTargetKes.toLocaleString()}</strong> across remaining <strong>${remainingWorkDaysThisWeek} workday${remainingWorkDaysThisWeek === 1 ? '' : 's'}</strong> (<strong class="text-emerald-400">Ksh ${dynamicDailyPaceKes.toLocaleString()}/day pace</strong>). Slow days are absorbed smoothly!`
+                              : `🎉 <strong>Weekly Floor Crushed!</strong> You have banked <strong class="text-emerald-400">Ksh ${thisWeekNetEarned.toLocaleString()}</strong> vs your Ksh ${weeklyFloorKes.toLocaleString()} weekly floor. Every shilling now pushes you toward 👑 Beast Mode!`}
+                        </p>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="text-[10px] text-gray-400 uppercase font-bold block">This Week Net (Since Mon ${currentWeekMondayStr})</span>
+                        <span class="text-lg font-black text-emerald-400 convertible-amount" data-kes="${thisWeekNetEarned}">Ksh ${thisWeekNetEarned.toLocaleString()}</span>
+                        <span class="text-xs text-gray-400"> / Ksh ${weeklyFloorKes.toLocaleString()} (${weeklyProgressPct}%)</span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar with 80% / 100% / 120% Milestone Markers -->
+                <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                    <div class="bg-gradient-to-r from-indigo-500 via-emerald-400 to-amber-400 h-2.5 rounded-full transition-all" style="width: ${Math.min(100, weeklyProgressPct)}%"></div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                    <div class="p-2.5 rounded-xl border ${thisWeekNetEarned >= survivorTargetKes ? 'bg-cyan-950/60 border-cyan-500/60 text-cyan-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
+                        <span>🥉 <strong>Survivor (80%)</strong></span>
+                        <span class="font-black">Ksh ${survivorTargetKes.toLocaleString()} ${thisWeekNetEarned >= survivorTargetKes ? '✅' : ''}</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl border ${thisWeekNetEarned >= proRiderTargetKes ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
+                        <span>🥈 <strong>Pro Rider (100%)</strong></span>
+                        <span class="font-black">Ksh ${proRiderTargetKes.toLocaleString()} ${thisWeekNetEarned >= proRiderTargetKes ? '✅' : ''}</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl border ${thisWeekNetEarned >= ironRiderTargetKes ? 'bg-amber-950/60 border-amber-500/60 text-amber-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
+                        <span>👑 <strong>Iron Rider / Beast (120%+)</strong></span>
+                        <span class="font-black">Ksh ${ironRiderTargetKes.toLocaleString()}+ ${thisWeekNetEarned >= ironRiderTargetKes ? '🔥' : ''}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📦 Daily Logging with Sunday Batch Waterfall Split (Avoid Daily M-Pesa Charges) -->
+        <div id="sunday-batch-card" class="bg-gradient-to-br from-slate-900 via-emerald-950/80 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-emerald-700/50 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-emerald-800/60 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-xl shadow-xs">
+                        📦
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-base sm:text-lg font-black text-white">Sunday Batch Waterfall Accumulator (Avoid Daily M-Pesa Charges)</h2>
+                            <span class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/40 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                Save ~${transfersAvoidedCount} Transfers / Week (~Ksh ${estMpesaFeesSavedKes} Fees Saved)
+                            </span>
+                        </div>
+                        <p class="text-xs text-emerald-200/90 mt-0.5">
+                            Queue your Mon–Sat 23:50 net splits in a virtual <strong>Weekly Holding Pot (in your M-Pesa)</strong>, then make just <strong>${bucketCountForFeeCalc} bulk transfers on Sunday night</strong> instead of 21 daily transfers!
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <form action="/rider/batch-pot/queue" method="POST" class="inline">
+                        <input type="hidden" name="date" value="${today}">
+                        <input type="hidden" name="net_amount" value="${Math.max(0, lastShiftNet || strictNetFloor)}">
+                        <button type="submit" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5">
+                            <span>➕ Queue Today's Split (Ksh ${Math.max(0, lastShiftNet || strictNetFloor).toLocaleString()})</span>
+                        </button>
+                    </form>
+                    ${batchPotEntries.length > 0 ? `
+                    <form action="/rider/batch-pot/disburse" method="POST" class="inline" onsubmit="return confirm('Execute Sunday Batch Disbursement of Ksh ${batchPotTotalKes.toLocaleString()} across ${batchBucketList.length} buckets now?');">
+                        <button type="submit" class="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 text-xs font-black rounded-xl transition shadow-md flex items-center gap-1.5 active:scale-95">
+                            <span>🚀 Sunday Closeout: Disburse Ksh ${batchPotTotalKes.toLocaleString()}</span>
+                        </button>
+                    </form>
+                    <form action="/rider/batch-pot/clear" method="POST" class="inline" onsubmit="return confirm('Clear the Weekly Batch Holding Pot?');">
+                        <button type="submit" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950 text-gray-300 hover:text-rose-300 border border-slate-700 text-xs font-bold rounded-xl transition">
+                            Reset
+                        </button>
+                    </form>
+                    ` : ''}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <!-- Left 7 Cols: Daily Queued Shifts (Mon–Sat Holding Pot) -->
+                <div class="lg:col-span-7 bg-slate-950/80 border border-emerald-900/60 rounded-2xl p-4 space-y-2.5">
+                    <div class="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
+                        <span class="font-extrabold text-emerald-300 uppercase tracking-wider">🗓️ Daily Queued Splits (${batchPotEntries.length} day${batchPotEntries.length === 1 ? '' : 's'} in Holding Pot)</span>
+                        <span class="font-black text-white">Total Held: <strong class="text-emerald-400">Ksh ${batchPotTotalKes.toLocaleString()}</strong></span>
+                    </div>
+
+                    ${batchPotEntries.length > 0 ? `
+                    <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        ${batchPotEntries.map((e: any) => `
+                        <div class="p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 text-xs">
+                            <div>
+                                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black text-[10px] mr-1.5">${e.day_label || 'Shift'}</span>
+                                <span class="font-bold text-gray-200">${e.date}</span>
+                                <span class="font-black text-emerald-400 ml-2">Ksh ${Number(e.net_amount || 0).toLocaleString()} queued</span>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5 text-[10px] text-gray-300">
+                                ${(e.splits || []).map((sp: any) => `
+                                <span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
+                                    ${sp.bucket_name.split(' ')[0]}: <strong class="text-cyan-300">Ksh ${Number(sp.amount || 0).toLocaleString()}</strong>
+                                </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                        `).join('')}
+                    </div>
+                    ` : `
+                    <div class="p-4 text-center text-xs text-gray-400 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
+                        No shifts queued in this week's holding pot yet. When logging a shift below (with <strong>"📦 Queue to Sunday Batch Pot"</strong> checked) or tapping <strong>"➕ Queue Today's Split"</strong> above, Finatrack holds your daily splits here for zero-fee Sunday night disbursement!
+                    </div>
+                    `}
+                </div>
+
+                <!-- Right 5 Cols: Sunday Evening Consolidated Breakdown -->
+                <div class="lg:col-span-5 bg-slate-950/80 border border-amber-700/50 rounded-2xl p-4 space-y-2.5 flex flex-col justify-between">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
+                            <span class="font-extrabold text-amber-300 uppercase tracking-wider">👑 Sunday Evening Closeout Totals</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">Bulk M-Pesa Transfer</span>
+                        </div>
+                        ${batchBucketList.length > 0 ? `
+                        <div class="space-y-1.5 pt-1">
+                            ${batchBucketList.map((b) => `
+                            <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+                                <span class="font-bold text-gray-200 truncate pr-2">${b.bucket_name} <span class="text-[10px] text-gray-400">(${b.percentage}%)</span></span>
+                                <span class="font-black text-emerald-400 shrink-0">Ksh ${b.amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                            </div>
+                            `).join('')}
+                        </div>
+                        ` : `
+                        <div class="space-y-1.5 pt-1 text-xs text-gray-400">
+                            <p>Example 6-Day Consolidated Sunday Transfer (at Ksh ${strictNetFloor.toLocaleString()}/day):</p>
+                            <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
+                                <span>📈 Ziidi MMF (30%)</span>
+                                <strong class="text-emerald-400">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.3).toLocaleString()}</strong>
+                            </div>
+                            <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
+                                <span>🔒 Lock Savings (30%)</span>
+                                <strong class="text-cyan-300">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.3).toLocaleString()}</strong>
+                            </div>
+                            <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
+                                <span>🎯 Goals / Sacco (20%)</span>
+                                <strong class="text-amber-300">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.2).toLocaleString()}</strong>
+                            </div>
+                        </div>
+                        `}
+                    </div>
+                    <p class="text-[11px] text-emerald-300/90 pt-2 border-t border-slate-800">
+                        💡 <strong>Result:</strong> Only <strong>${bucketCountForFeeCalc} bulk M-Pesa transfers on Sunday night</strong> instead of ${7 * bucketCountForFeeCalc} micro-transfers during the week!
                     </p>
                 </div>
             </div>
@@ -3927,7 +4164,13 @@ export function renderRiderDashboard(data: any): string {
                     </a>
                 </div>
 
-                <div class="sm:col-span-2 lg:col-span-4">
+                <div class="sm:col-span-2 lg:col-span-4 space-y-2.5">
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/70 cursor-pointer select-none text-xs">
+                        <input type="checkbox" name="queue_to_sunday_batch" value="1" checked class="w-4 h-4 rounded border-emerald-500 text-emerald-600 focus:ring-emerald-500">
+                        <span class="font-bold text-gray-800 dark:text-emerald-200">
+                            📦 Queue today's 23:50 net split to <strong>Sunday Batch Holding Pot</strong> <span class="text-gray-500 dark:text-gray-400 font-normal">(Avoid daily M-Pesa transfer fees — make 1 consolidated Sunday night disbursement)</span>
+                        </span>
+                    </label>
                     <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2">
                         <span>🚀 Save Shift Record & Sync With Finance Ledger</span>
                     </button>
@@ -5532,6 +5775,81 @@ export function renderRiderDashboard(data: any): string {
         </button>
     </nav>
 
+    <!-- 🔢 4-Digit Quick PIN (Roadside Helper Unlock & Setup) Modal -->
+    <div id="rider-pin-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-indigo-500/40 rounded-3xl max-w-sm w-full p-6 space-y-4 text-white shadow-2xl relative">
+            <button type="button" onclick="closeRiderPinModal()" id="rider-pin-close-btn" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">
+                ✕
+            </button>
+
+            <div class="text-center space-y-1">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 text-2xl">
+                    🔢
+                </div>
+                <h3 id="rider-pin-title" class="text-lg font-extrabold text-white">4-Digit Roadside Quick PIN</h3>
+                <p id="rider-pin-subtitle" class="text-xs text-slate-400">Unlock in 2 seconds with riding gloves or wet screen. Master Email + Password stays protected.</p>
+            </div>
+
+            <!-- Mode Switcher: Lock Keypad vs Set/Change PIN -->
+            <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+                <button type="button" id="tab-pin-keypad" onclick="switchRiderPinTab('keypad')" class="py-1.5 rounded-lg bg-indigo-600 text-white transition">🔒 Quick Lock Keypad</button>
+                <button type="button" id="tab-pin-setup" onclick="switchRiderPinTab('setup')" class="py-1.5 rounded-lg text-slate-400 hover:text-white transition">⚙️ Set / Change PIN</button>
+            </div>
+
+            <!-- Panel A: Big Numeric Keypad Lock Screen -->
+            <div id="rider-pin-keypad-panel" class="space-y-4 text-center">
+                <div class="flex items-center justify-center gap-4 my-3" id="rider-pin-dots">
+                    <div class="r-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                    <div class="r-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                    <div class="r-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                    <div class="r-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                </div>
+
+                <div id="rider-pin-error" class="hidden px-3 py-1.5 rounded-lg bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs font-bold"></div>
+
+                <div class="grid grid-cols-3 gap-2.5 select-none">
+                    <button type="button" onclick="pressRiderPin('1')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">1</button>
+                    <button type="button" onclick="pressRiderPin('2')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">2</button>
+                    <button type="button" onclick="pressRiderPin('3')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">3</button>
+                    <button type="button" onclick="pressRiderPin('4')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">4</button>
+                    <button type="button" onclick="pressRiderPin('5')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">5</button>
+                    <button type="button" onclick="pressRiderPin('6')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">6</button>
+                    <button type="button" onclick="pressRiderPin('7')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">7</button>
+                    <button type="button" onclick="pressRiderPin('8')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">8</button>
+                    <button type="button" onclick="pressRiderPin('9')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">9</button>
+                    <button type="button" onclick="clearRiderPin()" class="py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-slate-400 text-xs font-extrabold border border-slate-800">CLR</button>
+                    <button type="button" onclick="pressRiderPin('0')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">0</button>
+                    <button type="button" onclick="backspaceRiderPin()" class="py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-amber-400 text-base font-extrabold border border-slate-800">⌫</button>
+                </div>
+
+                <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                    <span id="rider-pin-strikes-info">3 wrong tries → Email + Password fallback</span>
+                    <a href="/login?pin_fallback=1" class="text-indigo-400 hover:underline font-bold">Use Master Password</a>
+                </div>
+            </div>
+
+            <!-- Panel B: Set or Clear 4-Digit PIN -->
+            <div id="rider-pin-setup-panel" class="hidden space-y-3">
+                <form action="/auth/pin/set" method="POST" onsubmit="saveRiderPinLocal(this)" class="space-y-3">
+                    <input type="hidden" name="redirect_to" value="/rider">
+                    <div>
+                        <label class="block text-xs font-bold text-indigo-300 mb-1">Choose 4-Digit Quick PIN (e.g. 1234)</label>
+                        <input type="password" inputmode="numeric" pattern="\\d{4}" maxlength="4" name="pin" id="new-rider-pin-input" placeholder="••••" required class="w-full p-3 bg-slate-950 border border-indigo-500/50 rounded-xl text-center text-2xl font-black tracking-[0.5em] text-emerald-400">
+                    </div>
+                    <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-lg transition">
+                        💾 Save 4-Digit Quick PIN
+                    </button>
+                </form>
+                <form action="/auth/pin/clear" method="POST" onsubmit="try{localStorage.removeItem('finatrack_quick_pin');}catch(e){}">
+                    <input type="hidden" name="redirect_to" value="/rider">
+                    <button type="submit" class="w-full py-2 bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 rounded-xl text-xs font-bold transition">
+                        🗑️ Remove Quick PIN
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         function openProfileModal() {
             document.getElementById('profile-switcher-modal')?.classList.remove('hidden');
@@ -5541,6 +5859,122 @@ export function renderRiderDashboard(data: any): string {
         }
         window.openProfileModal = openProfileModal;
         window.closeProfileModal = closeProfileModal;
+
+        var riderPinBuf = '';
+        var riderPinStrikes = 0;
+
+        function getStoredRiderPin() {
+            try {
+                var p = localStorage.getItem('finatrack_quick_pin');
+                if (p && /^\\d{4}$/.test(p)) return p;
+                var m = document.cookie.match(/(?:^|;\\s*)finatrack_quick_pin=(\\d{4})/);
+                return m ? m[1] : null;
+            } catch (e) { return null; }
+        }
+
+        function saveRiderPinLocal(formEl) {
+            try {
+                var inp = document.getElementById('new-rider-pin-input');
+                if (inp && /^\\d{4}$/.test(inp.value.trim())) {
+                    localStorage.setItem('finatrack_quick_pin', inp.value.trim());
+                }
+            } catch (e) {}
+        }
+
+        function switchRiderPinTab(tab) {
+            var kp = document.getElementById('rider-pin-keypad-panel');
+            var sp = document.getElementById('rider-pin-setup-panel');
+            var tk = document.getElementById('tab-pin-keypad');
+            var ts = document.getElementById('tab-pin-setup');
+            if (tab === 'setup') {
+                if (kp) kp.classList.add('hidden');
+                if (sp) sp.classList.remove('hidden');
+                if (ts) ts.className = 'py-1.5 rounded-lg bg-indigo-600 text-white transition';
+                if (tk) tk.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+            } else {
+                if (sp) sp.classList.add('hidden');
+                if (kp) kp.classList.remove('hidden');
+                if (tk) tk.className = 'py-1.5 rounded-lg bg-indigo-600 text-white transition';
+                if (ts) ts.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+            }
+        }
+
+        function openRiderPinModal() {
+            var modal = document.getElementById('rider-pin-modal');
+            if (!modal) return;
+            riderPinBuf = '';
+            renderRiderPinDots();
+            var saved = getStoredRiderPin();
+            switchRiderPinTab(saved ? 'keypad' : 'setup');
+            modal.classList.remove('hidden');
+        }
+
+        function closeRiderPinModal() {
+            document.getElementById('rider-pin-modal')?.classList.add('hidden');
+        }
+
+        function renderRiderPinDots() {
+            var dots = document.querySelectorAll('#rider-pin-dots .r-pin-dot');
+            for (var i = 0; i < dots.length; i++) {
+                dots[i].className = i < riderPinBuf.length
+                    ? 'r-pin-dot w-4 h-4 rounded-full border-2 border-emerald-400 bg-emerald-400 scale-110 transition-all'
+                    : 'r-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all';
+            }
+        }
+
+        function pressRiderPin(d) {
+            if (riderPinBuf.length >= 4) return;
+            riderPinBuf += String(d);
+            renderRiderPinDots();
+            if (riderPinBuf.length === 4) {
+                setTimeout(verifyRiderPinModal, 100);
+            }
+        }
+
+        function clearRiderPin() {
+            riderPinBuf = '';
+            renderRiderPinDots();
+        }
+
+        function backspaceRiderPin() {
+            riderPinBuf = riderPinBuf.slice(0, -1);
+            renderRiderPinDots();
+        }
+
+        function verifyRiderPinModal() {
+            var saved = getStoredRiderPin();
+            var errEl = document.getElementById('rider-pin-error');
+            if (!saved) {
+                switchRiderPinTab('setup');
+                return;
+            }
+            if (riderPinBuf === saved) {
+                if (errEl) errEl.classList.add('hidden');
+                riderPinStrikes = 0;
+                closeRiderPinModal();
+                return;
+            }
+            riderPinStrikes += 1;
+            riderPinBuf = '';
+            renderRiderPinDots();
+            var rem = 3 - riderPinStrikes;
+            if (riderPinStrikes >= 3) {
+                window.location.href = '/login?pin_fallback=1';
+                return;
+            }
+            if (errEl) {
+                errEl.textContent = 'Wrong PIN (' + rem + ' attempt' + (rem === 1 ? '' : 's') + ' left before password fallback)';
+                errEl.classList.remove('hidden');
+            }
+        }
+
+        window.openRiderPinModal = openRiderPinModal;
+        window.closeRiderPinModal = closeRiderPinModal;
+        window.switchRiderPinTab = switchRiderPinTab;
+        window.pressRiderPin = pressRiderPin;
+        window.clearRiderPin = clearRiderPin;
+        window.backspaceRiderPin = backspaceRiderPin;
+        window.saveRiderPinLocal = saveRiderPinLocal;
 
         (function() {
             recalcStintsSummary();

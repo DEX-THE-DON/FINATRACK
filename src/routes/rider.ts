@@ -5,7 +5,8 @@ import {
   toDecimal,
   calculateShiftHours,
   parseTimeToMinutes,
-  formatMoney
+  formatMoney,
+  allocateWaterfallSplit
 } from '../utils/math';
 import { Decimal } from 'decimal.js';
 
@@ -215,6 +216,7 @@ export interface StrictSaverConfig {
   savings_account_id: string;
   savings_account_name: string;
   starting_savings_balance: number;
+  work_days_per_week: number;
   required_gross_kes: number;
 }
 
@@ -231,6 +233,7 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
   let savingsAccountId = '';
   let savingsAccountName = 'Strict Savings Account';
   let startingSavingsBalance = 0;
+  let workDaysPerWeek = 6;
 
   try {
     const raw = getCookie(c, 'finatrack_strict_saver') || '';
@@ -268,6 +271,9 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
       if (typeof parsed.starting_savings_balance === 'number' && parsed.starting_savings_balance >= 0) {
         startingSavingsBalance = parsed.starting_savings_balance;
       }
+      if (typeof parsed.work_days_per_week === 'number' && parsed.work_days_per_week >= 1 && parsed.work_days_per_week <= 7) {
+        workDaysPerWeek = Math.round(parsed.work_days_per_week);
+      }
     }
   } catch (e) {}
 
@@ -284,6 +290,7 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
     savings_account_id: savingsAccountId,
     savings_account_name: savingsAccountName,
     starting_savings_balance: startingSavingsBalance,
+    work_days_per_week: workDaysPerWeek,
     required_gross_kes: netFloor + fuelAllowance + personalCap + dailyKodi,
   };
 }
@@ -363,6 +370,105 @@ export function savePlatformRemittanceConfigCookie(c: any, cfg: Partial<Platform
       sameSite: 'Lax',
     });
   } catch (e) {}
+}
+
+// ------------------------------------------------------------------------------
+// 📦 SUNDAY BATCH WATERFALL HOLDING POT (AVOID DAILY M-PESA CHARGES)
+// ------------------------------------------------------------------------------
+export interface BatchPotSplitBucket {
+  bucket_name: string;
+  target_type: string;
+  target_id?: string | null;
+  percentage: number;
+  amount: number;
+}
+
+export interface WeeklyBatchPotEntry {
+  id: string;
+  date: string;
+  day_label: string;
+  net_amount: number;
+  splits: BatchPotSplitBucket[];
+}
+
+export function getWeeklyBatchPot(c: any): WeeklyBatchPotEntry[] {
+  try {
+    const raw = getCookie(c, 'finatrack_batch_pot') || '';
+    if (raw) {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
+export function saveWeeklyBatchPotCookie(c: any, entries: WeeklyBatchPotEntry[]): void {
+  try {
+    const trimmed = (entries || []).slice(0, 14);
+    setCookie(c, 'finatrack_batch_pot', encodeURIComponent(JSON.stringify(trimmed)), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+export async function queueNetAmountToBatchPot(
+  c: any,
+  supabase: any,
+  userId: string | null,
+  dateStr: string,
+  netAmount: number
+): Promise<WeeklyBatchPotEntry | null> {
+  if (netAmount <= 0) return null;
+  let rules: any[] = [];
+  try {
+    let q = supabase.from('split_rules').select('*').order('percentage', { ascending: false });
+    if (userId) q = q.eq('user_id', userId);
+    const { data } = await q;
+    if (Array.isArray(data) && data.length > 0) rules = data;
+  } catch (e) {}
+
+  if (rules.length === 0) {
+    rules = [
+      { id: 'def-mmf', bucket_name: 'Ziidi MMF (Passive Yield)', target_type: 'MMF', percentage: 30 },
+      { id: 'def-lock', bucket_name: 'Lock Savings Vault', target_type: 'SAVINGS', percentage: 30 },
+      { id: 'def-goals', bucket_name: 'Goals / Sacco Checkoff', target_type: 'GOAL', percentage: 20 },
+      { id: 'def-bills', bucket_name: 'Bills & Upkeep Reserve', target_type: 'WALLET', percentage: 20 },
+    ];
+  }
+
+  const allocated = allocateWaterfallSplit(netAmount, rules);
+  const splits: BatchPotSplitBucket[] = allocated.map((s) => ({
+    bucket_name: s.bucket_name,
+    target_type: s.target_type,
+    target_id: s.target_id || null,
+    percentage: Number(s.percentage || 0),
+    amount: parseFloat(s.allocated_amount) || 0,
+  }));
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dt = new Date(dateStr + 'T12:00:00Z');
+  const dayLabel = isNaN(dt.getTime()) ? 'Shift' : dayNames[dt.getUTCDay()];
+
+  const currentPot = getWeeklyBatchPot(c);
+  const existingIdx = currentPot.findIndex((e) => e.date === dateStr);
+  const entry: WeeklyBatchPotEntry = {
+    id: existingIdx >= 0 ? currentPot[existingIdx].id : `batch-${Date.now()}`,
+    date: dateStr,
+    day_label: dayLabel,
+    net_amount: Math.round(netAmount * 100) / 100,
+    splits,
+  };
+
+  if (existingIdx >= 0) {
+    currentPot[existingIdx] = entry;
+  } else {
+    currentPot.push(entry);
+  }
+  currentPot.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  saveWeeklyBatchPotCookie(c, currentPot);
+  return entry;
 }
 
 
@@ -699,6 +805,16 @@ riderRoutes.post('/rider/logs', async (c) => {
 
   const strictCfg = getStrictSaverConfig(c);
   const shiftNet = totalEarnedKes - totalExpensesKes;
+  const safeShiftNetAfterUber = Math.max(0, shiftNet - totalUnremittedCommission);
+  const queueToSundayBatch = body['queue_to_sunday_batch'] === '1' || body['queue_to_sunday_batch'] === 'true';
+  let batchToastSuffix = '';
+  if (queueToSundayBatch && safeShiftNetAfterUber > 0) {
+    const queuedEntry = await queueNetAmountToBatchPot(c, supabase, userId, logDate, safeShiftNetAfterUber);
+    if (queuedEntry) {
+      batchToastSuffix = ` • 📦 Queued Ksh ${safeShiftNetAfterUber.toLocaleString()} to Sunday Batch Pot (0 M-Pesa fees today!)`;
+    }
+  }
+
   const lunchSavedBonus = strictCfg.save_unspent_lunch ? Math.max(0, strictCfg.lunch_allowance_kes - foodSpentKes) : 0;
   const strictRequiredToday = strictCfg.net_floor_kes + lunchSavedBonus;
   const totalShiftsSaved = savedCookieLogs.reduce((acc: number, l: any) => {
@@ -712,10 +828,10 @@ riderRoutes.post('/rider/logs', async (c) => {
   let strictToastMsg = '';
   if (shiftNet >= strictRequiredToday) {
     const extraProfit = shiftNet - strictRequiredToday;
-    strictToastMsg = `🎉 Congrats! You saved Ksh ${shiftNet.toLocaleString()} today (Ksh ${strictCfg.net_floor_kes.toLocaleString()} Target${lunchSavedBonus > 0 ? ` + Ksh ${lunchSavedBonus.toLocaleString()} Home-Lunch Saved` : ''}${extraProfit > 0 ? ` + Ksh ${extraProfit.toLocaleString()} Extra Profit` : ''})! Your ${accLabel} should now read Ksh ${expectedAccBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${kmToastMsg}`;
+    strictToastMsg = `🎉 Congrats! You saved Ksh ${shiftNet.toLocaleString()} today (Ksh ${strictCfg.net_floor_kes.toLocaleString()} Target${lunchSavedBonus > 0 ? ` + Ksh ${lunchSavedBonus.toLocaleString()} Home-Lunch Saved` : ''}${extraProfit > 0 ? ` + Ksh ${extraProfit.toLocaleString()} Extra Profit` : ''})! Your ${accLabel} should now read Ksh ${expectedAccBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${kmToastMsg}${batchToastSuffix}`;
   } else {
     const overdueAmt = strictRequiredToday - Math.max(0, shiftNet);
-    strictToastMsg = `💪 Let's catch up! You have an overdue of Ksh ${overdueAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Saved Ksh ${Math.max(0, shiftNet).toLocaleString()} vs Ksh ${strictRequiredToday.toLocaleString()} strict target). Your ${accLabel} should now read Ksh ${expectedAccBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${kmToastMsg}`;
+    strictToastMsg = `💪 Let's catch up! You have an overdue of Ksh ${overdueAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Saved Ksh ${Math.max(0, shiftNet).toLocaleString()} vs Ksh ${strictRequiredToday.toLocaleString()} strict target). Your ${accLabel} should now read Ksh ${expectedAccBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${kmToastMsg}${batchToastSuffix}`;
   }
 
   return c.redirect(`/rider?toast=${encodeURIComponent(strictToastMsg)}#shift-briefing-card`, 303);
@@ -820,6 +936,9 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
   const startingSavingsBalance = body['starting_savings_balance'] !== undefined
     ? Math.max(0, parseFloat(String(body['starting_savings_balance'] || '0')) || 0)
     : existing.starting_savings_balance;
+  const workDaysPerWeek = body['work_days_per_week'] !== undefined
+    ? Math.min(7, Math.max(1, parseInt(String(body['work_days_per_week'] || '6'), 10) || 6))
+    : existing.work_days_per_week;
   const bikeId = body['bike_id'] ? String(body['bike_id']).trim() : '';
 
   if (savingsAccountId) {
@@ -840,6 +959,7 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
     savings_account_id: savingsAccountId,
     savings_account_name: savingsAccountName || 'Strict Savings Account',
     starting_savings_balance: startingSavingsBalance,
+    work_days_per_week: workDaysPerWeek,
   });
 
   try {
@@ -851,10 +971,114 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
   } catch (e) {}
 
   const reqGross = netFloorKes + fuelAllowanceKes + personalCapKes + dailyKodiKes;
+  const weeklyFloor = netFloorKes * workDaysPerWeek;
   return c.redirect(
-    `/rider?toast=${encodeURIComponent(`Strict Saver Contract locked! Net Target: Ksh ${netFloorKes.toLocaleString()} • Fuel: Ksh ${fuelAllowanceKes.toLocaleString()} • Lunch: Ksh ${lunchAllowanceKes.toLocaleString()} • Airtime: Ksh ${airtimeAllowanceKes.toLocaleString()} • Required Gross: Ksh ${reqGross.toLocaleString()}`)}#shift-briefing-card`,
+    `/rider?toast=${encodeURIComponent(`Strict Saver Contract locked! Daily Net Floor: Ksh ${netFloorKes.toLocaleString()} • Work Week: ${workDaysPerWeek} days (Weekly Floor: Ksh ${weeklyFloor.toLocaleString()}) • Required Gross: Ksh ${reqGross.toLocaleString()}`)}#shift-briefing-card`,
     303
   );
+});
+
+// ------------------------------------------------------------------------------
+// 📦 SUNDAY BATCH WATERFALL POT ROUTES (QUEUE / DISBURSE / CLEAR)
+// ------------------------------------------------------------------------------
+riderRoutes.post('/rider/batch-pot/queue', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const netAmount = Math.max(0, parseFloat(String(body['net_amount'] || '0')) || 0);
+  const dateStr = String(body['date'] || new Date().toISOString().slice(0, 10));
+
+  if (netAmount <= 0) {
+    return c.redirect('/rider?toast=' + encodeURIComponent('Enter a positive net surplus to queue into your Sunday Batch Pot.') + '#sunday-batch-card', 303);
+  }
+
+  const entry = await queueNetAmountToBatchPot(c, supabase, userId, dateStr, netAmount);
+  const currentPot = getWeeklyBatchPot(c);
+  const totalQueued = currentPot.reduce((sum, e) => sum + Number(e.net_amount || 0), 0);
+
+  return c.redirect(
+    `/rider?toast=${encodeURIComponent(`📦 Queued Ksh ${netAmount.toLocaleString()} (${entry?.day_label || dateStr}) to Weekly Holding Pot! Total accumulated for Sunday: Ksh ${totalQueued.toLocaleString()} (0 M-Pesa charges today)`)}#sunday-batch-card`,
+    303
+  );
+});
+
+riderRoutes.post('/rider/batch-pot/disburse', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const sourceAccountId = body['source_account_id'] ? String(body['source_account_id']).trim() : null;
+  const currentPot = getWeeklyBatchPot(c);
+
+  if (currentPot.length === 0) {
+    return c.redirect('/rider?toast=' + encodeURIComponent('Your Weekly Holding Pot is currently empty.') + '#sunday-batch-card', 303);
+  }
+
+  // Consolidate splits by bucket_name
+  const bucketTotals = new Map<string, { bucket_name: string; target_type: string; target_id?: string | null; amount: number }>();
+  let totalBatchKes = 0;
+
+  for (const dayEntry of currentPot) {
+    totalBatchKes += Number(dayEntry.net_amount || 0);
+    for (const sp of (dayEntry.splits || [])) {
+      const key = sp.bucket_name;
+      const prev = bucketTotals.get(key);
+      if (prev) {
+        prev.amount = Math.round((prev.amount + Number(sp.amount || 0)) * 100) / 100;
+      } else {
+        bucketTotals.set(key, {
+          bucket_name: sp.bucket_name,
+          target_type: sp.target_type,
+          target_id: sp.target_id,
+          amount: Math.round(Number(sp.amount || 0) * 100) / 100,
+        });
+      }
+    }
+  }
+
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const consolidatedList = Array.from(bucketTotals.values()).filter((b) => b.amount > 0);
+
+  // Execute only 1 bulk transfer per bucket instead of daily micro-transfers
+  for (const bucket of consolidatedList) {
+    try {
+      if (bucket.target_id) {
+        if (bucket.target_type === 'GOAL') {
+          const { data: g } = await supabase.from('goals').select('*').eq('id', bucket.target_id).single();
+          if (g) {
+            const newCur = toDecimal(g.current_amount || 0).plus(bucket.amount).toNumber();
+            await supabase.from('goals').update({ current_amount: newCur }).eq('id', bucket.target_id);
+          }
+        } else {
+          const { data: acc } = await supabase.from('accounts').select('*').eq('id', bucket.target_id).single();
+          if (acc) {
+            const newBal = toDecimal(acc.balance || 0).plus(bucket.amount).toNumber();
+            await supabase.from('accounts').update({ balance: newBal }).eq('id', bucket.target_id);
+          }
+        }
+      }
+
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: bucket.target_id || sourceAccountId || null,
+        transaction_type: 'INCOME',
+        category: 'Sunday Batch Waterfall Split',
+        amount: bucket.amount,
+        date: todayDate,
+        description: `📦 Sunday Batch Waterfall (${currentPot.length} days consolidated): ${bucket.bucket_name}`,
+      });
+    } catch (e) {}
+  }
+
+  const transfersSaved = Math.max(0, (currentPot.length * consolidatedList.length) - consolidatedList.length);
+  saveWeeklyBatchPotCookie(c, []);
+
+  return c.redirect(
+    `/rider?toast=${encodeURIComponent(`🚀 Sunday Batch Disbursed! Ksh ${totalBatchKes.toLocaleString()} sent in ${consolidatedList.length} bulk transfers (Saved ${transfersSaved} M-Pesa transfers & tariff fees!). Weekly pot reset for Monday.`)}#sunday-batch-card`,
+    303
+  );
+});
+
+riderRoutes.post('/rider/batch-pot/clear', async (c) => {
+  saveWeeklyBatchPotCookie(c, []);
+  return c.redirect('/rider?toast=' + encodeURIComponent('Weekly Batch Holding Pot cleared.') + '#sunday-batch-card', 303);
 });
 
 riderRoutes.post('/rider/platform-remittance/remit', async (c) => {

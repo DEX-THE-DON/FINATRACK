@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
-import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents } from './routes/rider';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
 import { exportRoutes } from './routes/export';
@@ -747,6 +747,8 @@ app.get('/rider', async (c) => {
     odometer_config: odometerConfig,
     strict_saver_config: strictSaverConfig,
     platform_remittance: platformRemittanceConfig,
+    weekly_batch_pot: getWeeklyBatchPot(c),
+    has_quick_pin: Boolean(getCookie(c, 'finatrack_quick_pin')),
     time_intelligence: timeIntelligence,
     maintenance_schedules: resolveEffectiveMaintenanceSchedules(c, maintenance),
     compliance_deadlines: resolveEffectiveComplianceDeadlines(c, compliance),
