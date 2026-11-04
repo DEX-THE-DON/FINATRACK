@@ -217,6 +217,8 @@ export interface StrictSaverConfig {
   savings_account_name: string;
   starting_savings_balance: number;
   work_days_per_week: number;
+  daily_bonus_target_kes: number;
+  bonus_mission: string;
   required_gross_kes: number;
 }
 
@@ -234,6 +236,8 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
   let savingsAccountName = 'Strict Savings Account';
   let startingSavingsBalance = 0;
   let workDaysPerWeek = 6;
+  let dailyBonusTarget = 300;
+  let bonusMission = '80_20_REWARD';
 
   try {
     const raw = getCookie(c, 'finatrack_strict_saver') || '';
@@ -274,6 +278,12 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
       if (typeof parsed.work_days_per_week === 'number' && parsed.work_days_per_week >= 1 && parsed.work_days_per_week <= 7) {
         workDaysPerWeek = Math.round(parsed.work_days_per_week);
       }
+      if (typeof parsed.daily_bonus_target_kes === 'number' && parsed.daily_bonus_target_kes >= 50) {
+        dailyBonusTarget = Math.round(parsed.daily_bonus_target_kes);
+      }
+      if (typeof parsed.bonus_mission === 'string' && parsed.bonus_mission.trim()) {
+        bonusMission = parsed.bonus_mission.trim();
+      }
     }
   } catch (e) {}
 
@@ -291,6 +301,8 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
     savings_account_name: savingsAccountName,
     starting_savings_balance: startingSavingsBalance,
     work_days_per_week: workDaysPerWeek,
+    daily_bonus_target_kes: dailyBonusTarget,
+    bonus_mission: bonusMission,
     required_gross_kes: netFloor + fuelAllowance + personalCap + dailyKodi,
   };
 }
@@ -939,6 +951,12 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
   const workDaysPerWeek = body['work_days_per_week'] !== undefined
     ? Math.min(7, Math.max(1, parseInt(String(body['work_days_per_week'] || '6'), 10) || 6))
     : existing.work_days_per_week;
+  const dailyBonusTargetKes = body['daily_bonus_target_kes'] !== undefined
+    ? Math.max(50, parseFloat(String(body['daily_bonus_target_kes'] || '300')) || 300)
+    : existing.daily_bonus_target_kes;
+  const bonusMission = body['bonus_mission']
+    ? String(body['bonus_mission']).trim()
+    : existing.bonus_mission;
   const bikeId = body['bike_id'] ? String(body['bike_id']).trim() : '';
 
   if (savingsAccountId) {
@@ -960,6 +978,8 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
     savings_account_name: savingsAccountName || 'Strict Savings Account',
     starting_savings_balance: startingSavingsBalance,
     work_days_per_week: workDaysPerWeek,
+    daily_bonus_target_kes: dailyBonusTargetKes,
+    bonus_mission: bonusMission,
   });
 
   try {
@@ -971,9 +991,9 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
   } catch (e) {}
 
   const reqGross = netFloorKes + fuelAllowanceKes + personalCapKes + dailyKodiKes;
-  const weeklyFloor = netFloorKes * workDaysPerWeek;
+  const weeklyExtraPool = dailyBonusTargetKes * workDaysPerWeek;
   return c.redirect(
-    `/rider?toast=${encodeURIComponent(`Strict Saver Contract locked! Daily Net Floor: Ksh ${netFloorKes.toLocaleString()} • Work Week: ${workDaysPerWeek} days (Weekly Floor: Ksh ${weeklyFloor.toLocaleString()}) • Required Gross: Ksh ${reqGross.toLocaleString()}`)}#shift-briefing-card`,
+    `/rider?toast=${encodeURIComponent(`Strict Saver Contract locked! 👑 Sacred Daily Floor: Ksh ${netFloorKes.toLocaleString()} • 🔥 Extra Hustle Challenge: +Ksh ${dailyBonusTargetKes.toLocaleString()}/day (Ksh ${weeklyExtraPool.toLocaleString()} Weekly Extra Pool) • Required Gross: Ksh ${reqGross.toLocaleString()}`)}#shift-briefing-card`,
     303
   );
 });

@@ -138,12 +138,15 @@ export function renderRiderDashboard(data: any): string {
   const lastShiftOverflow = lastShift ? Math.max(0, lastShiftNet - lastShiftStrictTarget) : 0;
   const requiredGrossBeforeHome = strictNetFloor + strictFuelAllowance + strictPersonalCap + strictDailyKodi + cumulativeOverdueKes;
 
-  // 🏆 Weekly Target & Streak Challenge (Connected to Daily Floor)
+  // 🔥 Weekly Extra Hustle & Streak Challenge (Strictly EXTRA Cash Above the Ksh 1,000 Pay Yourself First Floor!)
   const workDaysPerWeek = Math.min(7, Math.max(1, Number(strict_saver_config?.work_days_per_week || 6)));
+  const dailyBonusTargetKes = Math.max(50, Number(strict_saver_config?.daily_bonus_target_kes || 300));
+  const bonusMission = String(strict_saver_config?.bonus_mission || '80_20_REWARD');
   const weeklyFloorKes = strictNetFloor * workDaysPerWeek;
-  const survivorTargetKes = Math.round(weeklyFloorKes * 0.8);
-  const proRiderTargetKes = weeklyFloorKes;
-  const ironRiderTargetKes = Math.round(weeklyFloorKes * 1.2);
+  const weeklyExtraTargetKes = dailyBonusTargetKes * workDaysPerWeek;
+  const bronzeExtraTargetKes = Math.round(weeklyExtraTargetKes * 0.5);
+  const silverExtraTargetKes = weeklyExtraTargetKes;
+  const beastExtraTargetKes = Math.round(weeklyExtraTargetKes * 1.5);
 
   const nowDateObj = new Date(today + 'T12:00:00Z');
   const currentDayOfWeek = (nowDateObj.getUTCDay() + 6) % 7; // 0 = Mon, 6 = Sun
@@ -152,25 +155,52 @@ export function renderRiderDashboard(data: any): string {
   const currentWeekMondayStr = mondayDateObj.toISOString().slice(0, 10);
 
   const thisWeekShifts = (rider_logs || []).filter((l: any) => String(l.date || '') >= currentWeekMondayStr);
-  const thisWeekNetEarned = thisWeekShifts.reduce((acc: number, l: any) => {
+  const dailyNetByDate = new Map<string, number>();
+  for (const l of thisWeekShifts) {
+    const dStr = String(l.date || '');
     const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
-    return acc + Math.max(0, Number(l.total_earned || 0) - exp);
-  }, 0);
-  const uniqueDaysLoggedThisWeek = new Set(thisWeekShifts.map((l: any) => String(l.date || ''))).size;
-  const remainingWorkDaysThisWeek = Math.max(1, workDaysPerWeek - uniqueDaysLoggedThisWeek);
-  const remainingWeeklyTargetKes = Math.max(0, weeklyFloorKes - thisWeekNetEarned);
-  const dynamicDailyPaceKes = remainingWeeklyTargetKes > 0
-    ? Math.ceil(remainingWeeklyTargetKes / remainingWorkDaysThisWeek)
-    : strictNetFloor;
-  const weeklyProgressPct = weeklyFloorKes > 0 ? Math.min(140, Math.round((thisWeekNetEarned / weeklyFloorKes) * 100)) : 0;
+    const net = Math.max(0, Number(l.total_earned || 0) - exp);
+    dailyNetByDate.set(dStr, (dailyNetByDate.get(dStr) || 0) + net);
+  }
 
-  const weeklyBadgeTier = thisWeekNetEarned >= ironRiderTargetKes
-    ? { icon: '👑', label: 'Iron Rider / Beast Mode (120%+)', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-400/50' }
-    : thisWeekNetEarned >= proRiderTargetKes
-      ? { icon: '🥈', label: 'Pro Rider (100% Weekly Floor)', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50' }
-      : thisWeekNetEarned >= survivorTargetKes
-        ? { icon: '🥉', label: 'Survivor Tier (80%+ Reached)', badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/50' }
-        : { icon: '🔥', label: `Building Streak (${weeklyProgressPct}%)`, badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40' };
+  let thisWeekNetEarned = 0;
+  let thisWeekFloorProtectedKes = 0;
+  let thisWeekExtraSurplusKes = 0;
+  let extraStreakDaysCount = 0;
+
+  for (const [, dayNet] of dailyNetByDate.entries()) {
+    thisWeekNetEarned += dayNet;
+    const floorPart = Math.min(dayNet, strictNetFloor);
+    const extraPart = Math.max(0, dayNet - strictNetFloor);
+    thisWeekFloorProtectedKes += floorPart;
+    thisWeekExtraSurplusKes += extraPart;
+    if (extraPart > 0) extraStreakDaysCount += 1;
+  }
+
+  const uniqueDaysLoggedThisWeek = dailyNetByDate.size;
+  const remainingWorkDaysThisWeek = Math.max(1, workDaysPerWeek - uniqueDaysLoggedThisWeek);
+  const remainingExtraTargetKes = Math.max(0, weeklyExtraTargetKes - thisWeekExtraSurplusKes);
+  const dynamicDailyExtraPaceKes = remainingExtraTargetKes > 0
+    ? Math.ceil(remainingExtraTargetKes / remainingWorkDaysThisWeek)
+    : dailyBonusTargetKes;
+  const weeklyExtraProgressPct = weeklyExtraTargetKes > 0
+    ? Math.min(150, Math.round((thisWeekExtraSurplusKes / weeklyExtraTargetKes) * 100))
+    : 0;
+
+  const extraWealthBoosterKes = bonusMission === '80_20_REWARD'
+    ? Math.round(thisWeekExtraSurplusKes * 0.8)
+    : thisWeekExtraSurplusKes;
+  const extraSundayTreatKes = bonusMission === '80_20_REWARD'
+    ? Math.max(0, thisWeekExtraSurplusKes - extraWealthBoosterKes)
+    : 0;
+
+  const weeklyBadgeTier = thisWeekExtraSurplusKes >= beastExtraTargetKes
+    ? { icon: '👑', label: 'Beast Mode Overachiever (150%+ Extra)', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-400/50' }
+    : thisWeekExtraSurplusKes >= silverExtraTargetKes
+      ? { icon: '🥈', label: 'Pro Hustler (100% Extra Target Hit!)', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50' }
+      : thisWeekExtraSurplusKes >= bronzeExtraTargetKes
+        ? { icon: '🥉', label: 'Bronze Hustler (50%+ Extra Banked)', badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/50' }
+        : { icon: '🔥', label: `${extraStreakDaysCount}-Day Extra Streak (${weeklyExtraProgressPct}%)`, badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40' };
 
   // 📦 Sunday Batch Waterfall Holding Pot (Avoid Daily M-Pesa Charges)
   const batchPotEntries: any[] = Array.isArray(weekly_batch_pot) ? weekly_batch_pot : [];
@@ -3197,17 +3227,29 @@ export function renderRiderDashboard(data: any): string {
                         <input type="number" step="any" name="starting_savings_balance" value="${startingSavingsBalance}" class="w-full p-2 bg-slate-900 border border-purple-800 rounded-xl font-bold text-purple-300 text-sm">
                     </div>
                     <div>
-                        <label class="block text-[11px] font-bold text-amber-300 mb-1">📅 8. Work Days / Week (Weekly Floor)</label>
+                        <label class="block text-[11px] font-bold text-amber-300 mb-1">📅 8. Work Days / Week</label>
                         <select name="work_days_per_week" class="w-full p-2 bg-slate-900 border border-amber-700 rounded-xl font-bold text-amber-300 text-xs">
-                            <option value="5" ${workDaysPerWeek === 5 ? 'selected' : ''}>5 Days / Week (Ksh ${(strictNetFloor * 5).toLocaleString()} Floor)</option>
-                            <option value="6" ${workDaysPerWeek === 6 ? 'selected' : ''}>6 Days / Week (Ksh ${(strictNetFloor * 6).toLocaleString()} Floor)</option>
-                            <option value="7" ${workDaysPerWeek === 7 ? 'selected' : ''}>7 Days / Week (Ksh ${(strictNetFloor * 7).toLocaleString()} Floor)</option>
+                            <option value="5" ${workDaysPerWeek === 5 ? 'selected' : ''}>5 Days / Week</option>
+                            <option value="6" ${workDaysPerWeek === 6 ? 'selected' : ''}>6 Days / Week</option>
+                            <option value="7" ${workDaysPerWeek === 7 ? 'selected' : ''}>7 Days / Week</option>
                         </select>
                     </div>
-                    <div class="flex gap-2 items-end sm:col-span-2 lg:col-span-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-emerald-300 mb-1">🔥 9. Daily Extra Hustle Goal (Above ${strictNetFloor})</label>
+                        <input type="number" step="50" min="50" name="daily_bonus_target_kes" value="${dailyBonusTargetKes}" class="w-full p-2 bg-slate-900 border border-emerald-700 rounded-xl font-black text-emerald-400 text-sm" placeholder="300">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-cyan-300 mb-1">🎯 10. Extra Hustle Sunday Mission</label>
+                        <select name="bonus_mission" class="w-full p-2 bg-slate-900 border border-cyan-700 rounded-xl font-bold text-cyan-300 text-xs">
+                            <option value="80_20_REWARD" ${bonusMission === '80_20_REWARD' ? 'selected' : ''}>🍗 80% Wealth Booster + 20% Sunday Reward</option>
+                            <option value="GOAL_BOOSTER" ${bonusMission === 'GOAL_BOOSTER' ? 'selected' : ''}>🚀 100% Fast-Track Goal / Sacco Booster</option>
+                            <option value="BIKE_UPGRADE" ${bonusMission === 'BIKE_UPGRADE' ? 'selected' : ''}>🛠️ 100% Tyre, Spares &amp; Bike Upgrade Pot</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2 items-end sm:col-span-2">
                         <input type="hidden" id="strict_daily_kodi_input" name="daily_kodi_kes" value="${strictDailyKodi}">
                         <button type="submit" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs transition shadow-md active:scale-95">
-                            🔒 Lock Strict Daily &amp; Weekly Contract
+                            🔒 Lock Strict Floor &amp; Extra Hustle Challenge
                         </button>
                     </div>
                 </form>
@@ -3320,46 +3362,57 @@ export function renderRiderDashboard(data: any): string {
                 </div>
             </div>
 
-            <!-- 🏆 4. Weekly Target & Streak Challenge (Connected to Daily Floor + Dynamic Pace Buffer) -->
+            <!-- 🔥 4. Weekly Extra Hustle & Streak Challenge (Strictly EXTRA Cash Above Ksh 1,000 Pay Yourself First Floor!) -->
             <div class="p-4 bg-slate-950/90 border border-indigo-500/40 rounded-2xl space-y-3">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <div>
+                    <div class="space-y-1">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-xs font-black uppercase tracking-wider text-indigo-300">🏆 Weekly Target &amp; Streak Challenge (${workDaysPerWeek}-Day Work Week)</span>
+                            <span class="text-xs font-black uppercase tracking-wider text-amber-300">🔥 Weekly Extra Hustle Challenge (Strictly Above Ksh ${strictNetFloor.toLocaleString()} Floor)</span>
                             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black border ${weeklyBadgeTier.badgeClass}">
                                 ${weeklyBadgeTier.icon} ${weeklyBadgeTier.label}
                             </span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                👑 Ksh ${strictNetFloor.toLocaleString()}/day Floor Untouched (Ksh ${thisWeekFloorProtectedKes.toLocaleString()} Protected)
+                            </span>
                         </div>
-                        <p class="text-[11px] text-gray-300 mt-0.5">
-                            ${remainingWeeklyTargetKes > 0
-                              ? `⚡ <strong>Dynamic Pace Buffer:</strong> Weekly goal needs <strong class="text-amber-300">Ksh ${remainingWeeklyTargetKes.toLocaleString()}</strong> across remaining <strong>${remainingWorkDaysThisWeek} workday${remainingWorkDaysThisWeek === 1 ? '' : 's'}</strong> (<strong class="text-emerald-400">Ksh ${dynamicDailyPaceKes.toLocaleString()}/day pace</strong>). Slow days are absorbed smoothly!`
-                              : `🎉 <strong>Weekly Floor Crushed!</strong> You have banked <strong class="text-emerald-400">Ksh ${thisWeekNetEarned.toLocaleString()}</strong> vs your Ksh ${weeklyFloorKes.toLocaleString()} weekly floor. Every shilling now pushes you toward 👑 Beast Mode!`}
+                        <p class="text-[11px] text-gray-300">
+                            ${remainingExtraTargetKes > 0
+                              ? `⚡ <strong>Push Harder After Ksh ${strictNetFloor.toLocaleString()}:</strong> Your first Ksh ${strictNetFloor.toLocaleString()}/day is locked for <strong>Pay Yourself First</strong>. To hit your <strong class="text-amber-300">+Ksh ${weeklyExtraTargetKes.toLocaleString()} Weekly Extra Hustle Pool</strong> (${workDaysPerWeek} days × +Ksh ${dailyBonusTargetKes.toLocaleString()}/day), aim for <strong class="text-emerald-400">+Ksh ${dynamicDailyExtraPaceKes.toLocaleString()}/day extra</strong> (Net <strong>Ksh ${(strictNetFloor + dynamicDailyExtraPaceKes).toLocaleString()}/day</strong>) over the remaining <strong>${remainingWorkDaysThisWeek} workday${remainingWorkDaysThisWeek === 1 ? '' : 's'}</strong>!`
+                              : `🎉 <strong>Extra Hustle Target Crushed!</strong> Your sacred Ksh ${strictNetFloor.toLocaleString()}/day floor is safe AND you banked <strong class="text-emerald-400">+Ksh ${thisWeekExtraSurplusKes.toLocaleString()}</strong> pure extra cash above your floor this week!`}
                         </p>
                     </div>
-                    <div class="text-right shrink-0">
-                        <span class="text-[10px] text-gray-400 uppercase font-bold block">This Week Net (Since Mon ${currentWeekMondayStr})</span>
-                        <span class="text-lg font-black text-emerald-400 convertible-amount" data-kes="${thisWeekNetEarned}">Ksh ${thisWeekNetEarned.toLocaleString()}</span>
-                        <span class="text-xs text-gray-400"> / Ksh ${weeklyFloorKes.toLocaleString()} (${weeklyProgressPct}%)</span>
+                    <div class="text-right shrink-0 bg-slate-900/90 border border-indigo-800/60 px-3.5 py-2 rounded-xl">
+                        <span class="text-[10px] text-amber-300 uppercase font-extrabold block">🔥 Extra Cash Above ${strictNetFloor.toLocaleString()}</span>
+                        <span class="text-lg font-black text-emerald-400 convertible-amount" data-kes="${thisWeekExtraSurplusKes}">+Ksh ${thisWeekExtraSurplusKes.toLocaleString()}</span>
+                        <span class="text-xs text-gray-400"> / +Ksh ${weeklyExtraTargetKes.toLocaleString()} (${weeklyExtraProgressPct}%)</span>
                     </div>
                 </div>
 
-                <!-- Progress Bar with 80% / 100% / 120% Milestone Markers -->
+                <!-- Progress Bar for Extra Surplus Above Floor -->
                 <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                    <div class="bg-gradient-to-r from-indigo-500 via-emerald-400 to-amber-400 h-2.5 rounded-full transition-all" style="width: ${Math.min(100, weeklyProgressPct)}%"></div>
+                    <div class="bg-gradient-to-r from-indigo-500 via-emerald-400 to-amber-400 h-2.5 rounded-full transition-all" style="width: ${Math.min(100, weeklyExtraProgressPct)}%"></div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                    <div class="p-2.5 rounded-xl border ${thisWeekNetEarned >= survivorTargetKes ? 'bg-cyan-950/60 border-cyan-500/60 text-cyan-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
-                        <span>🥉 <strong>Survivor (80%)</strong></span>
-                        <span class="font-black">Ksh ${survivorTargetKes.toLocaleString()} ${thisWeekNetEarned >= survivorTargetKes ? '✅' : ''}</span>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px]">
+                    <div class="p-2.5 rounded-xl border ${thisWeekExtraSurplusKes >= bronzeExtraTargetKes ? 'bg-cyan-950/60 border-cyan-500/60 text-cyan-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
+                        <span>🥉 <strong>Bronze (50% Extra)</strong></span>
+                        <span class="font-black">+Ksh ${bronzeExtraTargetKes.toLocaleString()} ${thisWeekExtraSurplusKes >= bronzeExtraTargetKes ? '✅' : ''}</span>
                     </div>
-                    <div class="p-2.5 rounded-xl border ${thisWeekNetEarned >= proRiderTargetKes ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
-                        <span>🥈 <strong>Pro Rider (100%)</strong></span>
-                        <span class="font-black">Ksh ${proRiderTargetKes.toLocaleString()} ${thisWeekNetEarned >= proRiderTargetKes ? '✅' : ''}</span>
+                    <div class="p-2.5 rounded-xl border ${thisWeekExtraSurplusKes >= silverExtraTargetKes ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
+                        <span>🥈 <strong>Pro Hustler (100%)</strong></span>
+                        <span class="font-black">+Ksh ${silverExtraTargetKes.toLocaleString()} ${thisWeekExtraSurplusKes >= silverExtraTargetKes ? '✅' : ''}</span>
                     </div>
-                    <div class="p-2.5 rounded-xl border ${thisWeekNetEarned >= ironRiderTargetKes ? 'bg-amber-950/60 border-amber-500/60 text-amber-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
-                        <span>👑 <strong>Iron Rider / Beast (120%+)</strong></span>
-                        <span class="font-black">Ksh ${ironRiderTargetKes.toLocaleString()}+ ${thisWeekNetEarned >= ironRiderTargetKes ? '🔥' : ''}</span>
+                    <div class="p-2.5 rounded-xl border ${thisWeekExtraSurplusKes >= beastExtraTargetKes ? 'bg-amber-950/60 border-amber-500/60 text-amber-200' : 'bg-slate-900/70 border-slate-800 text-gray-400'} flex items-center justify-between">
+                        <span>👑 <strong>Beast Mode (150%+)</strong></span>
+                        <span class="font-black">+Ksh ${beastExtraTargetKes.toLocaleString()}+ ${thisWeekExtraSurplusKes >= beastExtraTargetKes ? '🔥' : ''}</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl border bg-indigo-950/50 border-indigo-700/50 text-indigo-200 flex items-center justify-between">
+                        <span>${bonusMission === 'BIKE_UPGRADE' ? '🛠️ <strong>Spares/Tyre Pot</strong>' : bonusMission === 'GOAL_BOOSTER' ? '🚀 <strong>Goal Booster</strong>' : '🍗 <strong>80/20 Reward</strong>'}</span>
+                        <span class="font-black text-emerald-300">
+                            ${bonusMission === '80_20_REWARD'
+                              ? `📈 ${extraWealthBoosterKes.toLocaleString()} / 🍗 ${extraSundayTreatKes.toLocaleString()}`
+                              : `Ksh ${thisWeekExtraSurplusKes.toLocaleString()}`}
+                        </span>
                     </div>
                 </div>
             </div>
