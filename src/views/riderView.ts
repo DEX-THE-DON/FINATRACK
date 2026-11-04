@@ -5846,7 +5846,7 @@ export function renderRiderDashboard(data: any): string {
             <!-- Mode Switcher: Lock Keypad vs Set/Change PIN -->
             <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
                 <button type="button" id="tab-pin-keypad" onclick="switchRiderPinTab('keypad')" class="py-1.5 rounded-lg bg-indigo-600 text-white transition">🔒 Quick Lock Keypad</button>
-                <button type="button" id="tab-pin-setup" onclick="switchRiderPinTab('setup')" class="py-1.5 rounded-lg text-slate-400 hover:text-white transition">⚙️ Set / Change PIN</button>
+                <button type="button" id="tab-pin-setup" onclick="switchRiderPinTab('setup')" class="py-1.5 rounded-lg text-slate-400 hover:text-white transition">⚙️ Set / Confirm PIN</button>
             </div>
 
             <!-- Panel A: Big Numeric Keypad Lock Screen -->
@@ -5881,16 +5881,25 @@ export function renderRiderDashboard(data: any): string {
                 </div>
             </div>
 
-            <!-- Panel B: Set or Clear 4-Digit PIN -->
+            <!-- Panel B: Set, Confirm, & Save 4-Digit PIN -->
             <div id="rider-pin-setup-panel" class="hidden space-y-3">
-                <form action="/auth/pin/set" method="POST" onsubmit="saveRiderPinLocal(this)" class="space-y-3">
+                <form action="/auth/pin/set" method="POST" onsubmit="return saveRiderPinLocal(event)" class="space-y-3.5">
                     <input type="hidden" name="redirect_to" value="/rider">
                     <div>
-                        <label class="block text-xs font-bold text-indigo-300 mb-1">Choose 4-Digit Quick PIN (e.g. 1234)</label>
-                        <input type="password" inputmode="numeric" pattern="\\d{4}" maxlength="4" name="pin" id="new-rider-pin-input" placeholder="••••" required class="w-full p-3 bg-slate-950 border border-indigo-500/50 rounded-xl text-center text-2xl font-black tracking-[0.5em] text-emerald-400">
+                        <label class="block text-xs font-bold text-indigo-300 mb-1">1. Choose 4-Digit PIN</label>
+                        <input type="password" inputmode="numeric" pattern="\\d{4}" maxlength="4" name="pin" id="new-rider-pin-input" placeholder="••••" required oninput="validatePinSetupMatch()" class="w-full p-2.5 bg-slate-950 border border-indigo-500/50 rounded-xl text-center text-xl font-black tracking-[0.4em] text-white focus:outline-none focus:border-indigo-400">
                     </div>
-                    <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-lg transition">
-                        💾 Save 4-Digit Quick PIN
+                    <div>
+                        <label class="block text-xs font-bold text-indigo-300 mb-1">2. Confirm 4-Digit PIN</label>
+                        <input type="password" inputmode="numeric" pattern="\\d{4}" maxlength="4" name="confirm_pin" id="confirm-rider-pin-input" placeholder="••••" required oninput="validatePinSetupMatch()" class="w-full p-2.5 bg-slate-950 border border-indigo-500/50 rounded-xl text-center text-xl font-black tracking-[0.4em] text-emerald-400 focus:outline-none focus:border-emerald-400">
+                    </div>
+                    
+                    <div id="pin-setup-match-msg" class="text-[11px] font-bold text-center py-1 text-slate-400">
+                        Enter matching 4 digits in both fields
+                    </div>
+
+                    <button type="submit" id="save-rider-pin-btn" disabled class="w-full py-3 bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-lg transition active:scale-95">
+                        💾 Confirm &amp; Save 4-Digit PIN
                     </button>
                 </form>
                 <form action="/auth/pin/clear" method="POST" onsubmit="try{localStorage.removeItem('finatrack_quick_pin');}catch(e){}">
@@ -5925,16 +5934,66 @@ export function renderRiderDashboard(data: any): string {
             } catch (e) { return null; }
         }
 
-        function saveRiderPinLocal(formEl) {
+        function validatePinSetupMatch() {
+            var p1El = document.getElementById('new-rider-pin-input');
+            var p2El = document.getElementById('confirm-rider-pin-input');
+            var msgEl = document.getElementById('pin-setup-match-msg');
+            var btnEl = document.getElementById('save-rider-pin-btn');
+            if (!p1El || !p2El || !msgEl || !btnEl) return;
+
+            var p1 = p1El.value.replace(/[^0-9]/g, '').slice(0, 4);
+            var p2 = p2El.value.replace(/[^0-9]/g, '').slice(0, 4);
+            p1El.value = p1;
+            p2El.value = p2;
+
+            if (p1.length === 0 && p2.length === 0) {
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-slate-400';
+                msgEl.textContent = 'Enter matching 4 digits in both fields';
+                btnEl.disabled = true;
+                return;
+            }
+
+            if (p1.length < 4 || p2.length < 4) {
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-amber-400';
+                msgEl.textContent = 'Enter all 4 digits in both fields (' + p1.length + '/4, ' + p2.length + '/4)';
+                btnEl.disabled = true;
+                return;
+            }
+
+            if (p1 === p2) {
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-emerald-400';
+                msgEl.textContent = '✓ PINs match! Ready to save.';
+                btnEl.disabled = false;
+            } else {
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-rose-400';
+                msgEl.textContent = '⚠️ PINs do not match. Please re-check.';
+                btnEl.disabled = true;
+            }
+        }
+
+        function saveRiderPinLocal(ev) {
             try {
-                var inp = document.getElementById('new-rider-pin-input');
-                if (inp && /^\\d{4}$/.test(inp.value.trim())) {
-                    localStorage.setItem('finatrack_quick_pin', inp.value.trim());
+                var inp1 = document.getElementById('new-rider-pin-input');
+                var inp2 = document.getElementById('confirm-rider-pin-input');
+                var val1 = inp1 ? inp1.value.replace(/[^0-9]/g, '').slice(0, 4) : '';
+                var val2 = inp2 ? inp2.value.replace(/[^0-9]/g, '').slice(0, 4) : '';
+                if (val1.length !== 4 || val1 !== val2) {
+                    if (ev && ev.preventDefault) ev.preventDefault();
+                    alert('⚠️ Please enter and confirm matching 4 digits before saving.');
+                    return false;
                 }
-            } catch (e) {}
+                localStorage.setItem('finatrack_quick_pin', val1);
+                return true;
+            } catch (e) {
+                return true;
+            }
         }
 
         function switchRiderPinTab(tab) {
+            var saved = getStoredRiderPin();
+            if (tab === 'keypad' && !saved) {
+                tab = 'setup';
+            }
             var kp = document.getElementById('rider-pin-keypad-panel');
             var sp = document.getElementById('rider-pin-setup-panel');
             var tk = document.getElementById('tab-pin-keypad');
@@ -5943,7 +6002,7 @@ export function renderRiderDashboard(data: any): string {
                 if (kp) kp.classList.add('hidden');
                 if (sp) sp.classList.remove('hidden');
                 if (ts) ts.className = 'py-1.5 rounded-lg bg-indigo-600 text-white transition';
-                if (tk) tk.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+                if (tk) tk.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition' + (!saved ? ' opacity-40 pointer-events-none' : '');
             } else {
                 if (sp) sp.classList.add('hidden');
                 if (kp) kp.classList.remove('hidden');
@@ -5958,6 +6017,16 @@ export function renderRiderDashboard(data: any): string {
             riderPinBuf = '';
             renderRiderPinDots();
             var saved = getStoredRiderPin();
+            var kpTab = document.getElementById('tab-pin-keypad');
+            if (kpTab) {
+                if (!saved) {
+                    kpTab.classList.add('opacity-40', 'pointer-events-none');
+                    kpTab.setAttribute('title', 'Set a PIN first to enable quick lock keypad');
+                } else {
+                    kpTab.classList.remove('opacity-40', 'pointer-events-none');
+                    kpTab.removeAttribute('title');
+                }
+            }
             switchRiderPinTab(saved ? 'keypad' : 'setup');
             modal.classList.remove('hidden');
         }
@@ -6028,6 +6097,7 @@ export function renderRiderDashboard(data: any): string {
         window.clearRiderPin = clearRiderPin;
         window.backspaceRiderPin = backspaceRiderPin;
         window.saveRiderPinLocal = saveRiderPinLocal;
+        window.validatePinSetupMatch = validatePinSetupMatch;
 
         (function() {
             recalcStintsSummary();

@@ -96,10 +96,15 @@ authRoutes.post('/auth/logout', async (c) => {
 authRoutes.post('/auth/pin/set', async (c) => {
   const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
   const rawPin = String(body['pin'] || '').replace(/[^0-9]/g, '').slice(0, 4);
+  const confirmPin = String(body['confirm_pin'] || '').replace(/[^0-9]/g, '').slice(0, 4);
   const redirectTo = String(body['redirect_to'] || '/rider');
 
   if (rawPin.length !== 4) {
     return c.redirect(`${redirectTo}?toast=${encodeURIComponent('Please enter a valid 4-digit numeric PIN.')}`, 303);
+  }
+
+  if (confirmPin && rawPin !== confirmPin) {
+    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚠️ PINs do not match. Please re-enter and confirm your 4-digit PIN.')}`, 303);
   }
 
   setCookie(c, 'finatrack_quick_pin', rawPin, {
@@ -109,7 +114,7 @@ authRoutes.post('/auth/pin/set', async (c) => {
   });
 
   return c.redirect(
-    `${redirectTo}?toast=${encodeURIComponent('🔒 4-Digit Quick PIN saved! You can now unlock in 2 seconds with the big numeric keypad.')}`,
+    `${redirectTo}?toast=${encodeURIComponent('🔒 4-Digit Quick PIN saved & confirmed! You can now use 2-second quick unlock.')}`,
     303
   );
 });

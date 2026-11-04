@@ -423,7 +423,8 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                                 Log In to Finatrack
                             </button>
 
-                            <button type="button" onclick="openQuickPinModal()" class="w-full py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 text-indigo-300 text-xs font-extrabold flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                            <!-- Quick PIN button: Hidden by default, only shown if user has configured & confirmed a PIN on this device -->
+                            <button type="button" id="login-quick-pin-btn" onclick="openQuickPinModal()" class="hidden w-full py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 text-indigo-300 text-xs font-extrabold flex items-center justify-center gap-2 transition active:scale-[0.99]">
                                 <span>🔢</span> 2-Second Quick PIN Unlock (Roadside / Gloves Mode)
                             </button>
                         </form>
@@ -608,16 +609,18 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
         }
 
         function openQuickPinModal() {
+            var savedPin = getSavedQuickPin();
+            if (!savedPin || !/^\d{4}$/.test(savedPin)) {
+                fallbackToMasterLogin('ℹ️ No 4-digit PIN set on this device yet. Sign in with Email + Password first to configure your PIN.');
+                return;
+            }
             var modal = document.getElementById('quick-pin-modal');
             if (!modal) return;
             currentPinBuffer = '';
             updatePinDotsUI();
-            var savedPin = getSavedQuickPin();
             var subtitle = document.getElementById('quick-pin-subtitle');
             if (subtitle) {
-                subtitle.textContent = savedPin
-                    ? 'Enter your 4-digit roadside helper PIN'
-                    : 'Enter your 4-digit PIN (or set one inside Rider Hub)';
+                subtitle.textContent = 'Enter your 4-digit roadside helper PIN';
             }
             modal.classList.remove('hidden');
         }
@@ -714,12 +717,21 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
 
         document.addEventListener('DOMContentLoaded', function() {
             var params = new URLSearchParams(window.location.search);
-            if (params.get('pin_fallback') === '1') {
-                fallbackToMasterLogin('⚠️ PIN verification failed — Please sign in with Email + Password.');
-                return;
-            }
-            if (getSavedQuickPin()) {
+            var savedPin = getSavedQuickPin();
+            var qBtn = document.getElementById('login-quick-pin-btn');
+
+            if (savedPin && /^\d{4}$/.test(savedPin)) {
+                if (qBtn) qBtn.classList.remove('hidden');
+                if (params.get('pin_fallback') === '1') {
+                    fallbackToMasterLogin('⚠️ PIN verification failed — Please sign in with Email + Password.');
+                    return;
+                }
                 openQuickPinModal();
+            } else {
+                if (qBtn) qBtn.classList.add('hidden');
+                if (params.get('pin_fallback') === '1') {
+                    fallbackToMasterLogin('⚠️ Please sign in with your Email + Password.');
+                }
             }
         });
         function switchAuthTab(tab) {
