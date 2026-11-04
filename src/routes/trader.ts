@@ -17,6 +17,7 @@ export interface TraderCloseoutLog {
   packaging_fee: number;
   airtime_fee: number;
   misc_fee: number;
+  spoilage_kes?: number;
   total_expenses: number;
   net_profit: number;
   notes?: string;
@@ -130,6 +131,7 @@ traderRoutes.post('/trader/closeout', async (c) => {
   const packagingFee = Math.max(0, parseFloat(String(body['packaging_fee'] || '0.0')) || 0);
   const airtimeFee = Math.max(0, parseFloat(String(body['airtime_fee'] || '0.0')) || 0);
   const miscFee = Math.max(0, parseFloat(String(body['misc_fee'] || '0.0')) || 0);
+  const spoilageKes = Math.max(0, parseFloat(String(body['spoilage_kes'] || '0.0')) || 0);
   const notes = String(body['notes'] || '').trim();
 
   const totalExpenses = kanjoFee + porterFee + packagingFee + airtimeFee + miscFee;
@@ -147,6 +149,7 @@ traderRoutes.post('/trader/closeout', async (c) => {
     packaging_fee: packagingFee,
     airtime_fee: airtimeFee,
     misc_fee: miscFee,
+    spoilage_kes: spoilageKes,
     total_expenses: totalExpenses,
     net_profit: netProfit,
     notes,

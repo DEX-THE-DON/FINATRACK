@@ -36,6 +36,27 @@ export function renderTraderDashboard(data: {
   const isTargetHit = latestNet >= targetFloor;
   const latestOverflow = Math.max(0, latestNet - targetFloor);
 
+  // Perishable Spoilage / Waste Analytics
+  const recent7Logs = trader_logs.slice(0, 7);
+  const weeklySpoilageKes = recent7Logs.reduce((sum, l) => sum + (Number(l.spoilage_kes) || 0), 0);
+  const weeklyRestockKes = recent7Logs.reduce((sum, l) => sum + (Number(l.restock_fund) || 0), 0);
+  const weeklySpoilagePct = weeklyRestockKes > 0
+    ? Math.round((weeklySpoilageKes / weeklyRestockKes) * 1000) / 10
+    : 0;
+  const latestSpoilageKes = latestLog ? (Number(latestLog.spoilage_kes) || 0) : 0;
+
+  const formatKeWhatsAppPhone = (rawPhone?: string) => {
+    if (!rawPhone) return '';
+    const digits = rawPhone.replace(/[^0-9]/g, '');
+    if (digits.startsWith('0') && digits.length >= 10) {
+      return '254' + digits.slice(1);
+    }
+    if ((digits.startsWith('7') || digits.startsWith('1')) && digits.length === 9) {
+      return '254' + digits;
+    }
+    return digits;
+  };
+
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -268,12 +289,12 @@ export function renderTraderDashboard(data: {
                             </div>
                         </div>
 
-                        <!-- Daily Operating Expenses -->
+                        <!-- Daily Operating Expenses & Perishable Spoilage -->
                         <div>
                             <span class="text-xs font-extrabold uppercase tracking-wider text-gray-500 dark:text-gray-400 block mb-2">
-                                🏛️ Stall &amp; Market Operating Expenses (<span class="curr-symbol-label">Ksh</span>)
+                                🏛️ Stall Operating Expenses &amp; Perishable Waste (<span class="curr-symbol-label">Ksh</span>)
                             </span>
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
                                 <div>
                                     <label class="block text-[10px] text-gray-500 mb-0.5">🏛️ Kanjo Ticket</label>
                                     <input type="number" step="any" name="kanjo_fee" id="trader_kanjo" value="50" class="w-full p-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-bold text-gray-900 dark:text-white">
@@ -289,6 +310,10 @@ export function renderTraderDashboard(data: {
                                 <div>
                                     <label class="block text-[10px] text-gray-500 mb-0.5">📱 Airtime &amp; Misc</label>
                                     <input type="number" step="any" name="airtime_fee" id="trader_airtime" value="50" class="w-full p-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-bold text-gray-900 dark:text-white">
+                                </div>
+                                <div class="col-span-2 sm:col-span-1">
+                                    <label class="block text-[10px] font-bold text-rose-600 dark:text-rose-400 mb-0.5">🍅 Spoilage / Waste</label>
+                                    <input type="number" step="any" min="0" name="spoilage_kes" id="trader_spoilage" value="0" placeholder="0" class="w-full p-1.5 bg-rose-50/60 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800 rounded-lg font-black text-rose-600 dark:text-rose-400">
                                 </div>
                             </div>
                         </div>
@@ -312,6 +337,7 @@ export function renderTraderDashboard(data: {
                             <p id="trader_preview_overflow" class="text-[11px] text-emerald-300 font-medium">
                                 Target Floor: Ksh ${targetFloor.toLocaleString()} Net. Extra profit sweeps 100% into MMF / Chama!
                             </p>
+                            <p id="trader_preview_spoilage" class="hidden text-[11px] font-bold text-rose-400 pt-1 border-t border-gray-800"></p>
                         </div>
 
                         <div class="flex items-center gap-3 pt-1">
@@ -351,6 +377,43 @@ export function renderTraderDashboard(data: {
                     </div>
                 </div>
 
+                <!-- 🍅 3. Perishable Spoilage & Stock Rotation Intelligence Card -->
+                <div class="bg-white dark:bg-gray-900 border border-rose-200/70 dark:border-rose-900/50 p-6 rounded-3xl shadow-sm space-y-3">
+                    <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2.5">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xl">🍅</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-gray-900 dark:text-white">Perishable Spoilage &amp; Stock Rotation Guard</h3>
+                                <p class="text-[11px] text-gray-500 dark:text-gray-400">Monitor tomato, greens &amp; fruit spoilage over your last 7 closeouts to protect your Soko capital.</p>
+                            </div>
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${weeklySpoilagePct > 10 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-300' : weeklySpoilagePct > 5 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300'}">
+                            ${weeklySpoilagePct > 10 ? '🚨 High Waste' : weeklySpoilagePct > 5 ? '🟡 Moderate Waste' : '🟢 Low Waste'} (${weeklySpoilagePct}%)
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2.5 text-xs">
+                        <div class="p-3 bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/60 dark:border-rose-900/50">
+                            <span class="text-[10px] font-bold text-rose-700 dark:text-rose-300 uppercase block">7-Day Spoilage Loss</span>
+                            <span class="text-base font-black text-rose-600 dark:text-rose-400 privacy-amount">${formatKes(weeklySpoilageKes)}</span>
+                        </div>
+                        <div class="p-3 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700">
+                            <span class="text-[10px] font-bold text-gray-500 uppercase block">Last Closeout Waste</span>
+                            <span class="text-base font-black text-gray-900 dark:text-white privacy-amount">${formatKes(latestSpoilageKes)}</span>
+                        </div>
+                        <div class="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/50">
+                            <span class="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase block">Waste vs Restock</span>
+                            <span class="text-base font-black text-emerald-600 dark:text-emerald-400">${weeklySpoilagePct}%</span>
+                        </div>
+                    </div>
+
+                    <p class="text-[11px] text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-xl border border-gray-200/60 dark:border-gray-700/60">
+                        ${weeklySpoilagePct > 10
+                          ? `⚠️ <strong>Action Needed:</strong> Perishable waste is eating ${weeklySpoilagePct}% of your restock fund (${formatKes(weeklySpoilageKes)} lost). Bundle ripe tomatoes/greens for quick evening clearance at 5:30 PM!`
+                          : `💡 <strong>Soko Tip:</strong> Keep daily spoilage below 5% of your restock capital by clearing ripe stock with evening "Funga Soko" bundles.`}
+                    </p>
+                </div>
+
             </div>
 
             <!-- Right Col (5 cols): Daftari ya Mkopo (Customer Credit / Debt Tracker) -->
@@ -383,7 +446,7 @@ export function renderTraderDashboard(data: {
                                 <input type="text" name="customer_name" placeholder="e.g. Mama Kevin" class="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-gray-900 dark:text-white" required>
                             </div>
                             <div>
-                                <label class="block text-gray-600 dark:text-gray-400 mb-0.5 font-bold">Phone Number (Optional)</label>
+                                <label class="block text-gray-600 dark:text-gray-400 mb-0.5 font-bold">Phone Number (WhatsApp)</label>
                                 <input type="tel" name="phone" placeholder="07..." class="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white">
                             </div>
                         </div>
@@ -411,7 +474,12 @@ export function renderTraderDashboard(data: {
                         ${trader_credits.length > 0 ? trader_credits.map(cr => {
                             const remaining = Math.max(0, cr.amount - (cr.paid_amount || 0));
                             const isPaid = cr.status === 'PAID' || remaining === 0;
-                            const whatsappMsg = encodeURIComponent(`Habari ${cr.customer_name}, Finatrack reminder ya salio la soko/mboga ni Ksh ${remaining.toLocaleString()}. Unaweza kutuma kwa M-Pesa ukipata nafasi. Asante sana!`);
+                            const cleanPhone = formatKeWhatsAppPhone(cr.phone);
+                            const tillText = trader_config.till_number ? ` (M-Pesa Buy Goods Till: ${trader_config.till_number})` : ' kupitia M-Pesa';
+                            const whatsappMsg = encodeURIComponent(`Habari ${cr.customer_name}, nakukumbusha kwa upole salio lako la Ksh ${remaining.toLocaleString()} kwa (${cr.items}) hapa ${trader_config.stall_name}. Tafadhali tuma${tillText} ukipata nafasi. Asante sana!`);
+                            const whatsappUrl = cleanPhone
+                              ? `https://wa.me/${cleanPhone}?text=${whatsappMsg}`
+                              : `https://wa.me/?text=${whatsappMsg}`;
                             return `
                             <div class="p-3.5 rounded-2xl border ${isPaid ? 'bg-gray-50/60 dark:bg-gray-900/40 border-gray-200 dark:border-gray-800 opacity-60' : 'bg-white dark:bg-gray-950 border-rose-200 dark:border-rose-900/60 shadow-2xs'} space-y-2">
                                 <div class="flex justify-between items-start">
@@ -428,15 +496,13 @@ export function renderTraderDashboard(data: {
                                 <div class="flex items-center justify-between text-[10px] text-gray-400 border-t border-gray-100 dark:border-gray-800/80 pt-2">
                                     <span>Due: <strong class="text-gray-700 dark:text-gray-300">${cr.due_date || 'No date'}</strong></span>
                                     <div class="flex items-center gap-1.5">
-                                        ${!isPaid && cr.phone ? `
-                                        <a href="https://api.whatsapp.com/send?phone=${cr.phone.replace(/[^0-9]/g, '')}&text=${whatsappMsg}" target="_blank" class="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold rounded hover:bg-emerald-100 transition" title="Send WhatsApp friendly reminder">
-                                            📱 Reminder
-                                        </a>` : ''}
-
                                         ${!isPaid ? `
+                                        <a href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-extrabold rounded-lg hover:bg-emerald-100 transition flex items-center gap-1 active:scale-95" title="Send polite WhatsApp debt reminder">
+                                            <span>💬 WhatsApp</span>
+                                        </a>
                                         <form action="/trader/credit/settle/${cr.id}" method="POST" class="inline">
                                             <input type="hidden" name="amount" value="${remaining}">
-                                            <button type="submit" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded transition" title="Mark as settled &amp; add to Till">
+                                            <button type="submit" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg transition active:scale-95" title="Mark as settled &amp; add to Till">
                                                 ✓ Lipa
                                             </button>
                                         </form>` : ''}
@@ -467,7 +533,7 @@ export function renderTraderDashboard(data: {
                         <div class="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-800 flex justify-between items-center">
                             <div>
                                 <span class="font-bold text-gray-900 dark:text-white">${l.date}</span>
-                                <span class="text-[10px] text-gray-400 block">Gross: ${formatKes(l.gross_sales)} • Restock: ${formatKes(l.restock_fund)}</span>
+                                <span class="text-[10px] text-gray-400 block">Gross: ${formatKes(l.gross_sales)} • Restock: ${formatKes(l.restock_fund)}${Number(l.spoilage_kes) > 0 ? ` • <strong class="text-rose-500">🍅 Spoilage: ${formatKes(l.spoilage_kes || 0)}</strong>` : ''}</span>
                             </div>
                             <div class="text-right">
                                 <span class="font-black text-emerald-600 dark:text-emerald-400 block">${formatKes(l.net_profit)}</span>
@@ -639,6 +705,7 @@ export function renderTraderDashboard(data: {
             var porter = parseFloat(document.getElementById('trader_porter')?.value || 0) || 0;
             var pack = parseFloat(document.getElementById('trader_packaging')?.value || 0) || 0;
             var airtime = parseFloat(document.getElementById('trader_airtime')?.value || 0) || 0;
+            var spoilage = parseFloat(document.getElementById('trader_spoilage')?.value || 0) || 0;
 
             var burn = restock + kanjo + porter + pack + airtime;
             var net = gross - burn;
@@ -647,10 +714,21 @@ export function renderTraderDashboard(data: {
             var burnEl = document.getElementById('trader_preview_burn');
             var badgeEl = document.getElementById('trader_status_badge');
             var overflowEl = document.getElementById('trader_preview_overflow');
+            var spoilageEl = document.getElementById('trader_preview_spoilage');
             var splitBtn = document.getElementById('trader_split_btn');
 
             if (netEl) netEl.innerText = 'Ksh ' + net.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
             if (burnEl) burnEl.innerText = 'Ksh ' + burn.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+            if (spoilageEl) {
+                if (spoilage > 0) {
+                    var spoilPct = restock > 0 ? Math.round((spoilage / restock) * 1000) / 10 : 0;
+                    spoilageEl.classList.remove('hidden');
+                    spoilageEl.innerHTML = '🍅 Perishable Spoilage Today: <strong>Ksh ' + spoilage.toLocaleString() + '</strong> (' + spoilPct + '% of restock capital)';
+                } else {
+                    spoilageEl.classList.add('hidden');
+                }
+            }
 
             if (gross > 0) {
                 if (net >= TARGET_FLOOR) {

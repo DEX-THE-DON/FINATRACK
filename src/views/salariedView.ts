@@ -1,4 +1,4 @@
-import { SalariedConfig, SalariedLoanRecord, calculateDaysUntilPayday } from '../routes/salaried';
+import { SalariedConfig, SalariedLoanRecord, calculateDaysUntilPayday, calculateKenyanPayslip } from '../routes/salaried';
 import { calculateDebtDeadline } from '../utils/math';
 
 export function renderSalariedDashboard(data: {
@@ -61,6 +61,10 @@ export function renderSalariedDashboard(data: {
       : { label: '🚨 High Burn Danger', color: 'text-rose-400 bg-rose-500/20 border-rose-500/40' };
 
   const totalBlendedMonthly = salaried_config.monthly_net_salary + (salaried_config.side_hustle_estimate || 0);
+  const initialGrossSalary = salaried_config.monthly_gross_salary && salaried_config.monthly_gross_salary > 0
+    ? salaried_config.monthly_gross_salary
+    : Math.round(salaried_config.monthly_net_salary * 1.32);
+  const payslipBreakdown = calculateKenyanPayslip(initialGrossSalary, totalBorrowedMonthlyCheckoff);
 
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
@@ -341,8 +345,121 @@ export function renderSalariedDashboard(data: {
                             </div>
                         </div>
 
+                        <!-- One-Tap Monthly Checkoff Auto-Deduction on Payday -->
+                        <div class="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-2xl flex items-start sm:items-center justify-between gap-3">
+                            <label class="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                                <input type="checkbox" name="auto_deduct_checkoffs" value="1" ${totalBorrowedMonthlyCheckoff > 0 ? 'checked' : ''} class="mt-0.5 sm:mt-0 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500">
+                                <span class="text-xs">
+                                    <strong class="font-extrabold text-gray-900 dark:text-white block">🔄 One-Tap Monthly Checkoff Auto-Deduction</strong>
+                                    <span class="text-[11px] text-gray-600 dark:text-gray-400">
+                                        ${totalBorrowedMonthlyCheckoff > 0
+                                          ? `Automatically deduct <strong>${formatKes(totalBorrowedMonthlyCheckoff)}</strong> across your ${activeBorrowedLoans.filter(l => (l.monthly_installment || 0) > 0).length} active SACCO/Employer checkoff loan(s) when splitting salary.`
+                                          : 'No active checkoff installments set yet. Add a monthly installment on any borrowed loan below to auto-deduct on payday.'}
+                                    </span>
+                                </span>
+                            </label>
+                            ${totalBorrowedMonthlyCheckoff > 0 ? `
+                            <span class="px-2.5 py-1 bg-rose-600 text-white font-black text-[10px] rounded-lg shrink-0 privacy-amount">
+                                -${formatKes(totalBorrowedMonthlyCheckoff)}/mo
+                            </span>` : ''}
+                        </div>
+
                         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold py-3 px-4 rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2">
                             <span>🚀 Execute Payday Waterfall Split Now</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- 🇰🇪 Kenyan Payslip & Statutory Tax Breakdown Calculator (PAYE, SHIF, NSSF, Housing Levy) -->
+                <div id="payslip-calculator-card" class="bg-white dark:bg-gray-900 border border-indigo-200 dark:border-indigo-900/60 p-6 rounded-3xl shadow-sm space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 pb-3">
+                        <div class="flex items-center space-x-2.5">
+                            <span class="text-2xl">🇰🇪</span>
+                            <div>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <h2 class="text-base sm:text-lg font-bold text-gray-900 dark:text-white">Kenyan Payslip &amp; Statutory Tax Calculator</h2>
+                                    <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                        KRA PAYE • SHIF • NSSF • AHL
+                                    </span>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Enter your Gross Salary to compute exact statutory deductions and lock in your true Net Take-Home Pay.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Gross Salary Presets -->
+                    <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span class="text-[10px] font-bold uppercase text-gray-400 mr-1">Quick Gross:</span>
+                        ${[35000, 50000, 85000, 120000, 180000, 250000].map((preset) => `
+                        <button type="button" onclick="setSalariedGrossPreset(${preset})" class="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-indigo-100 dark:hover:bg-indigo-950 text-gray-700 dark:text-gray-300 font-bold rounded-lg text-[11px] transition active:scale-95">
+                            Ksh ${(preset / 1000)}k
+                        </button>
+                        `).join('')}
+                    </div>
+
+                    <form action="/salaried/payslip/apply" method="POST" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                                    💼 Monthly Gross Salary (Ksh)
+                                </label>
+                                <input type="number" step="any" min="0" name="gross_salary" id="payslip_gross_input" value="${payslipBreakdown.gross_salary}" oninput="recalcKenyanPayslip()" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded-xl font-black text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500" required>
+                                <span class="text-[10px] text-gray-400">Basic salary + house/commuter allowances</span>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                                    🏦 Checkoff / SACCO / HELB Deductions (Ksh)
+                                </label>
+                                <input type="number" step="any" min="0" name="checkoff_deductions" id="payslip_checkoff_input" value="${payslipBreakdown.checkoff_deductions}" oninput="recalcKenyanPayslip()" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-rose-300 dark:border-rose-800 rounded-xl font-black text-base text-rose-600 dark:text-rose-400 focus:ring-2 focus:ring-rose-500">
+                                <span class="text-[10px] text-gray-400">Auto-filled from your active checkoff loans</span>
+                            </div>
+                        </div>
+
+                        <!-- Statutory Breakdown Grid -->
+                        <div class="p-4 bg-slate-900 dark:bg-slate-950 rounded-2xl border border-indigo-900/60 text-white space-y-3 text-xs">
+                            <div class="flex items-center justify-between border-b border-gray-800 pb-2">
+                                <span class="text-[10px] font-black uppercase tracking-wider text-indigo-300">Statutory Deduction Item</span>
+                                <span class="text-[10px] font-black uppercase tracking-wider text-indigo-300">Monthly Amount</span>
+                            </div>
+
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <div class="p-2.5 bg-slate-950/90 rounded-xl border border-gray-800">
+                                    <span class="text-[10px] text-gray-400 block">NSSF (Tier I &amp; II 6%)</span>
+                                    <span id="ps_nssf_val" class="font-black text-sm text-amber-400 privacy-amount">${formatKes(payslipBreakdown.nssf)}</span>
+                                    <span class="text-[9px] text-gray-500 block">Capped at Ksh 4,320</span>
+                                </div>
+                                <div class="p-2.5 bg-slate-950/90 rounded-xl border border-gray-800">
+                                    <span class="text-[10px] text-gray-400 block">SHIF Health (2.75%)</span>
+                                    <span id="ps_shif_val" class="font-black text-sm text-cyan-400 privacy-amount">${formatKes(payslipBreakdown.shif)}</span>
+                                    <span class="text-[9px] text-gray-500 block">Social Health Fund</span>
+                                </div>
+                                <div class="p-2.5 bg-slate-950/90 rounded-xl border border-gray-800">
+                                    <span class="text-[10px] text-gray-400 block">Housing Levy (1.5%)</span>
+                                    <span id="ps_ahl_val" class="font-black text-sm text-purple-400 privacy-amount">${formatKes(payslipBreakdown.housing_levy)}</span>
+                                    <span class="text-[9px] text-gray-500 block">Affordable Housing</span>
+                                </div>
+                                <div class="p-2.5 bg-slate-950/90 rounded-xl border border-gray-800">
+                                    <span class="text-[10px] text-gray-400 block">Net PAYE (KRA Tax)</span>
+                                    <span id="ps_paye_val" class="font-black text-sm text-rose-400 privacy-amount">${formatKes(payslipBreakdown.paye_net)}</span>
+                                    <span class="text-[9px] text-gray-500 block">After Ksh 2,400 relief</span>
+                                </div>
+                            </div>
+
+                            <div class="pt-2 border-t border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div class="text-[11px] text-gray-300">
+                                    Total Statutory: <strong id="ps_stat_total" class="text-rose-300 privacy-amount">${formatKes(payslipBreakdown.total_statutory)}</strong>
+                                    • Net Before Checkoff: <strong id="ps_net_before" class="text-indigo-300 privacy-amount">${formatKes(payslipBreakdown.net_before_checkoff)}</strong>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-400">Net Take-Home:</span>
+                                    <span id="ps_net_takehome" class="text-lg font-black text-emerald-400 privacy-amount">${formatKes(payslipBreakdown.net_take_home)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold rounded-xl text-xs transition shadow-sm flex items-center justify-center gap-2">
+                            <span>✅ Lock Computed Net Take-Home into My Salaried Config</span>
                         </button>
                     </form>
                 </div>
@@ -984,6 +1101,49 @@ export function renderSalariedDashboard(data: {
             });
         }
 
+        function recalcKenyanPayslip() {
+            const gross = Math.max(0, parseFloat(document.getElementById('payslip_gross_input')?.value) || 0);
+            const checkoffs = Math.max(0, parseFloat(document.getElementById('payslip_checkoff_input')?.value) || 0);
+
+            const nssf = gross > 0 ? Math.min(4320, Math.round(gross * 0.06 * 100) / 100) : 0;
+            const shif = gross > 0 ? Math.max(300, Math.round(gross * 0.0275 * 100) / 100) : 0;
+            const ahl = gross > 0 ? Math.round(gross * 0.015 * 100) / 100 : 0;
+            const taxable = Math.max(0, gross - nssf - shif - ahl);
+
+            let grossTax = 0;
+            if (taxable > 24000) {
+                let rem = taxable;
+                const b1 = Math.min(rem, 24000); grossTax += b1 * 0.10; rem -= b1;
+                if (rem > 0) { const b2 = Math.min(rem, 8333); grossTax += b2 * 0.25; rem -= b2; }
+                if (rem > 0) { const b3 = Math.min(rem, 467667); grossTax += b3 * 0.30; rem -= b3; }
+                if (rem > 0) { const b4 = Math.min(rem, 300000); grossTax += b4 * 0.325; rem -= b4; }
+                if (rem > 0) { grossTax += rem * 0.35; }
+            }
+            const paye = taxable > 24000 ? Math.max(0, Math.round((grossTax - 2400) * 100) / 100) : 0;
+            const statTotal = nssf + shif + ahl + paye;
+            const netBefore = Math.max(0, gross - statTotal);
+            const netTakeHome = Math.max(0, netBefore - checkoffs);
+
+            const fmt = (v) => 'Ksh ' + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = fmt(val); };
+
+            setTxt('ps_nssf_val', nssf);
+            setTxt('ps_shif_val', shif);
+            setTxt('ps_ahl_val', ahl);
+            setTxt('ps_paye_val', paye);
+            setTxt('ps_stat_total', statTotal);
+            setTxt('ps_net_before', netBefore);
+            setTxt('ps_net_takehome', netTakeHome);
+        }
+
+        function setSalariedGrossPreset(val) {
+            const inp = document.getElementById('payslip_gross_input');
+            if (inp) {
+                inp.value = String(val);
+                recalcKenyanPayslip();
+            }
+        }
+
         window.openProfileModal = openProfileModal;
         window.closeProfileModal = closeProfileModal;
         window.toggleDarkMode = toggleDarkMode;
@@ -992,6 +1152,8 @@ export function renderSalariedDashboard(data: {
         window.applySalariedLoanPreset = applySalariedLoanPreset;
         window.syncSalariedLoanDirectionUI = syncSalariedLoanDirectionUI;
         window.filterSalariedLoans = filterSalariedLoans;
+        window.recalcKenyanPayslip = recalcKenyanPayslip;
+        window.setSalariedGrossPreset = setSalariedGrossPreset;
     </script>
 </body>
 </html>`;

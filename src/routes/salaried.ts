@@ -8,10 +8,119 @@ export const salariedRoutes = new Hono<{ Bindings: AppEnv }>();
 
 export interface SalariedConfig {
   monthly_net_salary: number;
+  monthly_gross_salary?: number;
   payday_day: number; // e.g. 25, 28, 30
   side_hustle_estimate: number;
   employer_name: string;
   living_budget_monthly: number;
+}
+
+export interface KenyanPayslipBreakdown {
+  gross_salary: number;
+  nssf: number;
+  shif: number;
+  housing_levy: number;
+  taxable_pay: number;
+  paye_before_relief: number;
+  personal_relief: number;
+  paye_net: number;
+  total_statutory: number;
+  net_before_checkoff: number;
+  checkoff_deductions: number;
+  net_take_home: number;
+}
+
+export function calculateKenyanPayslip(grossKes: number, checkoffDeductionKes: number = 0): KenyanPayslipBreakdown {
+  const gross = Math.max(0, Number(grossKes) || 0);
+  const checkoffs = Math.max(0, Number(checkoffDeductionKes) || 0);
+
+  if (gross <= 0) {
+    return {
+      gross_salary: 0,
+      nssf: 0,
+      shif: 0,
+      housing_levy: 0,
+      taxable_pay: 0,
+      paye_before_relief: 0,
+      personal_relief: 0,
+      paye_net: 0,
+      total_statutory: 0,
+      net_before_checkoff: 0,
+      checkoff_deductions: checkoffs,
+      net_take_home: 0,
+    };
+  }
+
+  // 1. NSSF (6% of pensionable pay, Tier I + Tier II capped at Ksh 72,000 upper limit => max Ksh 4,320)
+  const nssf = Math.min(4320, Math.round(gross * 0.06 * 100) / 100);
+
+  // 2. SHIF (Social Health Insurance Fund: 2.75% of Gross, min Ksh 300)
+  const shif = Math.max(300, Math.round(gross * 0.0275 * 100) / 100);
+
+  // 3. Affordable Housing Levy (1.5% of Gross)
+  const housingLevy = Math.round(gross * 0.015 * 100) / 100;
+
+  // 4. Taxable Income (NSSF, SHIF, and Housing Levy are allowable tax deductions in Kenya)
+  const taxablePay = Math.max(0, Math.round((gross - nssf - shif - housingLevy) * 100) / 100);
+
+  // 5. PAYE Monthly Tax Bands (KRA)
+  let grossTax = 0;
+  if (taxablePay > 24000) {
+    let rem = taxablePay;
+    // Band 1: First 24,000 @ 10%
+    const b1 = Math.min(rem, 24000);
+    grossTax += b1 * 0.10;
+    rem -= b1;
+
+    // Band 2: Next 8,333 @ 25%
+    if (rem > 0) {
+      const b2 = Math.min(rem, 8333);
+      grossTax += b2 * 0.25;
+      rem -= b2;
+    }
+
+    // Band 3: Next 467,667 @ 30%
+    if (rem > 0) {
+      const b3 = Math.min(rem, 467667);
+      grossTax += b3 * 0.30;
+      rem -= b3;
+    }
+
+    // Band 4: Next 300,000 @ 32.5%
+    if (rem > 0) {
+      const b4 = Math.min(rem, 300000);
+      grossTax += b4 * 0.325;
+      rem -= b4;
+    }
+
+    // Band 5: Above 800,000 @ 35%
+    if (rem > 0) {
+      grossTax += rem * 0.35;
+    }
+  }
+
+  grossTax = Math.round(grossTax * 100) / 100;
+  const personalRelief = taxablePay > 24000 ? 2400 : 0;
+  const payeNet = Math.max(0, Math.round((grossTax - personalRelief) * 100) / 100);
+
+  const totalStatutory = Math.round((nssf + shif + housingLevy + payeNet) * 100) / 100;
+  const netBeforeCheckoff = Math.max(0, Math.round((gross - totalStatutory) * 100) / 100);
+  const netTakeHome = Math.max(0, Math.round((netBeforeCheckoff - checkoffs) * 100) / 100);
+
+  return {
+    gross_salary: gross,
+    nssf,
+    shif,
+    housing_levy: housingLevy,
+    taxable_pay: taxablePay,
+    paye_before_relief: grossTax,
+    personal_relief: personalRelief,
+    paye_net: payeNet,
+    total_statutory: totalStatutory,
+    net_before_checkoff: netBeforeCheckoff,
+    checkoff_deductions: checkoffs,
+    net_take_home: netTakeHome,
+  };
 }
 
 export interface SalariedLoanRecord {
@@ -109,6 +218,7 @@ export function resolveEffectiveSalariedLoans(c: any, dbDebts: any[] = []): Sala
 export function getSalariedConfig(c: any): SalariedConfig {
   const defaults: SalariedConfig = {
     monthly_net_salary: 65000,
+    monthly_gross_salary: 85000,
     payday_day: 28,
     side_hustle_estimate: 0,
     employer_name: 'Main Employer',
@@ -155,7 +265,7 @@ export function calculateDaysUntilPayday(paydayDay: number): { daysRemaining: nu
 }
 
 // ------------------------------------------------------------------------------
-// 1. UPDATE SALARIED CONFIG
+// 1. UPDATE SALARIED CONFIG & APPLY PAYSLIP CALCULATOR
 // ------------------------------------------------------------------------------
 salariedRoutes.post('/salaried/config', async (c) => {
   const body = await c.req.parseBody();
@@ -163,6 +273,9 @@ salariedRoutes.post('/salaried/config', async (c) => {
 
   const updated: SalariedConfig = {
     monthly_net_salary: Math.max(0, parseFloat(String(body['monthly_net_salary'] || '65000')) || current.monthly_net_salary),
+    monthly_gross_salary: body['monthly_gross_salary'] !== undefined
+      ? Math.max(0, parseFloat(String(body['monthly_gross_salary'] || '0')) || 0)
+      : current.monthly_gross_salary,
     payday_day: Math.min(31, Math.max(1, parseInt(String(body['payday_day'] || '28'), 10) || current.payday_day)),
     side_hustle_estimate: Math.max(0, parseFloat(String(body['side_hustle_estimate'] || '0')) || 0),
     employer_name: String(body['employer_name'] || current.employer_name).trim(),
@@ -173,8 +286,33 @@ salariedRoutes.post('/salaried/config', async (c) => {
   return c.redirect('/salaried?toast=Payday+and+salary+settings+updated+successfully', 303);
 });
 
+salariedRoutes.post('/salaried/payslip/apply', async (c) => {
+  const body = await c.req.parseBody();
+  const current = getSalariedConfig(c);
+
+  const grossSalary = Math.max(0, parseFloat(String(body['gross_salary'] || '0')) || 0);
+  const checkoffDeductions = Math.max(0, parseFloat(String(body['checkoff_deductions'] || '0')) || 0);
+
+  if (grossSalary <= 0) {
+    return c.redirect('/salaried?toast=Please+enter+a+valid+Gross+Salary#payslip-calculator-card', 303);
+  }
+
+  const breakdown = calculateKenyanPayslip(grossSalary, checkoffDeductions);
+  const updated: SalariedConfig = {
+    ...current,
+    monthly_gross_salary: grossSalary,
+    monthly_net_salary: breakdown.net_take_home,
+  };
+  saveSalariedConfigCookie(c, updated);
+
+  return c.redirect(
+    `/salaried?toast=${encodeURIComponent(`✅ Kenyan Payslip Applied! Gross: Ksh ${grossSalary.toLocaleString()} → Net Take-Home: Ksh ${breakdown.net_take_home.toLocaleString()} (PAYE: Ksh ${breakdown.paye_net.toLocaleString()}, SHIF: Ksh ${breakdown.shif.toLocaleString()}, NSSF: Ksh ${breakdown.nssf.toLocaleString()}, Housing: Ksh ${breakdown.housing_levy.toLocaleString()})`)}#payslip-calculator-card`,
+    303
+  );
+});
+
 // ------------------------------------------------------------------------------
-// 2. RUN MONTHLY PAYDAY WATERFALL SPLIT
+// 2. RUN MONTHLY PAYDAY WATERFALL SPLIT (+ OPTIONAL CHECKOFF AUTO-DEDUCTION)
 // ------------------------------------------------------------------------------
 salariedRoutes.post('/salaried/payday/split', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
@@ -185,6 +323,8 @@ salariedRoutes.post('/salaried/payday/split', async (c) => {
   if (salaryAmount <= 0) {
     return c.redirect('/salaried?toast=Please+enter+a+valid+salary+amount', 303);
   }
+
+  const autoDeductCheckoffs = body['auto_deduct_checkoffs'] === '1' || body['auto_deduct_checkoffs'] === 'on' || body['auto_deduct_checkoffs'] === 'true';
 
   // Use effective allocation rules
   const { data: dbRules } = await supabase.from('allocation_rules').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
@@ -239,7 +379,66 @@ salariedRoutes.post('/salaried/payday/split', async (c) => {
     }
   }
 
-  return c.redirect(`/salaried?toast=${encodeURIComponent(`🎉 Payday Waterfall Executed! Ksh ${salaryAmount.toLocaleString()} distributed across your wealth, goals, obligations, and living buckets.`)}`, 303);
+  // Optional 1-Tap Checkoff Loan Installment Auto-Deduction
+  let checkoffDeductedTotal = 0;
+  let checkoffLoansCount = 0;
+  if (autoDeductCheckoffs) {
+    try {
+      let dbDebts: any[] = [];
+      try {
+        const { data: dData } = await supabase.from('debts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
+        dbDebts = dData || [];
+      } catch (e) {}
+
+      const effectiveLoans = resolveEffectiveSalariedLoans(c, dbDebts);
+      const cookieLoans = getSavedSalariedLoans(c);
+      const cookieMap = new Map<string, SalariedLoanRecord>();
+      for (const cl of cookieLoans) {
+        if (cl && cl.id) cookieMap.set(String(cl.id), cl);
+      }
+
+      for (const loan of effectiveLoans) {
+        if (loan.debt_type === 'I_OWE' && loan.status === 'ACTIVE' && Number(loan.monthly_installment || 0) > 0) {
+          const remaining = Math.max(0, Number(loan.total_amount) - Number(loan.paid_amount));
+          if (remaining <= 0) continue;
+          const installment = Math.min(remaining, Number(loan.monthly_installment));
+          const newPaid = toDecimal(loan.paid_amount).plus(installment);
+          const isFullyPaid = newPaid.greaterThanOrEqualTo(toDecimal(loan.total_amount));
+          const newStatus: 'ACTIVE' | 'PAID' = isFullyPaid ? 'PAID' : 'ACTIVE';
+
+          checkoffDeductedTotal += installment;
+          checkoffLoansCount += 1;
+
+          // Update Supabase debt if present
+          try {
+            let upQ = supabase
+              .from('debts')
+              .update({ paid_amount: newPaid.toFixed(2), status: newStatus })
+              .eq('id', loan.id);
+            if (userId) upQ = upQ.eq('user_id', userId);
+            await upQ;
+          } catch (e) {}
+
+          // Update cookie loan
+          cookieMap.set(String(loan.id), {
+            ...loan,
+            paid_amount: Number(newPaid.toFixed(2)),
+            status: newStatus,
+          });
+        }
+      }
+
+      if (checkoffLoansCount > 0) {
+        saveSalariedLoansCookie(c, Array.from(cookieMap.values()));
+      }
+    } catch (e) {}
+  }
+
+  const checkoffNote = checkoffLoansCount > 0
+    ? ` • Auto-deducted Ksh ${checkoffDeductedTotal.toLocaleString()} across ${checkoffLoansCount} checkoff loan(s)!`
+    : '';
+
+  return c.redirect(`/salaried?toast=${encodeURIComponent(`🎉 Payday Waterfall Executed! Ksh ${salaryAmount.toLocaleString()} distributed across your wealth, goals, obligations, and living buckets${checkoffNote}`)}`, 303);
 });
 
 // ------------------------------------------------------------------------------

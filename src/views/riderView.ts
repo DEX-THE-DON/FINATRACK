@@ -165,6 +165,159 @@ export function renderRiderDashboard(data: any): string {
   const dailyTarget = Number(active_bike?.daily_target || strictNetFloor);
   const dailyTargetMetPct = Math.min(100, Math.round((todayNetEarned / (dailyTarget || 1)) * 100));
 
+  // 📱 Platform Earnings Breakdown (Uber vs. Bolt vs. Little/Glovo vs. Direct Errands)
+  const platStatsMap: Record<string, { key: string; label: string; icon: string; gross: number; net: number; hours: number; km: number; shifts: number; color: string }> = {
+    UBER: { key: 'UBER', label: 'Uber (Boda / ChapChap / X)', icon: '🚗', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'emerald' },
+    BOLT: { key: 'BOLT', label: 'Bolt (Boda / Economy)', icon: '⚡', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'teal' },
+    LITTLE: { key: 'LITTLE', label: 'Little / Glovo / Faras', icon: '🛵', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'indigo' },
+    DIRECT: { key: 'DIRECT', label: 'Private Errands & Direct Cash', icon: '🤝', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'amber' },
+  };
+
+  // ⛽ Fuel Station & EV Swap Hub Efficiency Leaderboard
+  const stationMap = new Map<string, {
+    station: string;
+    isEv: boolean;
+    totalSpent: number;
+    totalKm: number;
+    totalLitres: number;
+    totalSwaps: number;
+    visits: number;
+  }>();
+
+  for (const l of (rider_logs || [])) {
+    const gross = Number(l.total_earned || 0);
+    const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
+    const net = Math.max(0, gross - exp);
+    const hrs = Math.max(0.5, Number(l.shift_hours || 8));
+    const km = Math.max(0, Number(l.kilometers || 0));
+
+    const u = Number(l.uber_earned || 0);
+    const b = Number(l.bolt_earned || 0);
+    const lt = Number(l.little_earned || 0);
+    const dc = Number(l.direct_cash_earned || 0);
+    const explicitSum = u + b + lt + dc;
+
+    if (explicitSum > 0) {
+      const addPart = (key: string, amt: number) => {
+        if (amt <= 0) return;
+        const ratio = amt / explicitSum;
+        platStatsMap[key].gross += amt;
+        platStatsMap[key].net += net * ratio;
+        platStatsMap[key].hours += hrs * ratio;
+        platStatsMap[key].km += km * ratio;
+        platStatsMap[key].shifts += 1;
+      };
+      addPart('UBER', u);
+      addPart('BOLT', b);
+      addPart('LITTLE', lt);
+      addPart('DIRECT', dc);
+    } else if (gross > 0) {
+      const ch = String(l.channel || '').toUpperCase();
+      if (ch.includes('BOLT')) {
+        platStatsMap.BOLT.gross += gross;
+        platStatsMap.BOLT.net += net;
+        platStatsMap.BOLT.hours += hrs;
+        platStatsMap.BOLT.km += km;
+        platStatsMap.BOLT.shifts += 1;
+      } else if (ch.includes('LITTLE') || ch.includes('GLOVO') || ch.includes('FARAS')) {
+        platStatsMap.LITTLE.gross += gross;
+        platStatsMap.LITTLE.net += net;
+        platStatsMap.LITTLE.hours += hrs;
+        platStatsMap.LITTLE.km += km;
+        platStatsMap.LITTLE.shifts += 1;
+      } else if (ch.includes('DIRECT') || ch.includes('PRIVATE') || ch.includes('ERRAND')) {
+        platStatsMap.DIRECT.gross += gross;
+        platStatsMap.DIRECT.net += net;
+        platStatsMap.DIRECT.hours += hrs;
+        platStatsMap.DIRECT.km += km;
+        platStatsMap.DIRECT.shifts += 1;
+      } else if (ch.includes('UBER')) {
+        platStatsMap.UBER.gross += gross;
+        platStatsMap.UBER.net += net;
+        platStatsMap.UBER.hours += hrs;
+        platStatsMap.UBER.km += km;
+        platStatsMap.UBER.shifts += 1;
+      } else {
+        // Default multi-app blend (50% Uber, 35% Bolt, 15% Direct Errands) when shift wasn't explicitly split
+        platStatsMap.UBER.gross += gross * 0.5;
+        platStatsMap.UBER.net += net * 0.5;
+        platStatsMap.UBER.hours += hrs * 0.5;
+        platStatsMap.UBER.km += km * 0.5;
+        platStatsMap.UBER.shifts += 1;
+
+        platStatsMap.BOLT.gross += gross * 0.35;
+        platStatsMap.BOLT.net += net * 0.35;
+        platStatsMap.BOLT.hours += hrs * 0.35;
+        platStatsMap.BOLT.km += km * 0.35;
+        platStatsMap.BOLT.shifts += 1;
+
+        platStatsMap.DIRECT.gross += gross * 0.15;
+        platStatsMap.DIRECT.net += net * 0.15;
+        platStatsMap.DIRECT.hours += hrs * 0.15;
+        platStatsMap.DIRECT.km += km * 0.15;
+        platStatsMap.DIRECT.shifts += 1;
+      }
+    }
+
+    // Fuel / Swap station aggregation
+    const fCost = Number(l.fuel_cost || 0);
+    if (fCost > 0) {
+      const isEvShift = String(l.power_type || '').toUpperCase() === 'ELECTRIC' || Number(l.swaps_count || 0) > 0;
+      const rawSt = String(l.fuel_station || (isEvShift ? 'Spiro / Roam EV Swap' : 'Rubis / Shell Petrol')).trim();
+      const stKey = rawSt.toLowerCase();
+      const existing = stationMap.get(stKey) || {
+        station: rawSt,
+        isEv: isEvShift,
+        totalSpent: 0,
+        totalKm: 0,
+        totalLitres: 0,
+        totalSwaps: 0,
+        visits: 0,
+      };
+      existing.totalSpent += fCost;
+      existing.totalKm += km;
+      existing.totalLitres += Number(l.fuel_litres || 0);
+      existing.totalSwaps += Number(l.swaps_count || 0);
+      existing.visits += 1;
+      stationMap.set(stKey, existing);
+    }
+  }
+
+  const totalPlatformGross = Object.values(platStatsMap).reduce((s, p) => s + p.gross, 0) || 1;
+  const platformBreakdownList = Object.values(platStatsMap)
+    .map((p) => ({
+      ...p,
+      sharePct: p.gross > 0 ? Math.round((p.gross / totalPlatformGross) * 100) : 0,
+      netPerHour: p.hours > 0 ? Math.round((p.net / p.hours) * 100) / 100 : 0,
+      netPerKm: p.km > 0 ? Math.round((p.net / p.km) * 100) / 100 : 0,
+    }))
+    .sort((a, b) => b.netPerHour - a.netPerHour);
+
+  const topPlatformItem = platformBreakdownList.find((p) => p.gross > 0) || platformBreakdownList[0];
+
+  const stationEfficiencyList = Array.from(stationMap.values())
+    .map((st) => {
+      const cpk = st.totalKm > 0 ? Math.round((st.totalSpent / st.totalKm) * 100) / 100 : 0;
+      const kmPerUnit = st.isEv
+        ? (st.totalSwaps > 0 ? Math.round((st.totalKm / st.totalSwaps) * 10) / 10 : 0)
+        : (st.totalLitres > 0 ? Math.round((st.totalKm / st.totalLitres) * 10) / 10 : 0);
+      const avgUnitCost = st.isEv
+        ? (st.totalSwaps > 0 ? Math.round(st.totalSpent / st.totalSwaps) : Math.round(st.totalSpent / st.visits))
+        : (st.totalLitres > 0 ? Math.round((st.totalSpent / st.totalLitres) * 10) / 10 : 0);
+      return {
+        ...st,
+        cpk,
+        kmPerUnit,
+        avgUnitCost,
+      };
+    })
+    .sort((a, b) => {
+      if (a.cpk > 0 && b.cpk > 0) return a.cpk - b.cpk;
+      return b.totalSpent - a.totalSpent;
+    });
+
+  const bestStationItem = stationEfficiencyList.find((s) => s.cpk > 0) || stationEfficiencyList[0] || null;
+
   const formatKes = (val: number | string) => 'Ksh ' + (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatNum = (val: number | string) => (Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -3234,6 +3387,103 @@ export function renderRiderDashboard(data: any): string {
                     <p class="text-xl font-black text-emerald-300 mt-0.5">${formatNum(ev_roi_stats.co2SavedKg)} <span class="text-xs font-normal text-gray-400">kg</span></p>
                     <p class="text-[10px] text-gray-400">Clean energy reduction</p>
                 </div>
+            </div>
+        </div>
+
+        <!-- 📱 Platform Earnings Breakdown & ⛽ Fuel / Swap Station Efficiency Leaderboard -->
+        <div id="platform-and-station-intelligence-card" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Left: Platform Yield Leaderboard (Uber vs. Bolt vs. Glovo vs. Direct Cash) -->
+            <div class="bg-gradient-to-br from-slate-900 via-indigo-950/70 to-slate-900 rounded-3xl p-6 text-white shadow-lg border border-indigo-800/50 space-y-4">
+                <div class="flex items-start justify-between gap-2 border-b border-indigo-800/60 pb-3">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-lg">
+                            📱
+                        </div>
+                        <div>
+                            <h2 class="text-base font-black text-white flex items-center gap-2 flex-wrap">
+                                <span>Platform Earnings &amp; Yield Breakdown</span>
+                                ${topPlatformItem && topPlatformItem.gross > 0 ? `
+                                <span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-extrabold px-2 py-0.5 rounded-full">
+                                    🏆 Best Yield: ${topPlatformItem.icon} ${topPlatformItem.key}
+                                </span>` : ''}
+                            </h2>
+                            <p class="text-[11px] text-indigo-200/80">Compare Net KES/hr and KES/km across Uber, Bolt, Little/Glovo &amp; Private Errands</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-2.5">
+                    ${platformBreakdownList.map((p, idx) => `
+                    <div class="p-3 bg-slate-950/80 border ${idx === 0 && p.gross > 0 ? 'border-emerald-500/50' : 'border-indigo-900/50'} rounded-2xl space-y-1.5">
+                        <div class="flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="text-base">${p.icon}</span>
+                                <span class="font-extrabold text-white">${p.label}</span>
+                                ${idx === 0 && p.gross > 0 ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">#1 Yield</span>` : ''}
+                            </div>
+                            <span class="font-black text-emerald-400 privacy-amount">${formatKes(p.gross)} <span class="text-[10px] text-gray-400 font-semibold">(${p.sharePct}%)</span></span>
+                        </div>
+                        <div class="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                            <div class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-1.5 rounded-full" style="width: ${Math.max(3, p.sharePct)}%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-gray-400 pt-0.5">
+                            <span>Net Hourly: <strong class="text-cyan-300">${formatKes(p.netPerHour)}/hr</strong></span>
+                            <span>Net / Km: <strong class="text-amber-300">${p.netPerKm > 0 ? `Ksh ${p.netPerKm.toFixed(2)}/km` : '—'}</strong></span>
+                            <span>Logged: <strong class="text-gray-300">${p.shifts} shift${p.shifts === 1 ? '' : 's'}</strong></span>
+                        </div>
+                    </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Right: Fuel & EV Swap Station Efficiency Leaderboard -->
+            <div class="bg-gradient-to-br from-slate-900 via-emerald-950/50 to-slate-900 rounded-3xl p-6 text-white shadow-lg border border-emerald-800/50 space-y-4">
+                <div class="flex items-start justify-between gap-2 border-b border-emerald-800/60 pb-3">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-lg">
+                            ⛽
+                        </div>
+                        <div>
+                            <h2 class="text-base font-black text-white flex items-center gap-2 flex-wrap">
+                                <span>Fuel &amp; Battery Swap Station Leaderboard</span>
+                                ${bestStationItem ? `
+                                <span class="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 font-extrabold px-2 py-0.5 rounded-full">
+                                    ⭐ Best Mileage: ${bestStationItem.station}
+                                </span>` : ''}
+                            </h2>
+                            <p class="text-[11px] text-emerald-200/80">Stations ranked by lowest Cost per Km (KES/km) &amp; highest mileage per shilling</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-2.5">
+                    ${stationEfficiencyList.length > 0 ? stationEfficiencyList.slice(0, 4).map((st, idx) => `
+                    <div class="p-3 bg-slate-950/80 border ${idx === 0 && st.cpk > 0 ? 'border-emerald-500/50' : 'border-emerald-900/40'} rounded-2xl flex flex-col justify-between gap-1.5">
+                        <div class="flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm">${st.isEv ? '🔋' : '⛽'}</span>
+                                <span class="font-extrabold text-white">${st.station}</span>
+                                ${idx === 0 && st.cpk > 0 ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Most Economical</span>` : ''}
+                            </div>
+                            <span class="font-black text-cyan-300">${st.cpk > 0 ? `Ksh ${st.cpk.toFixed(2)} / km` : formatKes(st.totalSpent)}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-gray-400">
+                            <span>Total Spend: <strong class="text-amber-300 privacy-amount">${formatKes(st.totalSpent)}</strong> (${st.visits} refill${st.visits === 1 ? '' : 's'})</span>
+                            <span>Distance: <strong class="text-white">${formatNum(st.totalKm)} km</strong></span>
+                            <span>Efficiency: <strong class="text-emerald-300">${st.kmPerUnit > 0 ? `${st.kmPerUnit} km/${st.isEv ? 'swap' : 'L'}` : 'Log litres/swaps'}</strong></span>
+                        </div>
+                    </div>
+                    `).join('') : `
+                    <div class="p-5 bg-slate-950/60 border border-dashed border-emerald-800/50 rounded-2xl text-center text-xs text-gray-400">
+                        Log your fuel station (e.g. Rubis, Shell, TotalEnergies) or EV Swap Hub (Spiro, Roam, ARC) when recording shifts to rank which station gives you the lowest cost per kilometer!
+                    </div>
+                    `}
+                </div>
+
+                ${bestStationItem && bestStationItem.cpk > 0 ? `
+                <div class="p-2.5 bg-emerald-950/60 border border-emerald-700/40 rounded-xl text-[11px] text-emerald-200">
+                    💡 <strong>Station Verdict:</strong> Refueling/swapping at <strong>${bestStationItem.station}</strong> averages <strong class="text-white">Ksh ${bestStationItem.cpk.toFixed(2)}/km</strong> across ${formatNum(bestStationItem.totalKm)} km.
+                </div>` : ''}
             </div>
         </div>
 
