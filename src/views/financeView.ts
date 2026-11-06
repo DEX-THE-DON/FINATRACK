@@ -87,6 +87,7 @@ export function renderFinanceDashboard(data: any): string {
     username = 'Dennis',
     is_logged_in = false,
     active_profile = 'RIDER',
+    has_quick_pin = false,
   } = data;
 
   const activeProfileMode = (active_profile === 'TRADER' || active_profile === 'SALARIED') ? active_profile : 'RIDER';
@@ -2658,6 +2659,187 @@ export function renderFinanceDashboard(data: any): string {
         window.updateMpesaCategory = updateMpesaCategory;
         window.removeMpesaItem = removeMpesaItem;
         window.toggleAllMpesaReview = toggleAllMpesaReview;
+
+        // -------------------------------------------------------------
+        // 🔢 APP-WIDE 4-DIGIT QUICK PIN CONTROLLER
+        // -------------------------------------------------------------
+        var appPinBuf = '';
+        var appPinStrikes = 0;
+
+        function getStoredAppPin() {
+            try {
+                var p = localStorage.getItem('finatrack_quick_pin');
+                if (p && /^\d{4}$/.test(p)) return p;
+                var m = document.cookie.match(/(?:^|;\s*)finatrack_quick_pin=(\d{4})/);
+                return m ? m[1] : null;
+            } catch (e) { return null; }
+        }
+
+        function validateAppPinSetupMatch() {
+            var p1El = document.getElementById('new-app-pin-input');
+            var p2El = document.getElementById('confirm-app-pin-input');
+            var msgEl = document.getElementById('app-pin-setup-match-msg');
+            var btnEl = document.getElementById('save-app-pin-btn');
+            if (!p1El || !p2El || !msgEl || !btnEl) return;
+
+            var p1 = p1El.value.replace(/[^0-9]/g, '').slice(0, 4);
+            var p2 = p2El.value.replace(/[^0-9]/g, '').slice(0, 4);
+            p1El.value = p1;
+            p2El.value = p2;
+
+            if (p1.length === 0 && p2.length === 0) {
+                msgEl.textContent = 'Enter matching 4 digits in both fields';
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-slate-400';
+                btnEl.disabled = true;
+            } else if (p1.length < 4 || p2.length < 4) {
+                msgEl.textContent = '⏳ Both fields must be exactly 4 digits (' + p1.length + '/4 & ' + p2.length + '/4)';
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-amber-400';
+                btnEl.disabled = true;
+            } else if (p1 === p2) {
+                msgEl.textContent = '✅ PINs match! Ready to save.';
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-emerald-400';
+                btnEl.disabled = false;
+            } else {
+                msgEl.textContent = '⚠️ PINs do not match yet.';
+                msgEl.className = 'text-[11px] font-bold text-center py-1 text-rose-400';
+                btnEl.disabled = true;
+            }
+        }
+
+        function saveAppPinLocal(ev) {
+            try {
+                var inp1 = document.getElementById('new-app-pin-input');
+                var inp2 = document.getElementById('confirm-app-pin-input');
+                var val1 = inp1 ? inp1.value.replace(/[^0-9]/g, '').slice(0, 4) : '';
+                var val2 = inp2 ? inp2.value.replace(/[^0-9]/g, '').slice(0, 4) : '';
+                if (val1.length !== 4 || val1 !== val2) {
+                    if (ev && ev.preventDefault) ev.preventDefault();
+                    alert('⚠️ Please enter and confirm matching 4 digits before saving.');
+                    return false;
+                }
+                localStorage.setItem('finatrack_quick_pin', val1);
+                return true;
+            } catch (e) {
+                return true;
+            }
+        }
+
+        function switchAppPinTab(tab) {
+            var saved = getStoredAppPin();
+            if (tab === 'keypad' && !saved) {
+                tab = 'setup';
+            }
+            var kp = document.getElementById('app-pin-keypad-panel');
+            var sp = document.getElementById('app-pin-setup-panel');
+            var tk = document.getElementById('tab-app-pin-keypad');
+            var ts = document.getElementById('tab-app-pin-setup');
+
+            if (tab === 'setup') {
+                if (kp) kp.classList.add('hidden');
+                if (sp) sp.classList.remove('hidden');
+                if (tk) tk.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+                if (ts) ts.className = 'py-1.5 rounded-lg bg-indigo-600 text-white transition';
+                validateAppPinSetupMatch();
+            } else {
+                if (kp) kp.classList.remove('hidden');
+                if (sp) sp.classList.add('hidden');
+                if (tk) tk.className = 'py-1.5 rounded-lg bg-indigo-600 text-white transition';
+                if (ts) ts.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+            }
+        }
+
+        function openAppPinModal() {
+            var modal = document.getElementById('app-pin-modal');
+            if (!modal) return;
+            appPinBuf = '';
+            renderAppPinDots();
+            var saved = getStoredAppPin();
+            if (saved) {
+                switchAppPinTab('keypad');
+            } else {
+                switchAppPinTab('setup');
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function closeAppPinModal() {
+            document.getElementById('app-pin-modal')?.classList.add('hidden');
+            appPinBuf = '';
+            renderAppPinDots();
+        }
+
+        function renderAppPinDots() {
+            var dots = document.querySelectorAll('.a-pin-dot');
+            dots.forEach(function(dot, idx) {
+                if (idx < appPinBuf.length) {
+                    dot.classList.add('bg-indigo-400', 'border-indigo-400', 'scale-110');
+                    dot.classList.remove('bg-slate-950');
+                } else {
+                    dot.classList.remove('bg-indigo-400', 'border-indigo-400', 'scale-110');
+                    dot.classList.add('bg-slate-950');
+                }
+            });
+        }
+
+        function pressAppPin(digit) {
+            if (appPinBuf.length < 4) {
+                appPinBuf += digit;
+                renderAppPinDots();
+                if (appPinBuf.length === 4) {
+                    setTimeout(verifyAppPinEntered, 120);
+                }
+            }
+        }
+
+        function clearAppPin() {
+            appPinBuf = '';
+            renderAppPinDots();
+            var errEl = document.getElementById('app-pin-error');
+            if (errEl) errEl.classList.add('hidden');
+        }
+
+        function backspaceAppPin() {
+            if (appPinBuf.length > 0) {
+                appPinBuf = appPinBuf.slice(0, -1);
+                renderAppPinDots();
+            }
+        }
+
+        function verifyAppPinEntered() {
+            var saved = getStoredAppPin();
+            var errEl = document.getElementById('app-pin-error');
+            var strikesInfo = document.getElementById('app-pin-strikes-info');
+
+            if (saved && appPinBuf === saved) {
+                closeAppPinModal();
+                if (errEl) errEl.classList.add('hidden');
+                return;
+            }
+
+            appPinStrikes += 1;
+            appPinBuf = '';
+            renderAppPinDots();
+            var rem = 3 - appPinStrikes;
+
+            if (appPinStrikes >= 3) {
+                window.location.href = '/login?pin_fallback=1&redirect_to=/';
+                return;
+            }
+
+            if (errEl) {
+                errEl.textContent = 'Wrong PIN (' + rem + ' attempt' + (rem === 1 ? '' : 's') + ' left before master login)';
+                errEl.classList.remove('hidden');
+            }
+        }
+
+        window.openAppPinModal = openAppPinModal;
+        window.closeAppPinModal = closeAppPinModal;
+        window.switchAppPinTab = switchAppPinTab;
+        window.pressAppPin = pressAppPin;
+        window.clearAppPin = clearAppPin;
+        window.backspaceAppPin = backspaceAppPin;
+        window.validateAppPinSetupMatch = validateAppPinSetupMatch;
+        window.saveAppPinLocal = saveAppPinLocal;
     </script>
 </head>
 <body class="bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 min-h-screen antialiased flex flex-col justify-between font-sans">
@@ -2726,6 +2908,11 @@ export function renderFinanceDashboard(data: any): string {
                     <span class="hidden sm:inline">Sign In</span>
                 </a>
                 `}
+
+                <button type="button" onclick="openAppPinModal()" class="px-2 sm:px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center gap-1 shadow-2xs" title="4-Digit Quick PIN (Fast App Unlock & Screen Lock)">
+                    <span>🔢</span>
+                    <span class="hidden md:inline">${has_quick_pin ? 'PIN Lock' : 'Set PIN'}</span>
+                </button>
 
                 <button onclick="togglePrivacyBlur()" class="privacy-toggle-btn p-1.5 sm:p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" title="Hide or Show Balances">
                     👁️
@@ -5939,6 +6126,89 @@ export function renderFinanceDashboard(data: any): string {
                             </div>
                         </div>
                         <span class="text-indigo-600 font-extrabold text-xs">${activeProfileMode === 'SALARIED' ? '✓ Active' : 'Switch →'}</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4-Digit Quick PIN (App-Wide Unlock & Screen Lock) Modal -->
+    <div id="app-pin-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="w-full max-w-sm rounded-3xl bg-slate-900 border border-indigo-500/30 p-6 shadow-2xl relative text-slate-100">
+            <button type="button" onclick="closeAppPinModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">
+                ✕ Close
+            </button>
+            <div class="text-center mb-4">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-2xl mb-2">
+                    🔢
+                </div>
+                <h3 id="app-pin-title" class="text-lg font-extrabold text-white">4-Digit Quick PIN</h3>
+                <p id="app-pin-subtitle" class="text-xs text-slate-400">Fast 2-second unlock for all of Finatrack without typing long passwords.</p>
+            </div>
+
+            <!-- Mode Switcher: Lock Keypad vs Set/Change PIN -->
+            <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold mb-4">
+                <button type="button" id="tab-app-pin-keypad" onclick="switchAppPinTab('keypad')" class="py-1.5 rounded-lg bg-indigo-600 text-white transition">🔒 Quick Screen Lock</button>
+                <button type="button" id="tab-app-pin-setup" onclick="switchAppPinTab('setup')" class="py-1.5 rounded-lg text-slate-400 hover:text-white transition">⚙️ Set / Confirm PIN</button>
+            </div>
+
+            <!-- Panel A: Big Numeric Keypad Screen Lock -->
+            <div id="app-pin-keypad-panel" class="space-y-4 text-center">
+                <div class="flex items-center justify-center gap-4 my-3" id="app-pin-dots">
+                    <div class="a-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                    <div class="a-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                    <div class="a-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                    <div class="a-pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                </div>
+
+                <div id="app-pin-error" class="hidden px-3 py-1.5 rounded-lg bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs font-bold"></div>
+
+                <div class="grid grid-cols-3 gap-2.5 select-none">
+                    <button type="button" onclick="pressAppPin('1')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">1</button>
+                    <button type="button" onclick="pressAppPin('2')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">2</button>
+                    <button type="button" onclick="pressAppPin('3')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">3</button>
+                    <button type="button" onclick="pressAppPin('4')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">4</button>
+                    <button type="button" onclick="pressAppPin('5')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">5</button>
+                    <button type="button" onclick="pressAppPin('6')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">6</button>
+                    <button type="button" onclick="pressAppPin('7')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">7</button>
+                    <button type="button" onclick="pressAppPin('8')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">8</button>
+                    <button type="button" onclick="pressAppPin('9')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">9</button>
+                    <button type="button" onclick="clearAppPin()" class="py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-slate-400 text-xs font-extrabold border border-slate-800">CLR</button>
+                    <button type="button" onclick="pressAppPin('0')" class="py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow">0</button>
+                    <button type="button" onclick="backspaceAppPin()" class="py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-amber-400 text-base font-extrabold border border-slate-800">⌫</button>
+                </div>
+
+                <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                    <span id="app-pin-strikes-info">3 wrong tries → Master login</span>
+                    <a href="/login?pin_fallback=1&redirect_to=/" class="text-indigo-400 hover:underline font-bold">Use Master Password</a>
+                </div>
+            </div>
+
+            <!-- Panel B: Set, Confirm, & Save 4-Digit PIN -->
+            <div id="app-pin-setup-panel" class="hidden space-y-3">
+                <form action="/auth/pin/set" method="POST" onsubmit="return saveAppPinLocal(event)" class="space-y-3.5">
+                    <input type="hidden" name="redirect_to" value="/">
+                    <div>
+                        <label class="block text-xs font-bold text-indigo-300 mb-1">1. Choose 4-Digit PIN</label>
+                        <input type="password" inputmode="numeric" pattern="\\d{4}" maxlength="4" name="pin" id="new-app-pin-input" placeholder="••••" required oninput="validateAppPinSetupMatch()" class="w-full p-2.5 bg-slate-950 border border-indigo-500/50 rounded-xl text-center text-xl font-black tracking-[0.4em] text-white focus:outline-none focus:border-indigo-400">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-indigo-300 mb-1">2. Confirm 4-Digit PIN</label>
+                        <input type="password" inputmode="numeric" pattern="\\d{4}" maxlength="4" name="confirm_pin" id="confirm-app-pin-input" placeholder="••••" required oninput="validateAppPinSetupMatch()" class="w-full p-2.5 bg-slate-950 border border-indigo-500/50 rounded-xl text-center text-xl font-black tracking-[0.4em] text-emerald-400 focus:outline-none focus:border-emerald-400">
+                    </div>
+                    
+                    <div id="app-pin-setup-match-msg" class="text-[11px] font-bold text-center py-1 text-slate-400">
+                        Enter matching 4 digits in both fields
+                    </div>
+
+                    <button type="submit" id="save-app-pin-btn" disabled class="w-full py-3 bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-lg transition active:scale-95">
+                        💾 Confirm &amp; Save 4-Digit PIN
+                    </button>
+                </form>
+                <form action="/auth/pin/clear" method="POST" onsubmit="try{localStorage.removeItem('finatrack_quick_pin');}catch(e){}">
+                    <input type="hidden" name="redirect_to" value="/">
+                    <button type="submit" class="w-full py-2 bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 rounded-xl text-xs font-bold transition">
+                        🗑️ Remove Quick PIN
                     </button>
                 </form>
             </div>

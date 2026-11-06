@@ -425,7 +425,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
 
                             <!-- Quick PIN button: Hidden by default, only shown if user has configured & confirmed a PIN on this device -->
                             <button type="button" id="login-quick-pin-btn" onclick="openQuickPinModal()" class="hidden w-full py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 text-indigo-300 text-xs font-extrabold flex items-center justify-center gap-2 transition active:scale-[0.99]">
-                                <span>🔢</span> 2-Second Quick PIN Unlock (Roadside / Gloves Mode)
+                                <span>🔢</span> 2-Second Quick PIN Unlock (Fast App Unlock)
                             </button>
                         </form>
 
@@ -533,8 +533,8 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-2xl mb-2">
                 🔢
             </div>
-            <h3 class="text-lg font-extrabold text-white tracking-tight">Quick PIN Unlock</h3>
-            <p id="quick-pin-subtitle" class="text-xs text-slate-400 mt-1">Enter your 4-digit roadside helper PIN</p>
+            <h3 class="text-lg font-extrabold text-white tracking-tight">Quick PIN App Unlock</h3>
+            <p id="quick-pin-subtitle" class="text-xs text-slate-400 mt-1">Enter your 4-digit PIN to unlock Finatrack</p>
 
             <!-- 4 PIN Dots -->
             <div class="flex items-center justify-center gap-4 my-5" id="quick-pin-dots">
@@ -564,7 +564,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
 
             <form id="quick-pin-verify-form" action="/auth/pin/verify" method="POST" class="hidden">
                 <input type="hidden" name="pin" id="quick-pin-hidden-input" value="">
-                <input type="hidden" name="redirect_to" value="/rider">
+                <input type="hidden" name="redirect_to" id="quick-pin-redirect-to" value="/">
             </form>
 
             <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
@@ -665,10 +665,23 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             updatePinDotsUI();
         }
 
+        function getRedirectTarget() {
+            try {
+                var params = new URLSearchParams(window.location.search);
+                var r = params.get('redirect_to');
+                if (r && r.trim() && r !== 'undefined') return r;
+            } catch (e) {}
+            return '/';
+        }
+
         function verifyPinAttempt() {
             var savedPin = getSavedQuickPin();
             var errEl = document.getElementById('quick-pin-error');
             var strikesLabel = document.getElementById('quick-pin-strikes-label');
+            var targetUrl = getRedirectTarget();
+
+            var redirInput = document.getElementById('quick-pin-redirect-to');
+            if (redirInput) redirInput.value = targetUrl;
 
             if (savedPin && currentPinBuffer === savedPin) {
                 if (errEl) errEl.classList.add('hidden');
@@ -679,7 +692,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                     form.submit();
                     return;
                 }
-                window.location.href = '/rider';
+                window.location.href = targetUrl;
                 return;
             }
 
@@ -719,6 +732,11 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             var params = new URLSearchParams(window.location.search);
             var savedPin = getSavedQuickPin();
             var qBtn = document.getElementById('login-quick-pin-btn');
+            var redirParam = params.get('redirect_to');
+            var redirInput = document.getElementById('quick-pin-redirect-to');
+            if (redirInput && redirParam) {
+                redirInput.value = redirParam;
+            }
 
             if (savedPin && /^\d{4}$/.test(savedPin)) {
                 if (qBtn) qBtn.classList.remove('hidden');

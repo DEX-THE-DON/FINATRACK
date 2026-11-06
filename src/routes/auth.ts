@@ -79,6 +79,13 @@ authRoutes.post('/auth/login', async (c) => {
   const uname = data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'Member';
   c.header('Set-Cookie', `sb-access-token=${data.session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${data.session.expires_in}`);
   c.header('Set-Cookie', `finatrack_user=${encodeURIComponent(uname)}; Path=/; SameSite=Lax; Max-Age=${data.session.expires_in}`, { append: true });
+
+  // If a Quick PIN has been configured on this device, refresh the pinned session tokens
+  if (getCookie(c, 'finatrack_quick_pin')) {
+    c.header('Set-Cookie', `finatrack_pin_token=${data.session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 365}`, { append: true });
+    c.header('Set-Cookie', `finatrack_pin_user=${encodeURIComponent(uname)}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 365}`, { append: true });
+  }
+
   return c.redirect(`${redirectTo}?toast=Welcome+back,+${encodeURIComponent(uname)}!`, 303);
 });
 
@@ -91,13 +98,13 @@ authRoutes.post('/auth/logout', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// 🔢 4-DIGIT QUICK PIN (ROADSIDE HELPER UNLOCK)
+// 🔢 4-DIGIT QUICK PIN (APP-WIDE FAST UNLOCK)
 // ------------------------------------------------------------------------------
 authRoutes.post('/auth/pin/set', async (c) => {
   const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
   const rawPin = String(body['pin'] || '').replace(/[^0-9]/g, '').slice(0, 4);
   const confirmPin = String(body['confirm_pin'] || '').replace(/[^0-9]/g, '').slice(0, 4);
-  const redirectTo = String(body['redirect_to'] || '/rider');
+  const redirectTo = String(body['redirect_to'] || '/');
 
   if (rawPin.length !== 4) {
     return c.redirect(`${redirectTo}?toast=${encodeURIComponent('Please enter a valid 4-digit numeric PIN.')}`, 303);
@@ -113,17 +120,46 @@ authRoutes.post('/auth/pin/set', async (c) => {
     sameSite: 'Lax',
   });
 
+  // Preserve current authenticated session for seamless Quick PIN unlocks
+  const currentToken = getCookie(c, 'sb-access-token');
+  const currentUser = getCookie(c, 'finatrack_user');
+  if (currentToken) {
+    setCookie(c, 'finatrack_pin_token', currentToken, {
+      path: '/',
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  }
+  if (currentUser) {
+    setCookie(c, 'finatrack_pin_user', currentUser, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  }
+
   return c.redirect(
-    `${redirectTo}?toast=${encodeURIComponent('🔒 4-Digit Quick PIN saved & confirmed! You can now use 2-second quick unlock.')}`,
+    `${redirectTo}?toast=${encodeURIComponent('🔒 4-Digit Quick PIN saved & confirmed! You can now use 2-second quick unlock across Finatrack.')}`,
     303
   );
 });
 
 authRoutes.post('/auth/pin/clear', async (c) => {
   const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
-  const redirectTo = String(body['redirect_to'] || '/rider');
+  const redirectTo = String(body['redirect_to'] || '/');
 
   setCookie(c, 'finatrack_quick_pin', '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'Lax',
+  });
+  setCookie(c, 'finatrack_pin_token', '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'Lax',
+  });
+  setCookie(c, 'finatrack_pin_user', '', {
     path: '/',
     maxAge: 0,
     sameSite: 'Lax',
@@ -136,10 +172,30 @@ authRoutes.post('/auth/pin/verify', async (c) => {
   const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
   const enteredPin = String(body['pin'] || '').replace(/[^0-9]/g, '').slice(0, 4);
   const savedPin = getCookie(c, 'finatrack_quick_pin') || '';
-  const redirectTo = String(body['redirect_to'] || '/rider');
+
+  // Determine redirection target: explicit redirect_to > active profile > default '/'
+  let redirectTo = String(body['redirect_to'] || c.req.query('redirect_to') || '').trim();
+  if (!redirectTo || redirectTo === 'undefined') {
+    const rawProfile = getCookie(c, 'finatrack_profile');
+    if (rawProfile === 'SALARIED') redirectTo = '/salaried';
+    else if (rawProfile === 'TRADER') redirectTo = '/trader';
+    else if (rawProfile === 'RIDER') redirectTo = '/rider';
+    else redirectTo = '/';
+  }
 
   if (savedPin && enteredPin === savedPin) {
-    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚡ Quick PIN Unlocked!')}`, 303);
+    // Restore session tokens if available
+    const pinnedToken = getCookie(c, 'finatrack_pin_token');
+    const pinnedUser = getCookie(c, 'finatrack_pin_user');
+
+    if (pinnedToken) {
+      c.header('Set-Cookie', `sb-access-token=${pinnedToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`);
+    }
+    if (pinnedUser) {
+      c.header('Set-Cookie', `finatrack_user=${pinnedUser}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`, { append: true });
+    }
+
+    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚡ Finatrack Unlocked with Quick PIN! Welcome back.')}`, 303);
   }
 
   return c.redirect(`/login?pin_fallback=1&toast=${encodeURIComponent('PIN mismatch or expired. Please sign in with your master Email + Password.')}`, 303);

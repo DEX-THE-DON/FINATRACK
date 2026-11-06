@@ -583,6 +583,7 @@ app.get('/', async (c) => {
     unified_timeline: unifiedTimeline,
     usd_to_kes: USD_TO_KES,
     current_currency: userCurrency,
+    has_quick_pin: Boolean(getCookie(c, 'finatrack_quick_pin')),
     toast,
     username,
     is_logged_in: isLoggedIn,

@@ -5863,8 +5863,8 @@ export function renderRiderDashboard(data: any): string {
                 <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 text-2xl">
                     🔢
                 </div>
-                <h3 id="rider-pin-title" class="text-lg font-extrabold text-white">4-Digit Roadside Quick PIN</h3>
-                <p id="rider-pin-subtitle" class="text-xs text-slate-400">Unlock in 2 seconds with riding gloves or wet screen. Master Email + Password stays protected.</p>
+                <h3 id="rider-pin-title" class="text-lg font-extrabold text-white">4-Digit Quick PIN</h3>
+                <p id="rider-pin-subtitle" class="text-xs text-slate-400">Unlock your Finatrack account in 2 seconds. Master Email + Password stays protected.</p>
             </div>
 
             <!-- Mode Switcher: Lock Keypad vs Set/Change PIN -->
@@ -5900,8 +5900,8 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                    <span id="rider-pin-strikes-info">3 wrong tries → Email + Password fallback</span>
-                    <a href="/login?pin_fallback=1" class="text-indigo-400 hover:underline font-bold">Use Master Password</a>
+                    <span id="rider-pin-strikes-info">3 wrong tries → Master password</span>
+                    <a href="/login?pin_fallback=1&redirect_to=/rider" class="text-indigo-400 hover:underline font-bold">Use Master Password</a>
                 </div>
             </div>
 
