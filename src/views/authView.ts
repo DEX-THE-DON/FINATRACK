@@ -1,5 +1,5 @@
-export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string } = {}): string {
-  const { mode = 'signup', toast = '' } = data;
+export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string; has_quick_pin?: boolean } = {}): string {
+  const { mode = 'signup', toast = '', has_quick_pin = false } = data;
   const isLogin = mode === 'login';
 
   return `<!DOCTYPE html>
@@ -371,10 +371,72 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
 
                     <!-- PANEL 1 (LEFT): LOG IN FORM -->
                     <div id="login-slide-panel" class="auth-form-slide p-5 sm:p-8 lg:p-10">
-                        <div class="mb-4 sm:mb-5">
+                        <div class="mb-3 sm:mb-4">
                             <h2 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Welcome Back</h2>
-                            <p class="text-xs text-slate-400 mt-1">Enter your email and password to log in.</p>
+                            <p class="text-xs text-slate-400 mt-1">Unlock with your 4-digit PIN or email &amp; password.</p>
                         </div>
+
+                        <!-- Login Mode Switcher Tabs: 🔢 4-Digit Quick PIN vs ✉️ Email + Password -->
+                        <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs font-bold mb-4">
+                            <button type="button" id="tab-login-pin" onclick="switchLoginMethod('pin')" class="py-2 rounded-xl ${has_quick_pin ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'} transition flex items-center justify-center gap-1.5">
+                                <span>🔢</span> 4-Digit Quick PIN
+                            </button>
+                            <button type="button" id="tab-login-email" onclick="switchLoginMethod('email')" class="py-2 rounded-xl ${has_quick_pin ? 'text-slate-400 hover:text-white' : 'bg-emerald-600 text-white shadow-md'} transition flex items-center justify-center gap-1.5">
+                                <span>✉️</span> Email &amp; Password
+                            </button>
+                        </div>
+
+                        <!-- OPTION 1: INLINE 4-DIGIT QUICK PIN KEYPAD (RIGHT ON LOGIN PAGE) -->
+                        <div id="login-pin-subpanel" class="${has_quick_pin ? '' : 'hidden'} space-y-3.5 text-center">
+                            <div class="p-2.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-left flex items-center gap-2.5">
+                                <span class="text-xl shrink-0">⚡</span>
+                                <div>
+                                    <p class="text-xs font-bold text-indigo-200">2-Second Fast App Unlock</p>
+                                    <p class="text-[11px] text-slate-400">Enter your 4-digit PIN to restore full authenticated access to Finatrack.</p>
+                                </div>
+                            </div>
+
+                            <!-- 4 PIN Dots -->
+                            <div class="flex items-center justify-center gap-3.5 py-1" id="quick-pin-dots">
+                                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
+                            </div>
+
+                            <div id="quick-pin-error" class="hidden px-3 py-1.5 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-300 text-xs font-bold"></div>
+
+                            <!-- Numeric Keypad -->
+                            <div class="grid grid-cols-3 gap-2 select-none max-w-xs mx-auto">
+                                <button type="button" onclick="pressPinDigit('1')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">1</button>
+                                <button type="button" onclick="pressPinDigit('2')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">2</button>
+                                <button type="button" onclick="pressPinDigit('3')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">3</button>
+                                <button type="button" onclick="pressPinDigit('4')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">4</button>
+                                <button type="button" onclick="pressPinDigit('5')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">5</button>
+                                <button type="button" onclick="pressPinDigit('6')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">6</button>
+                                <button type="button" onclick="pressPinDigit('7')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">7</button>
+                                <button type="button" onclick="pressPinDigit('8')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">8</button>
+                                <button type="button" onclick="pressPinDigit('9')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">9</button>
+                                <button type="button" onclick="clearPinDigits()" class="py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-extrabold border border-slate-800 transition">CLR</button>
+                                <button type="button" onclick="pressPinDigit('0')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">0</button>
+                                <button type="button" onclick="backspacePinDigit()" class="py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-amber-400 text-base font-extrabold border border-slate-800 transition">⌫</button>
+                            </div>
+
+                            <form id="quick-pin-verify-form" action="/auth/pin/verify" method="POST" class="hidden">
+                                <input type="hidden" name="pin" id="quick-pin-hidden-input" value="">
+                                <input type="hidden" name="redirect_to" id="quick-pin-redirect-to" value="/">
+                            </form>
+
+                            <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                                <span id="quick-pin-strikes-label">3 attempts before password fallback</span>
+                                <button type="button" onclick="switchLoginMethod('email')" class="text-indigo-400 hover:text-indigo-300 font-bold underline">
+                                    Use Email + Password &rarr;
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- OPTION 2: EMAIL & PASSWORD FORM (RIGHT ON LOGIN PAGE) -->
+                        <div id="login-email-subpanel" class="${has_quick_pin ? 'hidden' : ''}">
 
                         <form id="login-form" action="/auth/login" method="POST" class="space-y-4">
                             <div>
@@ -423,11 +485,12 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                                 Log In to Finatrack
                             </button>
 
-                            <!-- Quick PIN button: Hidden by default, only shown if user has configured & confirmed a PIN on this device -->
-                            <button type="button" id="login-quick-pin-btn" onclick="openQuickPinModal()" class="hidden w-full py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 text-indigo-300 text-xs font-extrabold flex items-center justify-center gap-2 transition active:scale-[0.99]">
-                                <span>🔢</span> 2-Second Quick PIN Unlock (Fast App Unlock)
+                            <!-- Switch to Quick PIN button -->
+                            <button type="button" onclick="switchLoginMethod('pin')" class="w-full py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 text-indigo-300 text-xs font-extrabold flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                                <span>🔢</span> Switch to 2-Second Quick PIN Unlock &rarr;
                             </button>
                         </form>
+                    </div>
 
                         <div class="mt-5 pt-4 border-t border-slate-800 text-center space-y-2">
                             <p class="text-xs text-slate-400">
@@ -524,58 +587,6 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
         </div>
     </main>
 
-    <!-- 4-DIGIT QUICK PIN (HELPER UNLOCK) MODAL -->
-    <div id="quick-pin-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="w-full max-w-sm rounded-3xl bg-slate-900 border border-indigo-500/30 p-6 shadow-2xl text-center relative">
-            <button type="button" onclick="closeQuickPinModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">
-                Use Email ✕
-            </button>
-            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-2xl mb-2">
-                🔢
-            </div>
-            <h3 class="text-lg font-extrabold text-white tracking-tight">Quick PIN App Unlock</h3>
-            <p id="quick-pin-subtitle" class="text-xs text-slate-400 mt-1">Enter your 4-digit PIN to unlock Finatrack</p>
-
-            <!-- 4 PIN Dots -->
-            <div class="flex items-center justify-center gap-4 my-5" id="quick-pin-dots">
-                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
-                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
-                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
-                <div class="pin-dot w-4 h-4 rounded-full border-2 border-indigo-400/60 bg-slate-950 transition-all"></div>
-            </div>
-
-            <div id="quick-pin-error" class="hidden mb-3 px-3 py-1.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-rose-300 text-xs font-bold"></div>
-
-            <!-- Big Gloves-Friendly Numeric Keypad -->
-            <div class="grid grid-cols-3 gap-2.5 select-none">
-                <button type="button" onclick="pressPinDigit('1')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">1</button>
-                <button type="button" onclick="pressPinDigit('2')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">2</button>
-                <button type="button" onclick="pressPinDigit('3')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">3</button>
-                <button type="button" onclick="pressPinDigit('4')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">4</button>
-                <button type="button" onclick="pressPinDigit('5')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">5</button>
-                <button type="button" onclick="pressPinDigit('6')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">6</button>
-                <button type="button" onclick="pressPinDigit('7')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">7</button>
-                <button type="button" onclick="pressPinDigit('8')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">8</button>
-                <button type="button" onclick="pressPinDigit('9')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">9</button>
-                <button type="button" onclick="clearPinDigits()" class="py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-extrabold border border-slate-800 transition">CLR</button>
-                <button type="button" onclick="pressPinDigit('0')" class="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">0</button>
-                <button type="button" onclick="backspacePinDigit()" class="py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-amber-400 text-base font-extrabold border border-slate-800 transition">⌫</button>
-            </div>
-
-            <form id="quick-pin-verify-form" action="/auth/pin/verify" method="POST" class="hidden">
-                <input type="hidden" name="pin" id="quick-pin-hidden-input" value="">
-                <input type="hidden" name="redirect_to" id="quick-pin-redirect-to" value="/">
-            </form>
-
-            <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                <span id="quick-pin-strikes-label">3 attempts before password fallback</span>
-                <button type="button" onclick="fallbackToMasterLogin('Forgot PIN — Switched to master Email + Password')" class="text-indigo-400 hover:text-indigo-300 font-bold underline">
-                    Forgot PIN?
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Footer Copyright -->
     <footer class="w-full text-center py-4 text-xs text-slate-500">
         &copy; ${new Date().getFullYear()} Finatrack. Built for Kenya's Finance, Mobility, Trader &amp; Salaried Pros.
@@ -608,32 +619,57 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             }
         }
 
+        function switchLoginMethod(method) {
+            var pinSub = document.getElementById('login-pin-subpanel');
+            var emailSub = document.getElementById('login-email-subpanel');
+            var tabPin = document.getElementById('tab-login-pin');
+            var tabEmail = document.getElementById('tab-login-email');
+            var errEl = document.getElementById('quick-pin-error');
+
+            if (method === 'pin') {
+                if (pinSub) pinSub.classList.remove('hidden');
+                if (emailSub) emailSub.classList.add('hidden');
+                if (tabPin) {
+                    tabPin.className = 'py-2 rounded-xl bg-indigo-600 text-white shadow-md transition flex items-center justify-center gap-1.5';
+                }
+                if (tabEmail) {
+                    tabEmail.className = 'py-2 rounded-xl text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5';
+                }
+                var savedPin = getSavedQuickPin();
+                if (!savedPin) {
+                    if (errEl) {
+                        errEl.innerHTML = 'ℹ️ No 4-digit PIN is configured on this device yet.<br><button type="button" class="text-indigo-300 hover:text-white underline font-bold mt-1" onclick="switchLoginMethod(\\'email\\')">Sign in with Email &amp; Password once</button> to set your PIN.';
+                        errEl.classList.remove('hidden');
+                    }
+                } else {
+                    if (errEl) errEl.classList.add('hidden');
+                }
+                currentPinBuffer = '';
+                updatePinDotsUI();
+            } else {
+                if (pinSub) pinSub.classList.add('hidden');
+                if (emailSub) emailSub.classList.remove('hidden');
+                if (tabPin) {
+                    tabPin.className = 'py-2 rounded-xl text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5';
+                }
+                if (tabEmail) {
+                    tabEmail.className = 'py-2 rounded-xl bg-emerald-600 text-white shadow-md transition flex items-center justify-center gap-1.5';
+                }
+                var emailInput = document.getElementById('login-email');
+                if (emailInput) emailInput.focus();
+            }
+        }
+
         function openQuickPinModal() {
-            var savedPin = getSavedQuickPin();
-            if (!savedPin || !/^\d{4}$/.test(savedPin)) {
-                fallbackToMasterLogin('ℹ️ No 4-digit PIN set on this device yet. Sign in with Email + Password first to configure your PIN.');
-                return;
-            }
-            var modal = document.getElementById('quick-pin-modal');
-            if (!modal) return;
-            currentPinBuffer = '';
-            updatePinDotsUI();
-            var subtitle = document.getElementById('quick-pin-subtitle');
-            if (subtitle) {
-                subtitle.textContent = 'Enter your 4-digit roadside helper PIN';
-            }
-            modal.classList.remove('hidden');
+            switchLoginMethod('pin');
         }
 
         function closeQuickPinModal() {
-            var modal = document.getElementById('quick-pin-modal');
-            if (modal) modal.classList.add('hidden');
-            currentPinBuffer = '';
-            updatePinDotsUI();
+            switchLoginMethod('email');
         }
 
         function fallbackToMasterLogin(reasonMsg) {
-            closeQuickPinModal();
+            switchLoginMethod('email');
             switchAuthTab('login');
             var emailInput = document.getElementById('login-email');
             if (emailInput) emailInput.focus();
@@ -731,25 +767,38 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
         document.addEventListener('DOMContentLoaded', function() {
             var params = new URLSearchParams(window.location.search);
             var savedPin = getSavedQuickPin();
-            var qBtn = document.getElementById('login-quick-pin-btn');
             var redirParam = params.get('redirect_to');
             var redirInput = document.getElementById('quick-pin-redirect-to');
             if (redirInput && redirParam) {
                 redirInput.value = redirParam;
             }
 
-            if (savedPin && /^\d{4}$/.test(savedPin)) {
-                if (qBtn) qBtn.classList.remove('hidden');
-                if (params.get('pin_fallback') === '1') {
-                    fallbackToMasterLogin('⚠️ PIN verification failed — Please sign in with Email + Password.');
-                    return;
-                }
-                openQuickPinModal();
+            if (params.get('pin_fallback') === '1') {
+                switchLoginMethod('email');
+                fallbackToMasterLogin('⚠️ Master Email + Password required.');
+                return;
+            }
+
+            if (params.get('method') === 'pin' || (savedPin && /^\d{4}$/.test(savedPin) && params.get('method') !== 'email')) {
+                switchLoginMethod('pin');
             } else {
-                if (qBtn) qBtn.classList.add('hidden');
-                if (params.get('pin_fallback') === '1') {
-                    fallbackToMasterLogin('⚠️ Please sign in with your Email + Password.');
-                }
+                switchLoginMethod('email');
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            var pinSub = document.getElementById('login-pin-subpanel');
+            if (!pinSub || pinSub.classList.contains('hidden')) return;
+
+            // Only capture if not focused in an input field
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+            if (e.key >= '0' && e.key <= '9') {
+                pressPinDigit(e.key);
+            } else if (e.key === 'Backspace') {
+                backspacePinDigit();
+            } else if (e.key === 'Escape' || e.key === 'Delete') {
+                clearPinDigits();
             }
         });
         function switchAuthTab(tab) {

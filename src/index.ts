@@ -795,20 +795,23 @@ app.get('/rider', async (c) => {
 // ------------------------------------------------------------------------------
 app.get('/login', (c) => {
   const toast = c.req.query('toast') || '';
+  const hasQuickPin = Boolean(getCookie(c, 'finatrack_quick_pin'));
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-  return c.html(renderAuthView({ mode: 'login', toast }));
+  return c.html(renderAuthView({ mode: 'login', toast, has_quick_pin: hasQuickPin }));
 });
 
 app.get('/signup', (c) => {
   const toast = c.req.query('toast') || '';
+  const hasQuickPin = Boolean(getCookie(c, 'finatrack_quick_pin'));
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-  return c.html(renderAuthView({ mode: 'signup', toast }));
+  return c.html(renderAuthView({ mode: 'signup', toast, has_quick_pin: hasQuickPin }));
 });
 
 app.get('/auth', (c) => {
   const toast = c.req.query('toast') || '';
+  const hasQuickPin = Boolean(getCookie(c, 'finatrack_quick_pin'));
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-  return c.html(renderAuthView({ mode: 'signup', toast }));
+  return c.html(renderAuthView({ mode: 'login', toast, has_quick_pin: hasQuickPin }));
 });
 
 // ------------------------------------------------------------------------------
