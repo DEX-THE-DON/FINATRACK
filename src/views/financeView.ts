@@ -1804,18 +1804,133 @@ export function renderFinanceDashboard(data: any): string {
         window.openProfileModal = openProfileModal;
         window.closeProfileModal = closeProfileModal;
 
-        function onTxCategoryChange(val) {
-            const container = document.getElementById('custom-category-container');
-            const input = document.getElementById('tx-custom-category');
-            if (container) {
-                if (val === 'Other') {
-                    container.classList.remove('hidden');
-                    if (input) input.focus();
+        window.RECURRING_BILLS_DATA = ${JSON.stringify(recurring_bills || [])};
+
+        function syncBillToTransaction(billId, doScroll) {
+            if (doScroll === undefined) doScroll = true;
+            var bills = window.RECURRING_BILLS_DATA || [];
+            var bill = bills.find(function(b) { return String(b.id) === String(billId); });
+            if (!bill) return;
+
+            var catSelect = document.getElementById('tx-category-select');
+            var amtInput = document.getElementById('tx-amount-input');
+            var descInput = document.getElementById('tx-description-input') || document.querySelector('input[name="description"]');
+            var typeSelect = document.getElementById('tx-type-select') || document.querySelector('select[name="transaction_type"]');
+            var accSelect = document.getElementById('tx-account-select') || document.querySelector('select[name="account_id"]');
+            var linkedIdInput = document.getElementById('tx-linked-bill-id');
+            var syncBanner = document.getElementById('tx-bill-sync-banner');
+            var syncText = document.getElementById('tx-bill-sync-text');
+            var chipsContainer = document.getElementById('tx-category-bills-chips');
+
+            if (linkedIdInput) linkedIdInput.value = bill.id;
+            if (typeSelect) typeSelect.value = 'EXPENSE';
+            if (amtInput) amtInput.value = bill.amount;
+            if (descInput) descInput.value = (bill.icon || '⚡') + ' ' + bill.name + ' (Monthly Bill)';
+            if (accSelect && bill.account_id) accSelect.value = bill.account_id;
+            if (chipsContainer) chipsContainer.classList.add('hidden');
+
+            if (catSelect) {
+                var billOptionVal = 'BILL:' + bill.id;
+                var hasBillOpt = Array.from(catSelect.options).some(function(o) { return o.value === billOptionVal; });
+                if (hasBillOpt) {
+                    catSelect.value = billOptionVal;
                 } else {
-                    container.classList.add('hidden');
+                    catSelect.value = bill.category || 'Utilities & Bills';
+                }
+            }
+
+            if (syncBanner && syncText) {
+                syncText.textContent = (bill.icon || '⚡') + ' ' + bill.name + ' (Ksh ' + Number(bill.amount).toLocaleString() + ' • Due ' + bill.due_day + 'th)';
+                syncBanner.classList.remove('hidden');
+            }
+
+            highlightBillInChecklist(bill.id);
+
+            if (doScroll) {
+                var txCard = document.getElementById('tx-card');
+                if (txCard) {
+                    txCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    txCard.classList.add('ring-2', 'ring-indigo-500');
+                    setTimeout(function() {
+                        txCard.classList.remove('ring-2', 'ring-indigo-500');
+                    }, 1800);
                 }
             }
         }
+        window.syncBillToTransaction = syncBillToTransaction;
+
+        function unlinkRecurringBillFromTx() {
+            var linkedIdInput = document.getElementById('tx-linked-bill-id');
+            var syncBanner = document.getElementById('tx-bill-sync-banner');
+            var catSelect = document.getElementById('tx-category-select');
+
+            if (linkedIdInput) linkedIdInput.value = '';
+            if (syncBanner) syncBanner.classList.add('hidden');
+            if (catSelect && catSelect.value.startsWith('BILL:')) {
+                catSelect.value = 'Utilities & Bills';
+            }
+            highlightBillInChecklist(null);
+        }
+        window.unlinkRecurringBillFromTx = unlinkRecurringBillFromTx;
+
+        function highlightBillInChecklist(activeBillId) {
+            var cards = document.querySelectorAll('.recurring-bill-item-card');
+            cards.forEach(function(card) {
+                var bid = card.getAttribute('data-bill-id');
+                var safeId = String(bid).replace(/[^a-zA-Z0-9_-]/g, '_');
+                var chip = document.getElementById('bill-sync-chip-' + safeId);
+                if (activeBillId && String(bid) === String(activeBillId)) {
+                    card.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/90', 'dark:bg-indigo-950/50');
+                    if (chip) chip.classList.remove('hidden');
+                } else {
+                    card.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/90', 'dark:bg-indigo-950/50');
+                    if (chip) chip.classList.add('hidden');
+                }
+            });
+        }
+        window.highlightBillInChecklist = highlightBillInChecklist;
+
+        function onTxCategoryChange(val) {
+            const container = document.getElementById('custom-category-container');
+            const input = document.getElementById('tx-custom-category');
+            const chipsContainer = document.getElementById('tx-category-bills-chips');
+            const chipsList = document.getElementById('tx-category-bills-chips-list');
+
+            if (val === 'Other') {
+                if (container) container.classList.remove('hidden');
+                if (input) input.focus();
+                unlinkRecurringBillFromTx();
+                if (chipsContainer) chipsContainer.classList.add('hidden');
+                return;
+            } else {
+                if (container) container.classList.add('hidden');
+            }
+
+            if (val && val.startsWith('BILL:')) {
+                var bId = val.replace('BILL:', '');
+                syncBillToTransaction(bId, false);
+                if (chipsContainer) chipsContainer.classList.add('hidden');
+                return;
+            }
+
+            // Check if selected category has matching recurring bills (e.g. Utilities & Bills, Living Expenses)
+            var bills = window.RECURRING_BILLS_DATA || [];
+            var matching = bills.filter(function(b) {
+                var bCat = b.category || 'Utilities & Bills';
+                return bCat === val || (val === 'Utilities & Bills' && /rent|water|wifi|token|kplc|bill|sha|nhif|internet/i.test(b.name));
+            });
+
+            if (matching.length > 0 && chipsContainer && chipsList) {
+                chipsList.innerHTML = matching.map(function(b) {
+                    return '<button type="button" onclick="syncBillToTransaction(\\'' + b.id + '\\', false)" class="px-2.5 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/80 dark:hover:bg-indigo-800 text-indigo-900 dark:text-indigo-200 text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-xs"><span>' + (b.icon || '⚡') + '</span> <span>' + b.name + '</span> <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-extrabold">(Ksh ' + Number(b.amount).toLocaleString() + ')</span></button>';
+                }).join('');
+                chipsContainer.classList.remove('hidden');
+            } else {
+                if (chipsContainer) chipsContainer.classList.add('hidden');
+                unlinkRecurringBillFromTx();
+            }
+        }
+        window.onTxCategoryChange = onTxCategoryChange;
 
         let _mpesaParsedList = [];
 
@@ -5025,12 +5140,15 @@ export function renderFinanceDashboard(data: any): string {
                     const safeBillDomId = String(b.id).replace(/[^a-zA-Z0-9_-]/g, '_');
                     const isPaid = Boolean(b.is_paid_this_month);
                     return `
-                    <div class="p-3.5 rounded-xl border ${isPaid ? 'border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/40 dark:bg-emerald-950/20' : 'border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40'} flex flex-col justify-between gap-2.5">
-                        <div class="flex items-start justify-between gap-2">
+                    <div id="recurring-bill-card-${safeBillDomId}" data-bill-id="${b.id}" class="recurring-bill-item-card p-3.5 rounded-xl border ${isPaid ? 'border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/40 dark:bg-emerald-950/20' : 'border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40'} flex flex-col justify-between gap-2.5 transition-all">
+                        <div class="flex items-start justify-between gap-2 cursor-pointer" onclick="syncBillToTransaction('${b.id}')" title="Click to sync and pre-fill Record Transaction form">
                             <div class="flex items-center gap-2.5">
                                 <span class="text-xl p-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">${b.icon || '⚡'}</span>
                                 <div>
-                                    <h4 class="text-xs font-extrabold ${isPaid ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}">${b.name}</h4>
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <h4 class="text-xs font-extrabold ${isPaid ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}">${b.name}</h4>
+                                        <span id="bill-sync-chip-${safeBillDomId}" class="hidden px-1.5 py-0.2 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 text-[9px] font-black rounded-full uppercase tracking-wider animate-pulse">🔗 Synced</span>
+                                    </div>
                                     <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Due every <strong>${b.due_day}th</strong> • <strong class="text-indigo-600 dark:text-indigo-400">${formatKes(b.amount)}</strong></span>
                                 </div>
                             </div>
@@ -5040,14 +5158,18 @@ export function renderFinanceDashboard(data: any): string {
                         </div>
 
                         <div class="flex items-center justify-between gap-1.5 pt-2 border-t border-gray-200/70 dark:border-gray-700/60">
+                            <button type="button" onclick="syncBillToTransaction('${b.id}')" class="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-[11px] font-extrabold transition active:scale-95 flex items-center gap-1 shrink-0" title="Sync & Record in Ledger">
+                                <span>💳</span>
+                                <span class="hidden sm:inline">Sync to Record</span>
+                            </button>
                             ${!isPaid ? `
-                            <button type="button" onclick="document.getElementById('pay-bill-drawer-${safeBillDomId}').classList.toggle('hidden')" class="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-extrabold transition active:scale-95">
-                                ✓ Pay / Mark Settled
+                            <button type="button" onclick="document.getElementById('pay-bill-drawer-${safeBillDomId}').classList.toggle('hidden')" class="flex-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-extrabold transition active:scale-95 text-center">
+                                ✓ Quick Mark
                             </button>
                             ` : `
                             <form action="/finance/bills/toggle-pay/${b.id}" method="POST" class="flex-1">
-                                <button type="submit" class="w-full py-1 px-2.5 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition">
-                                    ↺ Undo Paid (${b.last_paid_date || curMonthLabel})
+                                <button type="submit" class="w-full py-1 px-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 text-gray-700 dark:text-gray-300 rounded-lg text-[11px] font-bold transition text-center">
+                                    ↺ Undo (${b.last_paid_date || curMonthLabel})
                                 </button>
                             </form>
                             `}
@@ -5098,18 +5220,19 @@ export function renderFinanceDashboard(data: any): string {
             </div>
 
             <!-- Add Tx Form -->
-            <form action="/transactions/create" method="POST" class="space-y-3">
+            <form action="/transactions/create" method="POST" id="record-transaction-form" class="space-y-3">
+                <input type="hidden" name="linked_bill_id" id="tx-linked-bill-id" value="">
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
-                        <select name="transaction_type" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <select name="transaction_type" id="tx-type-select" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
                             <option value="EXPENSE">🔴 Expense</option>
                             <option value="INCOME">🟢 Income</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Account / Wallet</label>
-                        <select name="account_id" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
+                        <select name="account_id" id="tx-account-select" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
                             <option value="">-- No Account / Cash --</option>
                             ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
                         </select>
@@ -5117,27 +5240,58 @@ export function renderFinanceDashboard(data: any): string {
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Category</label>
                         <select name="category" id="tx-category-select" onchange="onTxCategoryChange(this.value)" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold">
-                            <option value="Living Expenses">🏠 Living Expenses</option>
-                            <option value="Food & Groceries">🛒 Food & Groceries</option>
-                            <option value="Fuel & Petrol">⛽ Fuel & Petrol</option>
-                            <option value="EV Battery Swap & Charging">⚡ EV Battery Swap & Charging</option>
-                            <option value="Utilities & Bills">💡 Utilities & Bills</option>
-                            <option value="Bike Maintenance & Repairs">🔧 Vehicle / Car Maintenance & Repairs</option>
-                            <option value="Rider & Boda Deliveries">🚗 / 🛵 Ride-Hailing (Uber/Bolt) & Deliveries</option>
-                            <option value="M-Pesa Income">📲 M-Pesa Income</option>
-                            <option value="MMF Interest">📈 MMF Yield / Interest</option>
-                            <option value="Debt & Loan Repayments">💳 Debt & Loan Repayments</option>
-                            <option value="Other">✏️ Other (Custom...)</option>
+                            <optgroup label="🏷️ Standard Categories">
+                                <option value="Living Expenses">🏠 Living Expenses</option>
+                                <option value="Food &amp; Groceries">🛒 Food &amp; Groceries</option>
+                                <option value="Fuel &amp; Petrol">⛽ Fuel &amp; Petrol</option>
+                                <option value="EV Battery Swap &amp; Charging">⚡ EV Battery Swap &amp; Charging</option>
+                                <option value="Utilities &amp; Bills">💡 Utilities &amp; Bills</option>
+                                <option value="Bike Maintenance &amp; Repairs">🔧 Vehicle / Car Maintenance &amp; Repairs</option>
+                                <option value="Rider &amp; Boda Deliveries">🚗 / 🛵 Ride-Hailing (Uber/Bolt) &amp; Deliveries</option>
+                                <option value="M-Pesa Income">📲 M-Pesa Income</option>
+                                <option value="MMF Interest">📈 MMF Yield / Interest</option>
+                                <option value="Debt &amp; Loan Repayments">💳 Debt &amp; Loan Repayments</option>
+                                <option value="Other">✏️ Other (Custom...)</option>
+                            </optgroup>
+                            ${(recurring_bills || []).length > 0 ? `
+                            <optgroup label="🔁 Monthly Recurring Bills (Auto-Sync &amp; Settle)">
+                                ${(recurring_bills || []).map((b: any) => `
+                                    <option value="BILL:${b.id}" data-bill-id="${b.id}" data-bill-name="${b.name}" data-bill-amount="${b.amount}" data-bill-category="${b.category || 'Utilities & Bills'}" data-bill-account="${b.account_id || ''}">
+                                        ${b.icon || '⚡'} ${b.name} — Ksh ${Number(b.amount).toLocaleString()} (Due ${b.due_day}th${b.is_paid_this_month ? ' • ✅ Paid' : ' • ⏳ Pending'})
+                                    </option>
+                                `).join('')}
+                            </optgroup>
+                            ` : ''}
                         </select>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount (<span class="curr-symbol-label">Ksh</span>)</label>
-                        <input type="number" step="any" inputmode="decimal" name="amount" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
+                        <input type="number" step="any" inputmode="decimal" name="amount" id="tx-amount-input" placeholder="0.00" data-placeholder-base="0.00" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-bold convertible-placeholder" required>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
-                        <input type="date" name="t_date" value="${today}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold" required>
+                        <input type="date" name="t_date" id="tx-date-input" value="${today}" class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-base sm:text-sm font-semibold" required>
                     </div>
+                </div>
+
+                <!-- Active Recurring Bill Sync Banner -->
+                <div id="tx-bill-sync-banner" class="hidden p-3 rounded-xl bg-gradient-to-r from-indigo-50 to-emerald-50 dark:from-indigo-950/70 dark:to-emerald-950/60 border border-indigo-200 dark:border-indigo-800 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="px-2 py-0.5 rounded-full bg-indigo-600 text-white font-extrabold text-[10px] uppercase tracking-wider">🔁 Synced with Recurring Bill</span>
+                        <span id="tx-bill-sync-text" class="font-extrabold text-gray-900 dark:text-white"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <a href="#recurring-bills-card" class="text-indigo-600 dark:text-indigo-400 font-bold hover:underline text-[11px]">View in Checklist ↑</a>
+                        <button type="button" onclick="unlinkRecurringBillFromTx()" class="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:text-rose-500 rounded-lg text-xs font-bold transition">✕ Unlink</button>
+                    </div>
+                </div>
+
+                <!-- Matching Recurring Bills Quick Chips (When category is Utilities & Bills or Living Expenses) -->
+                <div id="tx-category-bills-chips" class="hidden flex items-center gap-1.5 flex-wrap p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 text-xs">
+                    <span class="text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                        <span>⚡</span> Recurring Bills in this Category:
+                    </span>
+                    <div id="tx-category-bills-chips-list" class="flex items-center gap-1.5 flex-wrap"></div>
                 </div>
 
                 <!-- Note / Custom Category Memo & Where money went/came in -->
@@ -5148,7 +5302,7 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Where did money go / come from? (Note / Memo)</label>
-                        <input type="text" name="description" placeholder="e.g. Paid mechanic Kamau for brake pads, Client tip, Java lunch, KPLC Token..." class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500">
+                        <input type="text" name="description" id="tx-description-input" placeholder="e.g. Paid mechanic Kamau for brake pads, Client tip, Java lunch, KPLC Token..." class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500">
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-sm transition shadow-xs active:scale-95 flex items-center justify-center gap-1.5">

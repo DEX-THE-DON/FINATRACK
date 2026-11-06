@@ -402,14 +402,64 @@ financeRoutes.post('/transactions/create', async (c) => {
   const description = body['description'] ? String(body['description']).trim() : null;
 
   let category = rawCategory;
+  let linkedBillId = body['linked_bill_id'] ? String(body['linked_bill_id']).trim() : '';
+  let syncedBillName = '';
+
+  if (rawCategory.startsWith('BILL:')) {
+    linkedBillId = rawCategory.replace('BILL:', '').trim();
+  }
+
   if (customCategory) {
     category = customCategory;
+  } else if (rawCategory.startsWith('BILL:')) {
+    category = 'Utilities & Bills';
   } else if (rawCategory === 'Other' && description) {
     category = description.length > 25 ? description.slice(0, 25) : description;
   }
 
   const amtKes = parseFloat(String(body['amount'] || '0.0')) || 0.0;
   const tDate = String(body['t_date'] || new Date().toISOString().slice(0, 10));
+  const currentMonth = tDate.slice(0, 7);
+
+  // If a recurring bill is linked or category is a recurring bill, mark it as paid for this month
+  if (linkedBillId) {
+    try {
+      const bills = getRecurringBills(c);
+      const bIdx = bills.findIndex((b) => String(b.id) === String(linkedBillId));
+      if (bIdx >= 0) {
+        const b = bills[bIdx];
+        syncedBillName = b.name;
+        category = b.category || 'Utilities & Bills';
+        bills[bIdx] = {
+          ...b,
+          is_paid_this_month: true,
+          last_paid_month: currentMonth,
+          last_paid_date: tDate,
+          account_id: accountId || b.account_id,
+        };
+        saveRecurringBillsCookie(c, bills);
+      }
+    } catch (e) {}
+  } else if ((category === 'Utilities & Bills' || category === 'Living Expenses') && description) {
+    // If description mentions a recurring bill name, mark it as paid
+    try {
+      const bills = getRecurringBills(c);
+      const descLower = description.toLowerCase();
+      const bIdx = bills.findIndex((b) => descLower.includes(b.name.toLowerCase()) || b.name.toLowerCase().includes(descLower));
+      if (bIdx >= 0 && !bills[bIdx].is_paid_this_month) {
+        const b = bills[bIdx];
+        syncedBillName = b.name;
+        bills[bIdx] = {
+          ...b,
+          is_paid_this_month: true,
+          last_paid_month: currentMonth,
+          last_paid_date: tDate,
+          account_id: accountId || b.account_id,
+        };
+        saveRecurringBillsCookie(c, bills);
+      }
+    } catch (e) {}
+  }
 
   const { error } = await supabase.from('transactions').insert({
     ...(userId ? { user_id: userId } : {}),
@@ -436,7 +486,11 @@ financeRoutes.post('/transactions/create', async (c) => {
     }
   }
 
-  return c.redirect('/?toast=Transaction+saved+successfully', 303);
+  const toastMsg = syncedBillName
+    ? `✅ Transaction recorded & monthly bill "${syncedBillName}" marked as PAID for ${currentMonth}!`
+    : 'Transaction saved successfully';
+
+  return c.redirect(`/?toast=${encodeURIComponent(toastMsg)}#recurring-bills-card`, 303);
 });
 
 financeRoutes.post('/transactions/delete/:id', async (c) => {
