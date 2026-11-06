@@ -97,13 +97,18 @@ export function renderRiderDashboard(data: any): string {
   const strictDailyKodi = Number(strict_saver_config?.daily_kodi_kes ?? 0);
   const saveUnspentLunch = strict_saver_config?.save_unspent_lunch !== false;
 
+  // 1. Resolve Linked Savings Account from accounts (Finance Hub)
   const linkedSavingsAcc = (accounts || []).find((a: any) => String(a.id) === String(strict_saver_config?.savings_account_id || ''))
-    || (accounts || []).find((a: any) => ['SAVINGS', 'INVESTMENT', 'MMF'].includes(String(a.account_type || '').toUpperCase()) || /mmf|sacco|lock|save|ziidi/i.test(String(a.name || '')));
-  const savingsAccountId = strict_saver_config?.savings_account_id || (linkedSavingsAcc ? String(linkedSavingsAcc.id) : '');
-  const savingsAccountName = (strict_saver_config?.savings_account_name && strict_saver_config.savings_account_name !== 'Strict Savings Account')
-    ? strict_saver_config.savings_account_name
-    : (linkedSavingsAcc?.name || 'Strict Savings Account');
-  const startingSavingsBalance = Number(strict_saver_config?.starting_savings_balance || 0);
+    || (accounts || []).find((a: any) => /kcb/i.test(String(a.name || '')))
+    || (accounts || []).find((a: any) => ['SAVINGS', 'INVESTMENT', 'MMF'].includes(String(a.account_type || '').toUpperCase()) || /mmf|sacco|lock|save|ziidi/i.test(String(a.name || '')))
+    || (accounts || [])[0];
+
+  const savingsAccountId = linkedSavingsAcc ? String(linkedSavingsAcc.id) : (strict_saver_config?.savings_account_id || '');
+  const savingsAccountName = linkedSavingsAcc?.name || strict_saver_config?.savings_account_name || 'Strict Savings Account';
+
+  // Live Account Balance 100% in sync with Finance Hub:
+  const liveFinanceBalance = linkedSavingsAcc ? Number(linkedSavingsAcc.balance || 0) : Number(strict_saver_config?.starting_savings_balance || 0);
+  const startingSavingsBalance = liveFinanceBalance;
 
   // Chronological ledger across all shifts to compute cumulative savings & overdue
   let cumulativeSavedFromShifts = 0;
@@ -129,7 +134,8 @@ export function renderRiderDashboard(data: any): string {
     }
   }
 
-  const expectedSavingsAccountBalance = startingSavingsBalance + cumulativeSavedFromShifts;
+  // 100% In Sync: Expected balance directly reflects the actual live balance of the linked account in Finance Hub!
+  const expectedSavingsAccountBalance = liveFinanceBalance;
   const lastShiftFood = lastShift ? Number(lastShift.food_spent || 0) : 0;
   const lastShiftLunchSaved = (lastShift && saveUnspentLunch) ? Math.max(0, strictLunchAllowance - lastShiftFood) : 0;
   const lastShiftStrictTarget = strictNetFloor + lastShiftLunchSaved;
@@ -1071,6 +1077,23 @@ export function renderRiderDashboard(data: any): string {
         var STRICT_SHORTFALL = ${cumulativeOverdueKes};
         var STRICT_EXPECTED_ACC_BALANCE = ${expectedSavingsAccountBalance};
         var STRICT_SAVINGS_ACC_NAME = ${JSON.stringify(savingsAccountName)};
+
+        function onStrictSavingsAccChange(sel) {
+            if (!sel || !sel.selectedOptions || !sel.selectedOptions[0]) return;
+            var opt = sel.selectedOptions[0];
+            var accNameInput = document.getElementById('strict_savings_acc_name_input');
+            var balanceInput = document.getElementById('strict_starting_savings_input');
+            if (accNameInput && opt.dataset.accname) {
+                accNameInput.value = opt.dataset.accname;
+                STRICT_SAVINGS_ACC_NAME = opt.dataset.accname;
+            }
+            if (balanceInput && opt.dataset.balance !== undefined) {
+                balanceInput.value = opt.dataset.balance;
+                STRICT_EXPECTED_ACC_BALANCE = parseFloat(opt.dataset.balance) || 0;
+            }
+            updateStrictSaverAudit();
+        }
+        window.onStrictSavingsAccChange = onStrictSavingsAccChange;
 
         function setShiftLunchMode(ateAtHome) {
             var foodInput = document.querySelector('input[name="food_spent"]');
@@ -3215,16 +3238,16 @@ export function renderRiderDashboard(data: any): string {
                         </select>
                     </div>
                     <div>
-                        <label class="block text-[11px] font-bold text-indigo-300 mb-1">🏦 6. Target Account You Save To</label>
-                        <select name="savings_account_id" onchange="if(this.selectedOptions[0] && this.value){document.getElementById('strict_savings_acc_name_input').value=this.selectedOptions[0].dataset.accname || '';}" class="w-full p-2 bg-slate-900 border border-indigo-700 rounded-xl font-bold text-indigo-200 text-xs">
+                        <label class="block text-[11px] font-bold text-indigo-300 mb-1">🏦 6. Target Account You Save To (Synced with Finance Hub)</label>
+                        <select name="savings_account_id" id="strict_savings_acc_select" onchange="onStrictSavingsAccChange(this)" class="w-full p-2 bg-slate-900 border border-indigo-700 rounded-xl font-bold text-indigo-200 text-xs">
                             <option value="">-- Custom / Strict Savings Vault --</option>
-                            ${(accounts || []).map((a: any) => `<option value="${a.id}" data-accname="${a.name}" ${String(savingsAccountId) === String(a.id) ? 'selected' : ''}>${a.name} (${a.account_type})</option>`).join('')}
+                            ${(accounts || []).map((a: any) => `<option value="${a.id}" data-accname="${a.name}" data-balance="${Number(a.balance || 0)}" ${String(savingsAccountId) === String(a.id) ? 'selected' : ''}>${a.name} (${a.account_type}) - Balance: Ksh ${Number(a.balance || 0).toLocaleString()}</option>`).join('')}
                         </select>
                         <input type="hidden" id="strict_savings_acc_name_input" name="savings_account_name" value="${savingsAccountName}">
                     </div>
                     <div>
-                        <label class="block text-[11px] font-bold text-purple-300 mb-1">💰 7. Opening Balance Before Shifts</label>
-                        <input type="number" step="any" name="starting_savings_balance" value="${startingSavingsBalance}" class="w-full p-2 bg-slate-900 border border-purple-800 rounded-xl font-bold text-purple-300 text-sm">
+                        <label class="block text-[11px] font-bold text-purple-300 mb-1">💰 7. Current Account Balance (Finance Hub)</label>
+                        <input type="number" step="any" id="strict_starting_savings_input" name="starting_savings_balance" value="${expectedSavingsAccountBalance}" class="w-full p-2 bg-slate-900 border border-purple-800 rounded-xl font-bold text-purple-300 text-sm" placeholder="Current Balance">
                     </div>
                     <div>
                         <label class="block text-[11px] font-bold text-amber-300 mb-1">📅 8. Work Days / Week</label>
@@ -3271,14 +3294,15 @@ export function renderRiderDashboard(data: any): string {
                           </span>
                       </p>
                       <p class="text-xs text-emerald-200/90">
-                          🏦 Your <strong class="text-amber-300 underline decoration-amber-400/60">${savingsAccountName}</strong> should now read:
+                          🏦 Your <strong class="text-amber-300 underline decoration-amber-400/60">${savingsAccountName}</strong> in Finance Hub:
                           <strong class="text-base font-black text-amber-300 ml-1 convertible-amount" data-kes="${expectedSavingsAccountBalance}">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                          <span class="text-xs text-emerald-300 font-bold ml-1">✅ (100% Synced)</span>
                       </p>
                   </div>
                   <div class="bg-slate-950/90 border border-emerald-500/50 px-4 py-2.5 rounded-xl text-right shrink-0">
-                      <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-300 block">🏦 ${savingsAccountName} Should Read</span>
+                      <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-300 block">🏦 ${savingsAccountName} (Finance Hub)</span>
                       <span class="text-xl font-black text-emerald-400 convertible-amount" data-kes="${expectedSavingsAccountBalance}">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                      <span class="text-[10px] text-gray-400 block">✅ Ksh 0.00 Overdue</span>
+                      <span class="text-[10px] text-emerald-300 font-bold block">✅ 100% in Sync with Finance</span>
                   </div>
               </div>
               ` : `
@@ -3292,28 +3316,28 @@ export function renderRiderDashboard(data: any): string {
                           Let's catch up! You have an overdue of <span class="text-rose-400 underline convertible-amount" data-kes="${cumulativeOverdueKes}">Ksh ${cumulativeOverdueKes.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span> to recover.
                       </p>
                       <p class="text-xs text-amber-200/90">
-                          🏦 Your <strong class="text-amber-300">${savingsAccountName}</strong> should currently read <strong class="text-white font-black convertible-amount" data-kes="${expectedSavingsAccountBalance}">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                          🏦 Your <strong class="text-amber-300">${savingsAccountName}</strong> currently reads <strong class="text-white font-black convertible-amount" data-kes="${expectedSavingsAccountBalance}">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong> in Finance Hub
                           (and will read <strong class="text-emerald-300 font-black convertible-amount" data-kes="${expectedSavingsAccountBalance + cumulativeOverdueKes}">Ksh ${(expectedSavingsAccountBalance + cumulativeOverdueKes).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong> once you clear the overdue!).
                       </p>
                   </div>
                   <div class="bg-slate-950/90 border border-rose-500/50 px-4 py-2.5 rounded-xl text-right shrink-0">
                       <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300 block">⚠️ Overdue To Catch Up</span>
                       <span class="text-xl font-black text-rose-400 convertible-amount" data-kes="${cumulativeOverdueKes}">Ksh ${cumulativeOverdueKes.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                      <span class="text-[10px] text-amber-300 block">🏦 Account Now: Ksh ${expectedSavingsAccountBalance.toLocaleString()}</span>
+                      <span class="text-[10px] text-amber-300 block">🏦 In Finance Now: Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
               </div>
               `
             ) : `
               <div class="p-4 bg-slate-950/90 border border-indigo-500/40 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div class="space-y-1">
-                      <span class="text-[10px] font-black uppercase tracking-wider text-amber-300">🏦 Strict Savings &amp; Overdue Tracker (${savingsAccountName})</span>
+                      <span class="text-[10px] font-black uppercase tracking-wider text-amber-300">🏦 Strict Savings &amp; Overdue Tracker (${savingsAccountName} • Finance Hub Synced)</span>
                       <p class="text-xs sm:text-sm font-bold text-white">
                           Daily Rule: <strong class="text-emerald-400">Ksh ${strictNetFloor.toLocaleString()} Net Target</strong> + <strong class="text-cyan-300">Ksh ${strictFuelAllowance.toLocaleString()} Fuel</strong> + <strong class="text-amber-300">Ksh ${strictLunchAllowance.toLocaleString()} Lunch</strong> + <strong class="text-rose-300">Ksh ${strictAirtimeAllowance.toLocaleString()} Airtime</strong>.
                           If you eat lunch at home at 12:00 PM (<code class="text-emerald-300">Lunch = 0</code>), that <strong>Ksh ${strictLunchAllowance.toLocaleString()}</strong> is automatically added to your savings!
                       </p>
                   </div>
                   <div class="bg-slate-900 border border-indigo-700/60 px-3.5 py-2 rounded-xl text-right shrink-0">
-                      <span class="text-[10px] text-indigo-300 font-bold block">🏦 ${savingsAccountName} Should Read</span>
+                      <span class="text-[10px] text-indigo-300 font-bold block">🏦 ${savingsAccountName} (Finance Hub)</span>
                       <span class="text-lg font-black text-emerald-400">Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
               </div>
@@ -4131,10 +4155,10 @@ export function renderRiderDashboard(data: any): string {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Target Account (Sync Income & Expenses)</label>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Target Account (Sync Income & Expenses with Finance Hub)</label>
                     <select name="earnings_account_id" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium text-emerald-600">
-                        <option value="">-- Don't Sync to Account --</option>
-                        ${accounts.map((a: any) => `<option value="${a.id}" ${String(savingsAccountId) === String(a.id) ? 'selected' : ''}>${a.name} (#${a.account_number || a.account_type})</option>`).join('')}
+                        ${accounts.length > 0 ? accounts.map((a: any) => `<option value="${a.id}" ${String(savingsAccountId) === String(a.id) ? 'selected' : ''}>${a.name} (Bal: Ksh ${Number(a.balance || 0).toLocaleString()} • #${a.account_number || a.account_type})</option>`).join('') : '<option value="">-- No Accounts in Finance Hub --</option>'}
+                        <option value="">-- Don't Sync to Any Account --</option>
                     </select>
                 </div>
 
@@ -4206,7 +4230,7 @@ export function renderRiderDashboard(data: any): string {
                 <div class="sm:col-span-2 lg:col-span-4 p-4 bg-slate-900 dark:bg-slate-950 border-2 border-indigo-600/60 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-md">
                     <div class="space-y-1">
                         <p id="live-strict-net-verdict" class="text-xs font-extrabold text-indigo-300">
-                            🎯 Strict Daily Contract: Ksh ${strictNetFloor.toLocaleString()} Net + Ksh ${strictFuelAllowance.toLocaleString()} Fuel + Ksh ${strictLunchAllowance.toLocaleString()} Lunch + Ksh ${strictAirtimeAllowance.toLocaleString()} Airtime • 🏦 Your ${savingsAccountName} currently reads: Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            🎯 Strict Daily Contract: Ksh ${strictNetFloor.toLocaleString()} Net + Ksh ${strictFuelAllowance.toLocaleString()} Fuel + Ksh ${strictLunchAllowance.toLocaleString()} Lunch + Ksh ${strictAirtimeAllowance.toLocaleString()} Airtime • 🏦 Your ${savingsAccountName} in Finance Hub currently reads: Ksh ${expectedSavingsAccountBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </p>
                         <p id="live-strict-cap-verdict" class="text-[11px] font-bold text-emerald-300">
                             🟢 Standard Shift Budget: Fuel Ksh ${strictFuelAllowance} • Lunch Ksh ${strictLunchAllowance} (or click "🏠 Ate at Home" to save +Ksh ${strictLunchAllowance}) • Airtime Ksh ${strictAirtimeAllowance}

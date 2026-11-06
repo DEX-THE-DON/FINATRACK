@@ -209,6 +209,19 @@ app.get('/', async (c) => {
   } else {
     allocationRules = [];
 
+    // Fetch guest accounts from database so Finance Hub and Rider Hub are 100% in sync
+    try {
+      const { data: guestAccs } = await supabase.from('accounts').select('*').is('user_id', null).order('created_at', { ascending: true });
+      if (guestAccs && guestAccs.length > 0) {
+        accounts = guestAccs;
+      } else {
+        const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+        accounts = anyAccs || [];
+      }
+    } catch (e) {
+      accounts = [];
+    }
+
     // Parse deleted goals cookie for guests
     let deletedGoalIds: string[] = [];
     try {
@@ -615,18 +628,25 @@ app.get('/rider', async (c) => {
     allocationRules = ruleRes.data || [];
   } else {
     try {
-      const [guestCompRes, guestLogsRes, guestMaintRes] = await Promise.all([
+      const [guestCompRes, guestLogsRes, guestMaintRes, guestAccRes] = await Promise.all([
         supabase.from('compliance_deadlines').select('*').is('user_id', null),
         supabase.from('rider_logs').select('*').is('user_id', null).order('date', { ascending: false }),
         supabase.from('maintenance_schedules').select('*').is('user_id', null),
+        supabase.from('accounts').select('*').is('user_id', null).order('created_at', { ascending: true }),
       ]);
       compliance = guestCompRes.data || [];
       logs = guestLogsRes.data || [];
       maintenance = guestMaintRes.data || [];
+      accounts = (guestAccRes.data && guestAccRes.data.length > 0) ? guestAccRes.data : [];
+      if (accounts.length === 0) {
+        const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+        accounts = anyAccs || [];
+      }
     } catch (e) {
       compliance = [];
       logs = [];
       maintenance = [];
+      accounts = [];
     }
   }
 
@@ -824,9 +844,25 @@ app.get('/salaried', async (c) => {
   const salariedConfig = getSalariedConfig(c);
   const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
 
-  const { data: accounts } = await supabase.from('accounts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
-  const { data: dbRules } = await supabase.from('allocation_rules').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
-  const { data: dbDebts } = await supabase.from('debts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
+  let accounts: any[] = [];
+  try {
+    const accQuery = userId ? supabase.from('accounts').select('*').eq('user_id', userId) : supabase.from('accounts').select('*').is('user_id', null);
+    const { data: accData } = await accQuery.order('created_at', { ascending: true });
+    accounts = (accData && accData.length > 0) ? accData : [];
+    if (accounts.length === 0) {
+      const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+      accounts = anyAccs || [];
+    }
+  } catch (e) {
+    accounts = [];
+  }
+
+  const { data: dbRules } = userId
+    ? await supabase.from('allocation_rules').select('*').eq('user_id', userId)
+    : await supabase.from('allocation_rules').select('*').is('user_id', null);
+  const { data: dbDebts } = userId
+    ? await supabase.from('debts').select('*').eq('user_id', userId)
+    : await supabase.from('debts').select('*').is('user_id', null);
   const rules = resolveEffectiveAllocationRules(c, dbRules || []);
   const salariedLoans = resolveEffectiveSalariedLoans(c, dbDebts || []);
 

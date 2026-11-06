@@ -547,8 +547,13 @@ riderRoutes.post('/rider/logs', async (c) => {
   const rawAirtime = parseFloat(String(body['airtime_spent'] || '0.0')) || 0.0;
   const rawMisc = parseFloat(String(body['misc_expenses'] || '0.0')) || 0.0;
 
-  const earningsAccId = body['earnings_account_id'] ? String(body['earnings_account_id']) : null;
-  const expenseAccId = body['expense_account_id'] ? String(body['expense_account_id']) : null;
+  const strictCfg = getStrictSaverConfig(c);
+  let earningsAccId = body['earnings_account_id'] !== undefined ? String(body['earnings_account_id']).trim() : null;
+  // If omitted or not explicitly cleared, default to strict saver's savings_account_id
+  if (!earningsAccId && strictCfg.savings_account_id) {
+    earningsAccId = strictCfg.savings_account_id;
+  }
+  const expenseAccId = body['expense_account_id'] ? String(body['expense_account_id']).trim() : null;
   const channel = body['channel'] ? String(body['channel']).trim() : 'ALL';
 
   // Optional Platform Split & Cash-in-Hand vs App Wallet Reconciliation
@@ -811,11 +816,17 @@ riderRoutes.post('/rider/logs', async (c) => {
       if (targetAcc) {
         const newBalance = toDecimal(targetAcc.balance).plus(netDelta).toNumber();
         await supabase.from('accounts').update({ balance: newBalance }).eq('id', targetAccId);
+        // Keep strict saver config 100% in sync with live Finance Hub balance
+        saveStrictSaverConfigCookie(c, {
+          ...strictCfg,
+          savings_account_id: targetAccId,
+          savings_account_name: targetAcc.name || strictCfg.savings_account_name,
+          starting_savings_balance: newBalance,
+        });
       }
     }
   }
 
-  const strictCfg = getStrictSaverConfig(c);
   const shiftNet = totalEarnedKes - totalExpensesKes;
   const safeShiftNetAfterUber = Math.max(0, shiftNet - totalUnremittedCommission);
   const queueToSundayBatch = body['queue_to_sunday_batch'] === '1' || body['queue_to_sunday_batch'] === 'true';
@@ -829,21 +840,29 @@ riderRoutes.post('/rider/logs', async (c) => {
 
   const lunchSavedBonus = strictCfg.save_unspent_lunch ? Math.max(0, strictCfg.lunch_allowance_kes - foodSpentKes) : 0;
   const strictRequiredToday = strictCfg.net_floor_kes + lunchSavedBonus;
-  const totalShiftsSaved = savedCookieLogs.reduce((acc: number, l: any) => {
-    const exp = Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.misc_expenses || 0) + Number(l.maintenance_cost || 0);
-    return acc + Math.max(0, Number(l.total_earned || 0) - exp);
-  }, 0);
-  const expectedAccBalance = strictCfg.starting_savings_balance + totalShiftsSaved;
-  const accLabel = strictCfg.savings_account_name || 'Savings Account';
+
+  // Resolve true live balance from the linked Finance Hub account
+  const activeTargetAccId = earningsAccId || expenseAccId || strictCfg.savings_account_id || null;
+  let liveAccBal = strictCfg.starting_savings_balance;
+  let accLabel = strictCfg.savings_account_name || 'Savings Account';
+  if (activeTargetAccId) {
+    try {
+      const { data: liveAcc } = await supabase.from('accounts').select('name, balance').eq('id', activeTargetAccId).single();
+      if (liveAcc) {
+        liveAccBal = Number(liveAcc.balance || 0);
+        if (liveAcc.name) accLabel = liveAcc.name;
+      }
+    } catch (e) {}
+  }
   const kmToastMsg = km > 0 ? ` (+${km} km Odo)` : '';
 
   let strictToastMsg = '';
   if (shiftNet >= strictRequiredToday) {
     const extraProfit = shiftNet - strictRequiredToday;
-    strictToastMsg = `🎉 Congrats! You saved Ksh ${shiftNet.toLocaleString()} today (Ksh ${strictCfg.net_floor_kes.toLocaleString()} Target${lunchSavedBonus > 0 ? ` + Ksh ${lunchSavedBonus.toLocaleString()} Home-Lunch Saved` : ''}${extraProfit > 0 ? ` + Ksh ${extraProfit.toLocaleString()} Extra Profit` : ''})! Your ${accLabel} should now read Ksh ${expectedAccBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${kmToastMsg}${batchToastSuffix}`;
+    strictToastMsg = `🎉 Congrats! Target & Profit Hit! You saved Ksh ${shiftNet.toLocaleString()} today (${accLabel} in Finance Hub is now Ksh ${liveAccBal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • 100% Synced)${kmToastMsg}${batchToastSuffix}`;
   } else {
     const overdueAmt = strictRequiredToday - Math.max(0, shiftNet);
-    strictToastMsg = `💪 Let's catch up! You have an overdue of Ksh ${overdueAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Saved Ksh ${Math.max(0, shiftNet).toLocaleString()} vs Ksh ${strictRequiredToday.toLocaleString()} strict target). Your ${accLabel} should now read Ksh ${expectedAccBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${kmToastMsg}${batchToastSuffix}`;
+    strictToastMsg = `💪 Let's catch up! Overdue of Ksh ${overdueAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} to recover (${accLabel} in Finance Hub reads Ksh ${liveAccBal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})${kmToastMsg}${batchToastSuffix}`;
   }
 
   return c.redirect(`/rider?toast=${encodeURIComponent(strictToastMsg)}#shift-briefing-card`, 303);
@@ -853,12 +872,25 @@ riderRoutes.post('/rider/logs/delete/:id', async (c) => {
   const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
   try {
+    const { data: shiftTxs } = await supabase.from('transactions').select('*').eq('rider_log_id', id);
+    if (shiftTxs && shiftTxs.length > 0) {
+      for (const t of shiftTxs) {
+        if (t.account_id) {
+          const { data: acc } = await supabase.from('accounts').select('*').eq('id', t.account_id).single();
+          if (acc) {
+            const delta = t.transaction_type === 'INCOME' ? -Number(t.amount || 0) : Number(t.amount || 0);
+            const newBal = toDecimal(acc.balance).plus(delta).toNumber();
+            await supabase.from('accounts').update({ balance: newBal }).eq('id', t.account_id);
+          }
+        }
+      }
+    }
     await supabase.from('transactions').delete().eq('rider_log_id', id);
     await supabase.from('rider_logs').delete().eq('id', id);
   } catch (e) {}
   const remainingLogs = getSavedRiderLogs(c).filter((l: any) => String(l.id) !== String(id));
   saveRiderLogsCookie(c, remainingLogs);
-  return c.redirect('/rider?toast=Shift+log+removed', 303);
+  return c.redirect('/rider?toast=Shift+log+removed+(Finance+accounts+re-synced)', 303);
 });
 
 // ------------------------------------------------------------------------------
@@ -959,10 +991,14 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
     : existing.bonus_mission;
   const bikeId = body['bike_id'] ? String(body['bike_id']).trim() : '';
 
+  let resolvedStartingBalance = startingSavingsBalance;
   if (savingsAccountId) {
     try {
-      const { data: acc } = await supabase.from('accounts').select('name').eq('id', savingsAccountId).single();
-      if (acc && acc.name) savingsAccountName = acc.name;
+      const { data: acc } = await supabase.from('accounts').select('name, balance').eq('id', savingsAccountId).single();
+      if (acc) {
+        if (acc.name) savingsAccountName = acc.name;
+        resolvedStartingBalance = Number(acc.balance || 0);
+      }
     } catch (e) {}
   }
 
@@ -976,7 +1012,7 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
     save_unspent_lunch: saveUnspentLunch,
     savings_account_id: savingsAccountId,
     savings_account_name: savingsAccountName || 'Strict Savings Account',
-    starting_savings_balance: startingSavingsBalance,
+    starting_savings_balance: resolvedStartingBalance,
     work_days_per_week: workDaysPerWeek,
     daily_bonus_target_kes: dailyBonusTargetKes,
     bonus_mission: bonusMission,

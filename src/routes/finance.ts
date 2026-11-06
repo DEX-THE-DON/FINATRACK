@@ -18,6 +18,7 @@ import { parseMultipleMpesaMessages } from '../utils/mpesa';
 import { parseMultipleBankMessages } from '../utils/bankSms';
 import { renderFinancialStatement } from '../views/statementView';
 import { Decimal } from 'decimal.js';
+import { getStrictSaverConfig, saveStrictSaverConfigCookie } from './rider';
 
 export const financeRoutes = new Hono<{ Bindings: AppEnv }>();
 
@@ -250,6 +251,18 @@ financeRoutes.post('/accounts/update/:id', async (c) => {
     return c.redirect(`/?toast=${encodeURIComponent('Failed to update account: ' + error.message)}`, 303);
   }
 
+  // Keep Rider Hub Strict Saver account in 100% sync if this account is linked
+  try {
+    const curStrict = getStrictSaverConfig(c);
+    if (String(curStrict.savings_account_id) === String(id)) {
+      saveStrictSaverConfigCookie(c, {
+        ...curStrict,
+        savings_account_name: name,
+        starting_savings_balance: finalBalance,
+      });
+    }
+  } catch (e) {}
+
   return c.redirect('/?toast=Account+updated+successfully', 303);
 });
 
@@ -260,6 +273,18 @@ financeRoutes.post('/accounts/delete/:id', async (c) => {
   // Decouple any linked allocation rules or bills
   await supabase.from('allocation_rules').update({ target_id: null }).eq('target_id', id);
   await supabase.from('bills').update({ payment_account_id: null }).eq('payment_account_id', id);
+
+  // If deleted account is linked in Strict Saver, clear it
+  try {
+    const curStrict = getStrictSaverConfig(c);
+    if (String(curStrict.savings_account_id) === String(id)) {
+      saveStrictSaverConfigCookie(c, {
+        ...curStrict,
+        savings_account_id: '',
+        savings_account_name: 'Strict Savings Account',
+      });
+    }
+  } catch (e) {}
 
   const { error } = await supabase.from('accounts').delete().eq('id', id);
   if (error) {

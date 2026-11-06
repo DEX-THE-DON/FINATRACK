@@ -342,8 +342,19 @@ salariedRoutes.post('/salaried/payday/split', async (c) => {
   );
 
   const today = new Date().toISOString().slice(0, 10);
-  const { data: accounts } = await supabase.from('accounts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
-  const userAccs = accounts || [];
+  let accounts: any[] = [];
+  try {
+    const accQuery = userId ? supabase.from('accounts').select('*').eq('user_id', userId) : supabase.from('accounts').select('*').is('user_id', null);
+    const { data: accData } = await accQuery.order('created_at', { ascending: true });
+    accounts = (accData && accData.length > 0) ? accData : [];
+    if (accounts.length === 0) {
+      const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+      accounts = anyAccs || [];
+    }
+  } catch (e) {
+    accounts = [];
+  }
+  const userAccs = accounts;
 
   for (const res of splitResults) {
     const splitAmt = parseFloat(res.allocated_amount);

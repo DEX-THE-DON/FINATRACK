@@ -163,7 +163,12 @@ traderRoutes.post('/trader/closeout', async (c) => {
 
   // 2. Also record as an income transaction for net profit into Till / Cash account
   try {
-    const { data: accounts } = await supabase.from('accounts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
+    const accQuery = userId ? supabase.from('accounts').select('*').eq('user_id', userId) : supabase.from('accounts').select('*').is('user_id', null);
+    let { data: accounts } = await accQuery.order('created_at', { ascending: true });
+    if (!accounts || accounts.length === 0) {
+      const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+      accounts = anyAccs || [];
+    }
     const tillAcc = (accounts || []).find((a: any) => a.account_type === 'MOBILE_MONEY' || a.name.toLowerCase().includes('till') || a.account_type === 'CASH') || (accounts || [])[0];
 
     if (tillAcc && netProfit > 0) {
@@ -244,7 +249,12 @@ traderRoutes.post('/trader/credit/settle/:id', async (c) => {
 
     // Optionally credit Till / Cash account
     try {
-      const { data: accounts } = await supabase.from('accounts').select('*').eq(userId ? 'user_id' : 'id', userId || 'demo');
+      const accQuery = userId ? supabase.from('accounts').select('*').eq('user_id', userId) : supabase.from('accounts').select('*').is('user_id', null);
+      let { data: accounts } = await accQuery.order('created_at', { ascending: true });
+      if (!accounts || accounts.length === 0) {
+        const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+        accounts = anyAccs || [];
+      }
       const cashAcc = (accounts || []).find((a: any) => a.account_type === 'MOBILE_MONEY' || a.account_type === 'CASH') || (accounts || [])[0];
       if (cashAcc && settleAmt > 0) {
         await supabase.from('transactions').insert({
