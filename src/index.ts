@@ -151,18 +151,19 @@ app.get('/', async (c) => {
   let riderLogs: any[] = [];
   let complianceDeadlines: any[] = [];
 
-  if (userId) {
+  if (userId || isLoggedIn) {
     try {
+      const filterByUser = (q: any) => userId ? q.eq('user_id', userId) : q;
       const [accRes, txRes, goalRes, bgtRes, debtRes, billRes, ruleRes, logRes, compRes] = await Promise.all([
-        supabase.from('accounts').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-        supabase.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100),
-        supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-        supabase.from('budgets').select('*').eq('user_id', userId),
-        supabase.from('debts').select('*').eq('user_id', userId).order('due_at', { ascending: true }),
-        supabase.from('bills').select('*').eq('user_id', userId).order('due_day', { ascending: true }),
-        supabase.from('allocation_rules').select('*').eq('user_id', userId).order('percentage', { ascending: false }),
-        supabase.from('rider_logs').select('*').eq('user_id', userId),
-        supabase.from('compliance_deadlines').select('*').eq('user_id', userId),
+        filterByUser(supabase.from('accounts').select('*')).order('created_at', { ascending: true }),
+        filterByUser(supabase.from('transactions').select('*')).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100),
+        filterByUser(supabase.from('goals').select('*')).order('created_at', { ascending: true }),
+        filterByUser(supabase.from('budgets').select('*')),
+        filterByUser(supabase.from('debts').select('*')).order('due_at', { ascending: true }),
+        filterByUser(supabase.from('bills').select('*')).order('due_day', { ascending: true }),
+        filterByUser(supabase.from('allocation_rules').select('*')).order('percentage', { ascending: false }),
+        filterByUser(supabase.from('rider_logs').select('*')),
+        filterByUser(supabase.from('compliance_deadlines').select('*')),
       ]);
 
       accounts = accRes?.data || [];
@@ -193,6 +194,19 @@ app.get('/', async (c) => {
       } catch (e) {
         accounts = inMemoryStore.accounts || [];
       }
+    }
+
+    if (userId && transactions.length === 0 && goals.length === 0 && riderLogs.length === 0) {
+      try {
+        const [anyTx, anyGoals, anyLogs] = await Promise.all([
+          supabase.from('transactions').select('*').is('user_id', null).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100),
+          supabase.from('goals').select('*').is('user_id', null).order('created_at', { ascending: true }),
+          supabase.from('rider_logs').select('*').is('user_id', null),
+        ]);
+        if (anyTx?.data?.length) transactions = sortTransactionsLatestFirst(anyTx.data);
+        if (anyGoals?.data?.length) goals = anyGoals.data;
+        if (anyLogs?.data?.length) riderLogs = anyLogs.data;
+      } catch (e) {}
     }
 
     const legacyDummyGoalTitles = new Set([
@@ -677,6 +691,13 @@ app.get('/rider', async (c) => {
         bikes = inMemoryStore.bikes || [];
       }
     }
+
+    if (logs.length === 0) {
+      try {
+        const { data: anyLogs } = await supabase.from('rider_logs').select('*').is('user_id', null).order('date', { ascending: false });
+        if (anyLogs && anyLogs.length > 0) logs = anyLogs;
+      } catch (e) {}
+    }
   } else {
     try {
       const [guestCompRes, guestLogsRes, guestMaintRes, guestAccRes, guestBikesRes] = await Promise.all([
@@ -982,6 +1003,18 @@ app.route('/', authRoutes);
 // Graceful Edge Error Boundary Handler
 app.onError((err, c) => {
   console.error('⚠️ Finatrack Graceful Route Error Boundary:', err);
+  if (c.req.path === '/rider' && c.req.method === 'GET') {
+    const fallbackBikes = inMemoryStore.bikes || [];
+    return c.html(renderRiderDashboard({
+      active_bike: fallbackBikes[0] || null,
+      bikes: fallbackBikes,
+      accounts: inMemoryStore.accounts || [],
+      username: getCookie(c, 'finatrack_user') || 'Dex',
+      email: getCookie(c, 'finatrack_email') || 'dex@gmail.com',
+      is_logged_in: true,
+      active_profile: 'RIDER',
+    }));
+  }
   return c.redirect('/?toast=' + encodeURIComponent('Notice: Handled system error gracefully. All data safe.'), 303);
 });
 

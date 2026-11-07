@@ -88,6 +88,7 @@ export const inMemoryStore: Record<string, any[]> = {
 
 export function createMockClient() {
   return {
+    __isMock: true,
     auth: {
       async signUp({ email, password, options }: any) {
         const normEmail = String(email || '').toLowerCase().trim();
@@ -256,29 +257,6 @@ export function createMockClient() {
 let isSupabaseHealthy = true;
 let lastHealthCheck = 0;
 
-// Instant startup DNS verification in Node.js runtime without static imports (Cloudflare Pages safe)
-if (typeof process !== 'undefined' && process.env) {
-  try {
-    const rawUrl = process.env.SUPABASE_URL || '';
-    if (rawUrl && !rawUrl.includes('placeholder')) {
-      const hostname = new URL(rawUrl).hostname;
-      // Dynamically resolve Node.js dns module if available so edge bundlers (esbuild/wrangler) don't fail
-      const nodeDns = typeof require !== 'undefined' ? require('dns') : null;
-      if (nodeDns && typeof nodeDns.lookup === 'function') {
-        nodeDns.lookup(hostname, (err: any, address: any) => {
-          if (err || !address) {
-            isSupabaseHealthy = false;
-            lastHealthCheck = Date.now();
-            console.warn(`⚡ Finatrack Edge: Host "${hostname}" unreachable (${err?.code || 'EAI_AGAIN'}). Instant local edge store active (0ms latency).`);
-          } else {
-            isSupabaseHealthy = true;
-          }
-        });
-      }
-    }
-  } catch(e) {}
-}
-
 export function markSupabaseUnhealthy() {
   isSupabaseHealthy = false;
   lastHealthCheck = Date.now();
@@ -341,8 +319,9 @@ export async function getRequestContext(c: any) {
   );
 
   const token = cookies['sb-access-token'] || c.req.header('authorization')?.replace(/^Bearer\s+/i, '') || '';
-  const authHeader = token ? `Bearer ${token}` : undefined;
-  const supabase = getSupabaseClient(env, authHeader);
+  const isMockToken = token.startsWith('mock-token-');
+  const authHeader = token && !isMockToken ? `Bearer ${token}` : undefined;
+  let supabase = getSupabaseClient(env, authHeader);
 
   let user: any = null;
   let username = '';
@@ -352,7 +331,7 @@ export async function getRequestContext(c: any) {
   if (token) {
     let verified = false;
     // Attempt remote Supabase verification if not explicitly a mock token
-    if (!token.startsWith('mock-token-')) {
+    if (!isMockToken) {
       try {
         const { data: userData, error } = await supabase.auth.getUser(token);
         if (!error && userData?.user) {
@@ -364,6 +343,7 @@ export async function getRequestContext(c: any) {
         }
       } catch (e) {
         // Supabase network failure or offline in sandbox
+        supabase = getSupabaseClient(env, authHeader);
       }
     }
 
@@ -425,10 +405,15 @@ export async function getRequestContext(c: any) {
     email = 'dex@gmail.com';
   }
 
+  const rawId = user?.id ? String(user.id) : null;
+  const isValidUuid = rawId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId) : false;
+  const isMockClient = Boolean((supabase as any)?.__isMock);
+  const effectiveUserId = isValidUuid ? rawId : (isMockClient ? rawId : null);
+
   return {
     supabase,
     user,
-    userId: user?.id || null,
+    userId: effectiveUserId,
     isLoggedIn,
     username: username || 'Member',
     email,

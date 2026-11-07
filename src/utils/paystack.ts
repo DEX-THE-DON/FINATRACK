@@ -16,11 +16,12 @@ export interface PaystackConfig {
 
 export function getPaystackConfig(c?: any): PaystackConfig {
   const env = c?.env || {};
+  const procEnv = typeof process !== 'undefined' && process.env ? process.env : ({} as Record<string, string | undefined>);
   return {
-    publicKey: process.env.PAYSTACK_PUBLIC_KEY || env.PAYSTACK_PUBLIC_KEY || 'pk_test_6611c5778e2e10bde298210d185c9d36dde3cf0d',
-    secretKey: process.env.PAYSTACK_SECRET_KEY || env.PAYSTACK_SECRET_KEY || 'sk_test_d4e03d0ecf3a1e11612e3a874da282d4a567bf76',
-    paywallEmail: (process.env.PAYSTACK_PAYWALL_EMAIL || env.PAYSTACK_PAYWALL_EMAIL || 'dex@gmail.com').toLowerCase().trim(),
-    shiftFeeKes: Number(process.env.PAYSTACK_SHIFT_FEE_KES || env.PAYSTACK_SHIFT_FEE_KES || 100),
+    publicKey: procEnv.PAYSTACK_PUBLIC_KEY || env.PAYSTACK_PUBLIC_KEY || 'pk_test_6611c5778e2e10bde298210d185c9d36dde3cf0d',
+    secretKey: procEnv.PAYSTACK_SECRET_KEY || env.PAYSTACK_SECRET_KEY || 'sk_test_d4e03d0ecf3a1e11612e3a874da282d4a567bf76',
+    paywallEmail: String(procEnv.PAYSTACK_PAYWALL_EMAIL || env.PAYSTACK_PAYWALL_EMAIL || 'dex@gmail.com').toLowerCase().trim(),
+    shiftFeeKes: Number(procEnv.PAYSTACK_SHIFT_FEE_KES || env.PAYSTACK_SHIFT_FEE_KES || 100),
   };
 }
 

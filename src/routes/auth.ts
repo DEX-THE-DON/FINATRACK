@@ -261,9 +261,13 @@ authRoutes.post('/auth/pin/verify', async (c) => {
   if (enteredPin.length === 4) {
     // If no pin was saved yet or pin matches, unlock and restore full Dex session
     if (!savedPin || enteredPin === savedPin) {
-      let pinnedToken = getCookie(c, 'finatrack_pin_token') || 'mock-token-usr-dex';
-      let pinnedUser = getCookie(c, 'finatrack_pin_user') || 'Dex';
-      let pinnedEmail = getCookie(c, 'finatrack_pin_email') || 'dex@gmail.com';
+      const existingPinToken = getCookie(c, 'finatrack_pin_token') || '';
+      const existingAccessToken = getCookie(c, 'sb-access-token') || '';
+      let pinnedToken = (!existingPinToken.startsWith('mock-token-') && existingPinToken)
+        ? existingPinToken
+        : ((!existingAccessToken.startsWith('mock-token-') && existingAccessToken) ? existingAccessToken : 'mock-token-usr-dex');
+      let pinnedUser = getCookie(c, 'finatrack_pin_user') || getCookie(c, 'finatrack_user') || 'Dex';
+      let pinnedEmail = getCookie(c, 'finatrack_pin_email') || getCookie(c, 'finatrack_email') || 'dex@gmail.com';
 
       setCookie(c, 'finatrack_quick_pin', enteredPin, { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'Lax' });
       setCookie(c, 'sb-access-token', pinnedToken, { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 30 });
