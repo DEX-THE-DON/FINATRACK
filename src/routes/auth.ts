@@ -5,7 +5,7 @@ import { AppEnv, getSupabaseClient, createMockClient } from '../db/supabase';
 export const authRoutes = new Hono<{ Bindings: AppEnv }>();
 
 authRoutes.post('/auth/signup', async (c) => {
-  const body = await c.req.parseBody().catch(() => ({}));
+  const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
   const email = String(body['email'] || '').trim().toLowerCase();
   const password = String(body['password'] || '').trim();
   const firstName = String(body['first_name'] || '').trim();
@@ -85,7 +85,7 @@ authRoutes.post('/auth/signup', async (c) => {
 });
 
 authRoutes.post('/auth/login', async (c) => {
-  const body = await c.req.parseBody().catch(() => ({}));
+  const body = (await c.req.parseBody().catch(() => ({}))) as Record<string, any>;
   const email = String(body['email'] || '').trim().toLowerCase();
   const password = String(body['password'] || '').trim();
   const redirectTo = String(body['redirect_to'] || '/');

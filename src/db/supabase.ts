@@ -1,5 +1,4 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import dns from 'dns';
 import { Database } from '../types/database';
 
 export interface AppEnv {
@@ -257,21 +256,25 @@ export function createMockClient() {
 let isSupabaseHealthy = true;
 let lastHealthCheck = 0;
 
-// Instant startup DNS verification (completes in ~7ms instead of 15,000ms fetch timeout)
+// Instant startup DNS verification in Node.js runtime without static imports (Cloudflare Pages safe)
 if (typeof process !== 'undefined' && process.env) {
   try {
     const rawUrl = process.env.SUPABASE_URL || '';
     if (rawUrl && !rawUrl.includes('placeholder')) {
       const hostname = new URL(rawUrl).hostname;
-      dns.lookup(hostname, (err, address) => {
-        if (err || !address) {
-          isSupabaseHealthy = false;
-          lastHealthCheck = Date.now();
-          console.warn(`⚡ Finatrack Edge: Host "${hostname}" unreachable (${err?.code || 'EAI_AGAIN'}). Instant local edge store active (0ms latency).`);
-        } else {
-          isSupabaseHealthy = true;
-        }
-      });
+      // Dynamically resolve Node.js dns module if available so edge bundlers (esbuild/wrangler) don't fail
+      const nodeDns = typeof require !== 'undefined' ? require('dns') : null;
+      if (nodeDns && typeof nodeDns.lookup === 'function') {
+        nodeDns.lookup(hostname, (err: any, address: any) => {
+          if (err || !address) {
+            isSupabaseHealthy = false;
+            lastHealthCheck = Date.now();
+            console.warn(`⚡ Finatrack Edge: Host "${hostname}" unreachable (${err?.code || 'EAI_AGAIN'}). Instant local edge store active (0ms latency).`);
+          } else {
+            isSupabaseHealthy = true;
+          }
+        });
+      }
     }
   } catch(e) {}
 }

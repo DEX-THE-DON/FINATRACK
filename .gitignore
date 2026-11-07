@@ -15,6 +15,7 @@ yarn-debug.log*
 yarn-error.log*
 dist/
 .wrangler/
+_worker.bundle
 
 # Gradle & Android build artifacts
 .gradle/
