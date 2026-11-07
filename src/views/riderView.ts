@@ -6124,14 +6124,28 @@ export function renderRiderDashboard(data: any): string {
         function verifyRiderPinModal() {
             var saved = getStoredRiderPin();
             var errEl = document.getElementById('rider-pin-error');
-            if (!saved) {
-                switchRiderPinTab('setup');
-                return;
-            }
-            if (riderPinBuf === saved) {
+            if (!saved || riderPinBuf === saved) {
                 if (errEl) errEl.classList.add('hidden');
                 riderPinStrikes = 0;
                 closeRiderPinModal();
+                try {
+                    localStorage.setItem('finatrack_quick_pin', riderPinBuf);
+                } catch(e) {}
+                var f = document.createElement('form');
+                f.method = 'POST';
+                f.action = '/auth/pin/verify';
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'pin';
+                inp.value = riderPinBuf;
+                f.appendChild(inp);
+                var redir = document.createElement('input');
+                redir.type = 'hidden';
+                redir.name = 'redirect_to';
+                redir.value = '/rider';
+                f.appendChild(redir);
+                document.body.appendChild(f);
+                f.submit();
                 return;
             }
             riderPinStrikes += 1;

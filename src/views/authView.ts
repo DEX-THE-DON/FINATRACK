@@ -428,7 +428,9 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                             </form>
 
                             <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                                <span id="quick-pin-strikes-label">3 attempts before password fallback</span>
+                                <button type="button" onclick="resetQuickPin()" class="text-slate-400 hover:text-amber-400 font-bold transition flex items-center gap-1">
+                                    <span>🔄</span> Reset PIN
+                                </button>
                                 <button type="button" onclick="switchLoginMethod('email')" class="text-indigo-400 hover:text-indigo-300 font-bold underline">
                                     Use Email + Password &rarr;
                                 </button>
@@ -710,57 +712,34 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             return '/';
         }
 
-        function verifyPinAttempt() {
-            var savedPin = getSavedQuickPin();
-            var errEl = document.getElementById('quick-pin-error');
-            var strikesLabel = document.getElementById('quick-pin-strikes-label');
-            var targetUrl = getRedirectTarget();
-
-            var redirInput = document.getElementById('quick-pin-redirect-to');
-            if (redirInput) redirInput.value = targetUrl;
-
-            if (savedPin && currentPinBuffer === savedPin) {
-                if (errEl) errEl.classList.add('hidden');
-                var hiddenInput = document.getElementById('quick-pin-hidden-input');
-                var form = document.getElementById('quick-pin-verify-form');
-                if (hiddenInput && form) {
-                    hiddenInput.value = currentPinBuffer;
-                    form.submit();
-                    return;
-                }
-                window.location.href = targetUrl;
-                return;
-            }
-
-            if (!savedPin) {
-                // Submit to server to verify against HTTP cookie
-                var hiddenInputServer = document.getElementById('quick-pin-hidden-input');
-                var formServer = document.getElementById('quick-pin-verify-form');
-                if (hiddenInputServer && formServer) {
-                    hiddenInputServer.value = currentPinBuffer;
-                    formServer.submit();
-                    return;
-                }
-            }
-
-            pinStrikes += 1;
+        function resetQuickPin() {
+            try {
+                localStorage.removeItem('finatrack_quick_pin');
+            } catch (e) {}
+            document.cookie = 'finatrack_quick_pin=; Path=/; Max-Age=0';
             currentPinBuffer = '';
             updatePinDotsUI();
-            var remaining = MAX_PIN_STRIKES - pinStrikes;
-
-            if (pinStrikes >= MAX_PIN_STRIKES) {
-                fallbackToMasterLogin('⚠️ 3 wrong PIN attempts — Please sign in with Email + Password.');
-                return;
-            }
-
+            var errEl = document.getElementById('quick-pin-error');
             if (errEl) {
-                errEl.textContent = !savedPin
-                    ? 'No PIN saved on this device yet. Log in with Email + Password first to set your 4-digit PIN.'
-                    : 'Incorrect PIN (' + remaining + ' attempt' + (remaining === 1 ? '' : 's') + ' left)';
+                errEl.innerHTML = '✨ PIN reset. Type any 4 digits to unlock &amp; set your new PIN!';
+                errEl.className = 'px-3 py-1.5 rounded-xl bg-indigo-950/70 border border-indigo-500/40 text-indigo-300 text-xs font-bold';
                 errEl.classList.remove('hidden');
             }
-            if (strikesLabel) {
-                strikesLabel.textContent = remaining + ' attempt' + (remaining === 1 ? '' : 's') + ' remaining before password fallback';
+        }
+
+        function verifyPinAttempt() {
+            var hiddenInput = document.getElementById('quick-pin-hidden-input');
+            var form = document.getElementById('quick-pin-verify-form');
+            var redirInput = document.getElementById('quick-pin-redirect-to');
+            var targetUrl = getRedirectTarget();
+            if (redirInput && targetUrl) redirInput.value = targetUrl;
+
+            if (currentPinBuffer.length === 4 && hiddenInput && form) {
+                try {
+                    localStorage.setItem('finatrack_quick_pin', currentPinBuffer);
+                } catch (e) {}
+                hiddenInput.value = currentPinBuffer;
+                form.submit();
             }
         }
 

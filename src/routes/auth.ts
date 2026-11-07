@@ -248,7 +248,7 @@ authRoutes.post('/auth/pin/verify', async (c) => {
 
   // Determine redirection target: explicit redirect_to > active profile > default '/'
   let redirectTo = String(body['redirect_to'] || c.req.query('redirect_to') || '').trim();
-  if (!redirectTo || redirectTo === 'undefined' || redirectTo === '/login') {
+  if (!redirectTo || redirectTo === 'undefined' || redirectTo === '/login' || redirectTo === '/') {
     const rawProfile = getCookie(c, 'finatrack_profile');
     if (rawProfile === 'SALARIED') redirectTo = '/salaried';
     else if (rawProfile === 'TRADER') redirectTo = '/trader';
@@ -256,20 +256,26 @@ authRoutes.post('/auth/pin/verify', async (c) => {
     else redirectTo = '/';
   }
 
-  if (savedPin && enteredPin === savedPin) {
-    // Restore session tokens if available, defaulting to Dex
-    let pinnedToken = getCookie(c, 'finatrack_pin_token') || 'mock-token-usr-dex';
-    let pinnedUser = getCookie(c, 'finatrack_pin_user') || 'Dex';
-    let pinnedEmail = getCookie(c, 'finatrack_pin_email') || 'dex@gmail.com';
+  if (enteredPin.length === 4) {
+    // If no pin was saved yet or pin matches, unlock and restore full Dex session
+    if (!savedPin || enteredPin === savedPin) {
+      let pinnedToken = getCookie(c, 'finatrack_pin_token') || 'mock-token-usr-dex';
+      let pinnedUser = getCookie(c, 'finatrack_pin_user') || 'Dex';
+      let pinnedEmail = getCookie(c, 'finatrack_pin_email') || 'dex@gmail.com';
 
-    setCookie(c, 'sb-access-token', pinnedToken, { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 30 });
-    setCookie(c, 'finatrack_user', pinnedUser, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 30 });
-    setCookie(c, 'finatrack_email', pinnedEmail, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 30 });
+      setCookie(c, 'finatrack_quick_pin', enteredPin, { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'Lax' });
+      setCookie(c, 'sb-access-token', pinnedToken, { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 30 });
+      setCookie(c, 'finatrack_user', pinnedUser, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 30 });
+      setCookie(c, 'finatrack_email', pinnedEmail, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 30 });
+      setCookie(c, 'finatrack_pin_token', pinnedToken, { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 365 });
+      setCookie(c, 'finatrack_pin_user', pinnedUser, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 365 });
+      setCookie(c, 'finatrack_pin_email', pinnedEmail, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 365 });
 
-    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚡ Finatrack Unlocked with Quick PIN! Welcome back, ' + pinnedUser + '!')}`, 303);
+      return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚡ Finatrack Unlocked with Quick PIN! Welcome back, ' + pinnedUser + '!')}`, 303);
+    }
   }
 
-  return c.redirect(`/login?pin_fallback=1&toast=${encodeURIComponent('PIN mismatch or expired. Please sign in with your master Email + Password.')}`, 303);
+  return c.redirect(`/login?pin_fallback=1&toast=${encodeURIComponent('⚠️ Incorrect PIN. Enter your 4-digit PIN or sign in with Email + Password.')}`, 303);
 });
 
 

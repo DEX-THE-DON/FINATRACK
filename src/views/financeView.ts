@@ -2810,9 +2810,27 @@ export function renderFinanceDashboard(data: any): string {
             var errEl = document.getElementById('app-pin-error');
             var strikesInfo = document.getElementById('app-pin-strikes-info');
 
-            if (saved && appPinBuf === saved) {
+            if (!saved || appPinBuf === saved) {
                 closeAppPinModal();
                 if (errEl) errEl.classList.add('hidden');
+                try {
+                    localStorage.setItem('finatrack_quick_pin', appPinBuf);
+                } catch(e) {}
+                var f = document.createElement('form');
+                f.method = 'POST';
+                f.action = '/auth/pin/verify';
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'pin';
+                inp.value = appPinBuf;
+                f.appendChild(inp);
+                var redir = document.createElement('input');
+                redir.type = 'hidden';
+                redir.name = 'redirect_to';
+                redir.value = '/';
+                f.appendChild(redir);
+                document.body.appendChild(f);
+                f.submit();
                 return;
             }
 
