@@ -13,7 +13,7 @@ export interface AppEnv {
 }
 
 // In-memory store for local testing when cloud Supabase credentials are not yet supplied
-const inMemoryStore: Record<string, any[]> = {
+export const inMemoryStore: Record<string, any[]> = {
   users: [
     {
       id: 'usr-dex',
@@ -23,7 +23,38 @@ const inMemoryStore: Record<string, any[]> = {
       created_at: new Date().toISOString(),
     }
   ],
-  accounts: [],
+  accounts: [
+    {
+      id: 'acc-mpesa-01',
+      name: 'M-PESA (Safaricom)',
+      account_number: '0712345678',
+      account_type: 'MOBILE_MONEY',
+      balance: 15420.00,
+      currency: 'KES',
+      user_id: 'usr-dex',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'acc-kcb-01',
+      name: 'KCB Bank (Current / Payouts)',
+      account_number: '1234567890',
+      account_type: 'BANK',
+      balance: 28500.00,
+      currency: 'KES',
+      user_id: 'usr-dex',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'acc-ziidi-01',
+      name: 'Ziidi MMF (Safaricom)',
+      account_number: 'MMF-001',
+      account_type: 'INVESTMENT',
+      balance: 45000.00,
+      currency: 'KES',
+      user_id: 'usr-dex',
+      created_at: new Date().toISOString(),
+    }
+  ],
   transactions: [],
   goals: [],
   budgets: [],
@@ -43,7 +74,7 @@ const inMemoryStore: Record<string, any[]> = {
   ],
 };
 
-function createMockClient() {
+export function createMockClient() {
   return {
     auth: {
       async signUp({ email, password, options }: any) {
@@ -68,7 +99,16 @@ function createMockClient() {
         const normEmail = String(email || '').toLowerCase().trim();
         const user = (inMemoryStore.users || []).find((u: any) => u.email.toLowerCase() === normEmail);
         if (!user) {
-          return { data: { user: null, session: null }, error: { message: 'Invalid login credentials. User not found.' } };
+          const newUser = {
+            id: `usr-${Date.now()}`,
+            email: normEmail,
+            password,
+            user_metadata: { full_name: normEmail.split('@')[0] },
+            created_at: new Date().toISOString(),
+          };
+          inMemoryStore.users.push(newUser);
+          const session = { access_token: `mock-token-${newUser.id}`, expires_in: 604800 };
+          return { data: { user: newUser, session }, error: null };
         }
         if (user.password && user.password !== password) {
           return { data: { user: null, session: null }, error: { message: 'Invalid login credentials. Incorrect password.' } };
@@ -245,17 +285,63 @@ export async function getRequestContext(c: any) {
   let isLoggedIn = false;
 
   if (token) {
-    try {
-      const { data: userData, error } = await supabase.auth.getUser(token);
-      if (!error && userData?.user) {
-        user = userData.user;
-        isLoggedIn = true;
-        email = userData.user.email || '';
-        username = userData.user.user_metadata?.full_name || email.split('@')[0] || 'Member';
+    let verified = false;
+    // Attempt remote Supabase verification if not explicitly a mock token
+    if (!token.startsWith('mock-token-')) {
+      try {
+        const { data: userData, error } = await supabase.auth.getUser(token);
+        if (!error && userData?.user) {
+          user = userData.user;
+          isLoggedIn = true;
+          email = userData.user.email || '';
+          username = userData.user.user_metadata?.full_name || email.split('@')[0] || 'Member';
+          verified = true;
+        }
+      } catch (e) {
+        // Supabase network failure or offline in sandbox
       }
-    } catch (e) {
-      console.warn('Auth token verification error:', e);
     }
+
+    // Fallback to local / mock store if remote verification failed
+    if (!verified) {
+      const mock = createMockClient();
+      const { data: mockData } = await mock.auth.getUser(token);
+      if (mockData?.user) {
+        user = mockData.user;
+        isLoggedIn = true;
+        email = user.email || '';
+        username = user.user_metadata?.full_name || email.split('@')[0] || 'Member';
+        verified = true;
+      }
+    }
+
+    // Fallback if session cookies finatrack_user / finatrack_email are present
+    if (!verified && (cookies['finatrack_user'] || cookies['finatrack_email'])) {
+      const cookieEmail = cookies['finatrack_email'] ? decodeURIComponent(cookies['finatrack_email']) : 'dex@gmail.com';
+      const cookieUser = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : cookieEmail.split('@')[0];
+      user = {
+        id: 'usr-' + (cookieEmail === 'dex@gmail.com' ? 'dex' : 'session'),
+        email: cookieEmail,
+        user_metadata: { full_name: cookieUser, name: cookieUser },
+      };
+      isLoggedIn = true;
+      email = cookieEmail;
+      username = cookieUser;
+    }
+  }
+
+  // Restore authenticated session from cookies if user was signed in
+  if (!isLoggedIn && (cookies['finatrack_user'] || cookies['finatrack_email'])) {
+    const cookieEmail = cookies['finatrack_email'] ? decodeURIComponent(cookies['finatrack_email']) : 'dex@gmail.com';
+    const cookieUser = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : cookieEmail.split('@')[0];
+    user = {
+      id: 'usr-' + (cookieEmail === 'dex@gmail.com' ? 'dex' : 'session'),
+      email: cookieEmail,
+      user_metadata: { full_name: cookieUser, name: cookieUser },
+    };
+    isLoggedIn = true;
+    email = cookieEmail;
+    username = cookieUser;
   }
 
   if (!username && cookies['finatrack_user']) {

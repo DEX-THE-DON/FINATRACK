@@ -733,10 +733,10 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             }
 
             if (!savedPin) {
-                // Verify with server cookie if localStorage wasn't populated
+                // Submit to server to verify against HTTP cookie
                 var hiddenInputServer = document.getElementById('quick-pin-hidden-input');
                 var formServer = document.getElementById('quick-pin-verify-form');
-                if (hiddenInputServer && formServer && document.cookie.indexOf('finatrack_quick_pin=') !== -1) {
+                if (hiddenInputServer && formServer) {
                     hiddenInputServer.value = currentPinBuffer;
                     formServer.submit();
                     return;

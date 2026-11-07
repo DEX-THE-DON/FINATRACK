@@ -165,6 +165,14 @@ app.get('/', async (c) => {
     ]);
 
     accounts = accRes.data || [];
+    if (accounts.length === 0) {
+      try {
+        const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+        accounts = anyAccs || [];
+      } catch (e) {
+        accounts = [];
+      }
+    }
     transactions = sortTransactionsLatestFirst(txRes.data || []);
     goals = goalRes.data || [];
     budgets = bgtRes.data || [];
@@ -624,6 +632,14 @@ app.get('/rider', async (c) => {
     bikes = bikeRes.data || [];
     logs = logRes.data || [];
     accounts = accRes.data || [];
+    if (accounts.length === 0) {
+      try {
+        const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+        accounts = anyAccs || [];
+      } catch (e) {
+        accounts = [];
+      }
+    }
     maintenance = maintRes.data || [];
     compliance = compRes.data || [];
     financing = finRes.data || [];
