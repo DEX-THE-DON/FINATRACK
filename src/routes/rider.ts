@@ -9,6 +9,7 @@ import {
   allocateWaterfallSplit
 } from '../utils/math';
 import { Decimal } from 'decimal.js';
+import { getPaystackConfig, isUserPaywalled, verifyPaystackPayment } from '../utils/paystack';
 
 export const riderRoutes = new Hono<{ Bindings: AppEnv }>();
 
@@ -512,8 +513,38 @@ export function classifyShiftWindow(startTime?: string | null, endTime?: string 
 // SHIFT LOGS CRUD
 // ------------------------------------------------------------------------------
 riderRoutes.post('/rider/logs', async (c) => {
-  const { supabase, userId } = await getRequestContext(c);
+  const { supabase, userId, username, email } = await getRequestContext(c);
   const body = await c.req.parseBody();
+
+  // ----------------------------------------------------------------------------
+  // 💳 PAYSTACK SHIFT GATE (Strictly enforced for dex@gmail.com in test mode)
+  // ----------------------------------------------------------------------------
+  const paystackCfg = getPaystackConfig(c);
+  const userIdentifier = email || getCookie(c, 'finatrack_email') || username || '';
+  const isPaywalled = isUserPaywalled(userIdentifier, paystackCfg);
+  let paystackToastPrefix = '';
+
+  if (isPaywalled) {
+    const paystackRef = String(body['paystack_reference'] || c.req.query('paystack_reference') || '').trim();
+
+    if (!paystackRef) {
+      return c.redirect(
+        `/rider?toast=${encodeURIComponent(`⚠️ Paystack test gate: dex@gmail.com must complete Ksh ${paystackCfg.shiftFeeKes} payment before recording a shift.`)}&paystack_gate=1`,
+        303
+      );
+    }
+
+    const verifyResult = await verifyPaystackPayment(paystackCfg.secretKey, paystackRef);
+    if (!verifyResult.success || (verifyResult.amountKes && verifyResult.amountKes < paystackCfg.shiftFeeKes)) {
+      return c.redirect(
+        `/rider?toast=${encodeURIComponent(`⚠️ Paystack Verification Failed: ${verifyResult.message || 'Payment not completed or amount is less than Ksh ' + paystackCfg.shiftFeeKes}`)}&paystack_gate=1`,
+        303
+      );
+    }
+
+    paystackToastPrefix = `⚡ Paystack Verified (Ref: ${paystackRef.slice(-7)}, Ksh ${verifyResult.amountKes || paystackCfg.shiftFeeKes}) • `;
+  }
+
   const bikeId = body['bike_id'] ? String(body['bike_id']) : null;
   const powerType = String(body['power_type'] || 'PETROL').toUpperCase();
   const logDate = String(body['date'] || new Date().toISOString().slice(0, 10));
@@ -865,7 +896,7 @@ riderRoutes.post('/rider/logs', async (c) => {
     strictToastMsg = `💪 Let's catch up! Overdue of Ksh ${overdueAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} to recover (${accLabel} in Finance Hub reads Ksh ${liveAccBal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})${kmToastMsg}${batchToastSuffix}`;
   }
 
-  return c.redirect(`/rider?toast=${encodeURIComponent(strictToastMsg)}#shift-briefing-card`, 303);
+  return c.redirect(`/rider?toast=${encodeURIComponent(paystackToastPrefix + strictToastMsg)}#shift-briefing-card`, 303);
 });
 
 riderRoutes.post('/rider/logs/delete/:id', async (c) => {

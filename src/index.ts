@@ -13,6 +13,7 @@ import { renderTraderDashboard } from './views/traderView';
 import { renderSalariedDashboard } from './views/salariedView';
 import { renderAuthView } from './views/authView';
 import { getActiveProfile, setActiveProfile, PROFILES, ProfileMode } from './utils/profile';
+import { getPaystackConfig, isUserPaywalled } from './utils/paystack';
 import {
   toDecimal,
   calculateMonthlyYield,
@@ -598,7 +599,7 @@ app.get('/', async (c) => {
 // 2. RIDER DASHBOARD (GET /rider)
 // ------------------------------------------------------------------------------
 app.get('/rider', async (c) => {
-  const { supabase, userId, username, isLoggedIn } = await getRequestContext(c);
+  const { supabase, userId, username, email, isLoggedIn } = await getRequestContext(c);
   const toast = c.req.query('toast') || '';
 
   let bikes: any[] = [];
@@ -761,6 +762,10 @@ app.get('/rider', async (c) => {
   const strictSaverConfig = getStrictSaverConfig(c, primaryActiveBike);
   const platformRemittanceConfig = getPlatformRemittanceConfig(c);
 
+  const paystackCfg = getPaystackConfig(c);
+  const userIdentifier = email || getCookie(c, 'finatrack_email') || username || '';
+  const isPaywalled = isUserPaywalled(userIdentifier, paystackCfg);
+
   const html = renderRiderDashboard({
     active_bike: primaryActiveBike,
     bikes: activeBikes,
@@ -782,8 +787,12 @@ app.get('/rider', async (c) => {
     usd_to_kes: USD_TO_KES,
     current_currency: userCurrency,
     username,
+    email: userIdentifier,
     is_logged_in: isLoggedIn,
     active_profile: getActiveProfile(c),
+    paystack_public_key: paystackCfg.publicKey,
+    paystack_shift_fee_kes: paystackCfg.shiftFeeKes,
+    is_paystack_paywalled: isPaywalled,
   });
 
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');

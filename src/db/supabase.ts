@@ -6,6 +6,10 @@ export interface AppEnv {
   SUPABASE_ANON_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   ENVIRONMENT?: string;
+  PAYSTACK_PUBLIC_KEY?: string;
+  PAYSTACK_SECRET_KEY?: string;
+  PAYSTACK_PAYWALL_EMAIL?: string;
+  PAYSTACK_SHIFT_FEE_KES?: string;
 }
 
 // In-memory store for local testing when cloud Supabase credentials are not yet supplied
@@ -258,6 +262,16 @@ export async function getRequestContext(c: any) {
     try {
       username = decodeURIComponent(cookies['finatrack_user']);
     } catch (_) {}
+  }
+
+  if (!email && cookies['finatrack_email']) {
+    try {
+      email = decodeURIComponent(cookies['finatrack_email']);
+    } catch (_) {}
+  }
+
+  if (!email && username && username.toLowerCase() === 'dex') {
+    email = 'dex@gmail.com';
   }
 
   return {

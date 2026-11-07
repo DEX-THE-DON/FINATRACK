@@ -33,8 +33,12 @@ export function renderRiderDashboard(data: any): string {
     current_currency = 'Ksh',
     today = new Date().toISOString().slice(0, 10),
     username = 'Dennis',
+    email = '',
     is_logged_in = false,
     active_profile = 'RIDER',
+    paystack_public_key = 'pk_test_6611c5778e2e10bde298210d185c9d36dde3cf0d',
+    paystack_shift_fee_kes = 100,
+    is_paystack_paywalled = false,
   } = data;
 
   const activeProfileMode = (active_profile === 'TRADER' || active_profile === 'SALARIED') ? active_profile : 'RIDER';
@@ -454,6 +458,9 @@ export function renderRiderDashboard(data: any): string {
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+    
+    <!-- Paystack Inline Popup SDK -->
+    <script src="https://js.paystack.co/v1/inline.js"></script>
     <script>
         (function() {
             var theme = localStorage.getItem('theme');
@@ -3965,8 +3972,9 @@ export function renderRiderDashboard(data: any): string {
                 </div>
             </div>
 
-            <form action="/rider/logs" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <form id="rider-shift-log-form" action="/rider/logs" method="POST" onsubmit="return handleShiftFormSubmit(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <input type="hidden" name="power_type" id="input_power_type" value="${activePowerType}">
+                <input type="hidden" name="paystack_reference" id="shift_paystack_ref" value="">
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Assigned Fleet Bike</label>
@@ -4241,15 +4249,41 @@ export function renderRiderDashboard(data: any): string {
                     </a>
                 </div>
 
-                <div class="sm:col-span-2 lg:col-span-4 space-y-2.5">
+                <div class="sm:col-span-2 lg:col-span-4 space-y-3">
                     <label class="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/70 cursor-pointer select-none text-xs">
                         <input type="checkbox" name="queue_to_sunday_batch" value="1" checked class="w-4 h-4 rounded border-emerald-500 text-emerald-600 focus:ring-emerald-500">
                         <span class="font-bold text-gray-800 dark:text-emerald-200">
                             📦 Queue today's 23:50 net split to <strong>Sunday Batch Holding Pot</strong> <span class="text-gray-500 dark:text-gray-400 font-normal">(Avoid daily M-Pesa transfer fees — make 1 consolidated Sunday night disbursement)</span>
                         </span>
                     </label>
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2">
-                        <span>🚀 Save Shift Record & Sync With Finance Ledger</span>
+
+                    ${is_paystack_paywalled ? `
+                    <div id="paystack-shift-gate" class="p-3.5 rounded-2xl bg-indigo-950/60 border-2 border-indigo-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-md">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-2xl p-2 bg-indigo-900/80 rounded-xl border border-indigo-400/40 shrink-0">🔒</span>
+                            <div>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <strong class="text-white text-sm">Paystack Shift Gate (Test Mode)</strong>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/30 text-indigo-200 border border-indigo-400/40">Strictly for ${email || 'dex@gmail.com'}</span>
+                                </div>
+                                <p class="text-[11px] text-indigo-300 mt-0.5">
+                                    Ksh ${paystack_shift_fee_kes} payment required before saving shift. Test M-Pesa / Card checkout active. Other users continue free.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                            <span id="paystack-status-pill" class="px-2.5 py-1 rounded-xl text-[11px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                                <span>⏳</span> Payment Required
+                            </span>
+                            <button type="button" onclick="initiateShiftPaystackPayment()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition active:scale-95 flex items-center gap-1.5">
+                                <span>💳</span> Pay Ksh ${paystack_shift_fee_kes}
+                            </button>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <button type="submit" id="btn-save-shift" class="w-full ${is_paystack_paywalled ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'} active:scale-95 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2">
+                        <span>${is_paystack_paywalled ? '🔒 Pay Ksh ' + paystack_shift_fee_kes + ' & Save Shift Record' : '🚀 Save Shift Record & Sync With Finance Ledger'}</span>
                     </button>
                 </div>
             </form>
@@ -6122,6 +6156,91 @@ export function renderRiderDashboard(data: any): string {
         window.backspaceRiderPin = backspaceRiderPin;
         window.saveRiderPinLocal = saveRiderPinLocal;
         window.validatePinSetupMatch = validatePinSetupMatch;
+
+        // -------------------------------------------------------------
+        // 💳 PAYSTACK SHIFT GATE CONTROLLER (Strictly for dex@gmail.com)
+        // -------------------------------------------------------------
+        function initiateShiftPaystackPayment() {
+            var pk = '${paystack_public_key}';
+            var userEmail = '${email || 'dex@gmail.com'}';
+            var feeKes = ${paystack_shift_fee_kes};
+            var amountSubunits = Math.round(feeKes * 100);
+
+            if (typeof PaystackPop === 'undefined') {
+                alert('Paystack SDK is loading or unavailable. Please check your internet connection.');
+                return;
+            }
+
+            var pill = document.getElementById('paystack-status-pill');
+            if (pill) {
+                pill.className = 'px-2.5 py-1 rounded-xl text-[11px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1';
+                pill.innerHTML = '<span>⚡</span> Opening Checkout...';
+            }
+
+            var handler = PaystackPop.setup({
+                key: pk,
+                email: userEmail,
+                amount: amountSubunits,
+                currency: 'KES',
+                ref: 'FT_RIDER_' + Date.now() + '_' + Math.floor(Math.random() * 1000000),
+                metadata: {
+                    custom_fields: [
+                        { display_name: "Service", variable_name: "service", value: "Finatrack Shift Unlock" },
+                        { display_name: "Rider", variable_name: "rider", value: "${username || 'Dex'}" }
+                    ]
+                },
+                onClose: function() {
+                    if (pill) {
+                        pill.className = 'px-2.5 py-1 rounded-xl text-[11px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1';
+                        pill.innerHTML = '<span>⏳</span> Payment Cancelled';
+                    }
+                },
+                callback: function(response) {
+                    var ref = response && response.reference ? response.reference : '';
+                    var refInput = document.getElementById('shift_paystack_ref');
+                    if (refInput) {
+                        refInput.value = ref;
+                    }
+                    if (pill) {
+                        pill.className = 'px-2.5 py-1 rounded-xl text-[11px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1';
+                        pill.innerHTML = '<span>✅</span> Verified (' + ref.slice(-6) + ')';
+                    }
+                    var form = document.getElementById('rider-shift-log-form');
+                    if (form) {
+                        form.submit();
+                    }
+                }
+            });
+            handler.openIframe();
+        }
+
+        function handleShiftFormSubmit(e) {
+            var isPaywalled = ${is_paystack_paywalled ? 'true' : 'false'};
+            if (!isPaywalled) return true;
+
+            var refInput = document.getElementById('shift_paystack_ref');
+            if (refInput && refInput.value && refInput.value.trim().length > 0) {
+                return true;
+            }
+
+            if (e && e.preventDefault) e.preventDefault();
+            initiateShiftPaystackPayment();
+            return false;
+        }
+
+        window.initiateShiftPaystackPayment = initiateShiftPaystackPayment;
+        window.handleShiftFormSubmit = handleShiftFormSubmit;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('paystack_gate') === '1' && ${is_paystack_paywalled ? 'true' : 'false'}) {
+                var gateCard = document.getElementById('paystack-shift-gate');
+                if (gateCard) {
+                    gateCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    gateCard.classList.add('ring-4', 'ring-indigo-500/50');
+                }
+            }
+        });
 
         (function() {
             recalcStintsSummary();

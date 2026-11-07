@@ -77,13 +77,16 @@ authRoutes.post('/auth/login', async (c) => {
   }
 
   const uname = data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'Member';
+  const userEmail = data.user.email || email;
   c.header('Set-Cookie', `sb-access-token=${data.session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${data.session.expires_in}`);
   c.header('Set-Cookie', `finatrack_user=${encodeURIComponent(uname)}; Path=/; SameSite=Lax; Max-Age=${data.session.expires_in}`, { append: true });
+  c.header('Set-Cookie', `finatrack_email=${encodeURIComponent(userEmail)}; Path=/; SameSite=Lax; Max-Age=${data.session.expires_in}`, { append: true });
 
   // If a Quick PIN has been configured on this device, refresh the pinned session tokens
   if (getCookie(c, 'finatrack_quick_pin')) {
     c.header('Set-Cookie', `finatrack_pin_token=${data.session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 365}`, { append: true });
     c.header('Set-Cookie', `finatrack_pin_user=${encodeURIComponent(uname)}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 365}`, { append: true });
+    c.header('Set-Cookie', `finatrack_pin_email=${encodeURIComponent(userEmail)}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 365}`, { append: true });
   }
 
   return c.redirect(`${redirectTo}?toast=Welcome+back,+${encodeURIComponent(uname)}!`, 303);
@@ -94,6 +97,7 @@ authRoutes.post('/auth/logout', async (c) => {
   const redirectTo = String(body['redirect_to'] || '/');
   c.header('Set-Cookie', 'sb-access-token=; Path=/; HttpOnly; Max-Age=0');
   c.header('Set-Cookie', 'finatrack_user=; Path=/; Max-Age=0', { append: true });
+  c.header('Set-Cookie', 'finatrack_email=; Path=/; Max-Age=0', { append: true });
   return c.redirect(`${redirectTo}?toast=Logged+out+successfully`, 303);
 });
 
@@ -123,6 +127,7 @@ authRoutes.post('/auth/pin/set', async (c) => {
   // Preserve current authenticated session for seamless Quick PIN unlocks
   const currentToken = getCookie(c, 'sb-access-token');
   const currentUser = getCookie(c, 'finatrack_user');
+  const currentEmail = getCookie(c, 'finatrack_email');
   if (currentToken) {
     setCookie(c, 'finatrack_pin_token', currentToken, {
       path: '/',
@@ -133,6 +138,13 @@ authRoutes.post('/auth/pin/set', async (c) => {
   }
   if (currentUser) {
     setCookie(c, 'finatrack_pin_user', currentUser, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  }
+  if (currentEmail) {
+    setCookie(c, 'finatrack_pin_email', currentEmail, {
       path: '/',
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'Lax',
@@ -164,6 +176,11 @@ authRoutes.post('/auth/pin/clear', async (c) => {
     maxAge: 0,
     sameSite: 'Lax',
   });
+  setCookie(c, 'finatrack_pin_email', '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'Lax',
+  });
 
   return c.redirect(`${redirectTo}?toast=${encodeURIComponent('🔓 4-Digit Quick PIN removed.')}`, 303);
 });
@@ -187,12 +204,16 @@ authRoutes.post('/auth/pin/verify', async (c) => {
     // Restore session tokens if available
     const pinnedToken = getCookie(c, 'finatrack_pin_token');
     const pinnedUser = getCookie(c, 'finatrack_pin_user');
+    const pinnedEmail = getCookie(c, 'finatrack_pin_email');
 
     if (pinnedToken) {
       c.header('Set-Cookie', `sb-access-token=${pinnedToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`);
     }
     if (pinnedUser) {
       c.header('Set-Cookie', `finatrack_user=${pinnedUser}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`, { append: true });
+    }
+    if (pinnedEmail) {
+      c.header('Set-Cookie', `finatrack_email=${pinnedEmail}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`, { append: true });
     }
 
     return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚡ Finatrack Unlocked with Quick PIN! Welcome back.')}`, 303);
