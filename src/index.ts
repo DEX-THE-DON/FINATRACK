@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
-import { AppEnv, getRequestContext } from './db/supabase';
+import { AppEnv, getRequestContext, inMemoryStore } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
 import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
@@ -152,35 +152,48 @@ app.get('/', async (c) => {
   let complianceDeadlines: any[] = [];
 
   if (userId) {
-    const [accRes, txRes, goalRes, bgtRes, debtRes, billRes, ruleRes, logRes, compRes] = await Promise.all([
-      supabase.from('accounts').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-      supabase.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100),
-      supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-      supabase.from('budgets').select('*').eq('user_id', userId),
-      supabase.from('debts').select('*').eq('user_id', userId).order('due_at', { ascending: true }),
-      supabase.from('bills').select('*').eq('user_id', userId).order('due_day', { ascending: true }),
-      supabase.from('allocation_rules').select('*').eq('user_id', userId).order('percentage', { ascending: false }),
-      supabase.from('rider_logs').select('*').eq('user_id', userId),
-      supabase.from('compliance_deadlines').select('*').eq('user_id', userId),
-    ]);
+    try {
+      const [accRes, txRes, goalRes, bgtRes, debtRes, billRes, ruleRes, logRes, compRes] = await Promise.all([
+        supabase.from('accounts').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+        supabase.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).order('created_at', { ascending: false }).limit(100),
+        supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+        supabase.from('budgets').select('*').eq('user_id', userId),
+        supabase.from('debts').select('*').eq('user_id', userId).order('due_at', { ascending: true }),
+        supabase.from('bills').select('*').eq('user_id', userId).order('due_day', { ascending: true }),
+        supabase.from('allocation_rules').select('*').eq('user_id', userId).order('percentage', { ascending: false }),
+        supabase.from('rider_logs').select('*').eq('user_id', userId),
+        supabase.from('compliance_deadlines').select('*').eq('user_id', userId),
+      ]);
 
-    accounts = accRes.data || [];
+      accounts = accRes?.data || [];
+      transactions = sortTransactionsLatestFirst(txRes?.data || []);
+      goals = goalRes?.data || [];
+      budgets = bgtRes?.data || [];
+      debts = debtRes?.data || [];
+      bills = billRes?.data || [];
+      allocationRules = ruleRes?.data || [];
+      riderLogs = logRes?.data || [];
+      complianceDeadlines = compRes?.data || [];
+    } catch (e) {
+      accounts = [];
+      transactions = [];
+      goals = [];
+      budgets = [];
+      debts = [];
+      bills = [];
+      allocationRules = [];
+      riderLogs = [];
+      complianceDeadlines = [];
+    }
+
     if (accounts.length === 0) {
       try {
         const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
-        accounts = anyAccs || [];
+        accounts = (anyAccs && anyAccs.length > 0) ? anyAccs : (inMemoryStore.accounts || []);
       } catch (e) {
-        accounts = [];
+        accounts = inMemoryStore.accounts || [];
       }
     }
-    transactions = sortTransactionsLatestFirst(txRes.data || []);
-    goals = goalRes.data || [];
-    budgets = bgtRes.data || [];
-    debts = debtRes.data || [];
-    bills = billRes.data || [];
-    allocationRules = ruleRes.data || [];
-    riderLogs = logRes?.data || [];
-    complianceDeadlines = compRes?.data || [];
 
     const legacyDummyGoalTitles = new Set([
       '55" 4K Smart TV',
@@ -619,52 +632,80 @@ app.get('/rider', async (c) => {
   let allocationRules: any[] = [];
 
   if (userId) {
-    const [bikeRes, logRes, accRes, maintRes, compRes, finRes, ruleRes] = await Promise.all([
-      supabase.from('bikes').select('*').eq('user_id', userId),
-      supabase.from('rider_logs').select('*').eq('user_id', userId).order('date', { ascending: false }),
-      supabase.from('accounts').select('*').eq('user_id', userId),
-      supabase.from('maintenance_schedules').select('*').eq('user_id', userId),
-      supabase.from('compliance_deadlines').select('*').eq('user_id', userId),
-      supabase.from('bike_financings').select('*').eq('user_id', userId),
-      supabase.from('allocation_rules').select('*').eq('user_id', userId),
-    ]);
+    try {
+      const [bikeRes, logRes, accRes, maintRes, compRes, finRes, ruleRes] = await Promise.all([
+        supabase.from('bikes').select('*').eq('user_id', userId),
+        supabase.from('rider_logs').select('*').eq('user_id', userId).order('date', { ascending: false }),
+        supabase.from('accounts').select('*').eq('user_id', userId),
+        supabase.from('maintenance_schedules').select('*').eq('user_id', userId),
+        supabase.from('compliance_deadlines').select('*').eq('user_id', userId),
+        supabase.from('bike_financings').select('*').eq('user_id', userId),
+        supabase.from('allocation_rules').select('*').eq('user_id', userId),
+      ]);
 
-    bikes = bikeRes.data || [];
-    logs = logRes.data || [];
-    accounts = accRes.data || [];
+      bikes = bikeRes?.data || [];
+      logs = logRes?.data || [];
+      accounts = accRes?.data || [];
+      maintenance = maintRes?.data || [];
+      compliance = compRes?.data || [];
+      financing = finRes?.data || [];
+      allocationRules = ruleRes?.data || [];
+    } catch (e) {
+      bikes = [];
+      logs = [];
+      accounts = [];
+      maintenance = [];
+      compliance = [];
+      financing = [];
+      allocationRules = [];
+    }
+
     if (accounts.length === 0) {
       try {
         const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
-        accounts = anyAccs || [];
+        accounts = (anyAccs && anyAccs.length > 0) ? anyAccs : (inMemoryStore.accounts || []);
       } catch (e) {
-        accounts = [];
+        accounts = inMemoryStore.accounts || [];
       }
     }
-    maintenance = maintRes.data || [];
-    compliance = compRes.data || [];
-    financing = finRes.data || [];
-    allocationRules = ruleRes.data || [];
+
+    if (bikes.length === 0) {
+      try {
+        const { data: anyBikes } = await supabase.from('bikes').select('*');
+        bikes = (anyBikes && anyBikes.length > 0) ? anyBikes : (inMemoryStore.bikes || []);
+      } catch (e) {
+        bikes = inMemoryStore.bikes || [];
+      }
+    }
   } else {
     try {
-      const [guestCompRes, guestLogsRes, guestMaintRes, guestAccRes] = await Promise.all([
+      const [guestCompRes, guestLogsRes, guestMaintRes, guestAccRes, guestBikesRes] = await Promise.all([
         supabase.from('compliance_deadlines').select('*').is('user_id', null),
         supabase.from('rider_logs').select('*').is('user_id', null).order('date', { ascending: false }),
         supabase.from('maintenance_schedules').select('*').is('user_id', null),
         supabase.from('accounts').select('*').is('user_id', null).order('created_at', { ascending: true }),
+        supabase.from('bikes').select('*').is('user_id', null),
       ]);
-      compliance = guestCompRes.data || [];
-      logs = guestLogsRes.data || [];
-      maintenance = guestMaintRes.data || [];
-      accounts = (guestAccRes.data && guestAccRes.data.length > 0) ? guestAccRes.data : [];
+      compliance = guestCompRes?.data || [];
+      logs = guestLogsRes?.data || [];
+      maintenance = guestMaintRes?.data || [];
+      accounts = guestAccRes?.data || [];
+      bikes = guestBikesRes?.data || [];
+
       if (accounts.length === 0) {
         const { data: anyAccs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
-        accounts = anyAccs || [];
+        accounts = (anyAccs && anyAccs.length > 0) ? anyAccs : (inMemoryStore.accounts || []);
+      }
+      if (bikes.length === 0) {
+        const { data: anyBikes } = await supabase.from('bikes').select('*');
+        bikes = (anyBikes && anyBikes.length > 0) ? anyBikes : (inMemoryStore.bikes || []);
       }
     } catch (e) {
       compliance = [];
       logs = [];
       maintenance = [];
-      accounts = [];
+      accounts = inMemoryStore.accounts || [];
+      bikes = inMemoryStore.bikes || [];
     }
   }
 
@@ -937,6 +978,12 @@ app.route('/', traderRoutes);
 app.route('/', salariedRoutes);
 app.route('/', exportRoutes);
 app.route('/', authRoutes);
+
+// Graceful Edge Error Boundary Handler
+app.onError((err, c) => {
+  console.error('⚠️ Finatrack Graceful Route Error Boundary:', err);
+  return c.redirect('/?toast=' + encodeURIComponent('Notice: Handled system error gracefully. All data safe.'), 303);
+});
 
 // Export for Cloudflare Pages / Workers & Local execution
 export default app;

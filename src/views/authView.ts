@@ -408,18 +408,18 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
 
                             <!-- Numeric Keypad -->
                             <div class="grid grid-cols-3 gap-2 select-none max-w-xs mx-auto">
-                                <button type="button" onclick="pressPinDigit('1')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">1</button>
-                                <button type="button" onclick="pressPinDigit('2')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">2</button>
-                                <button type="button" onclick="pressPinDigit('3')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">3</button>
-                                <button type="button" onclick="pressPinDigit('4')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">4</button>
-                                <button type="button" onclick="pressPinDigit('5')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">5</button>
-                                <button type="button" onclick="pressPinDigit('6')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">6</button>
-                                <button type="button" onclick="pressPinDigit('7')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">7</button>
-                                <button type="button" onclick="pressPinDigit('8')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">8</button>
-                                <button type="button" onclick="pressPinDigit('9')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">9</button>
-                                <button type="button" onclick="clearPinDigits()" class="py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-extrabold border border-slate-800 transition">CLR</button>
-                                <button type="button" onclick="pressPinDigit('0')" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition">0</button>
-                                <button type="button" onclick="backspacePinDigit()" class="py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-amber-400 text-base font-extrabold border border-slate-800 transition">⌫</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('1')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">1</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('2')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">2</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('3')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">3</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('4')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">4</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('5')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">5</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('6')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">6</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('7')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">7</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('8')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">8</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('9')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">9</button>
+                                <button type="button" ontouchstart="" onclick="clearPinDigits()" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-extrabold border border-slate-800 transition cursor-pointer">CLR</button>
+                                <button type="button" ontouchstart="" onclick="pressPinDigit('0')" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 text-white text-xl font-black border border-slate-700 shadow transition cursor-pointer">0</button>
+                                <button type="button" ontouchstart="" onclick="backspacePinDigit()" style="touch-action: manipulation;" class="py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-amber-400 text-base font-extrabold border border-slate-800 transition cursor-pointer">⌫</button>
                             </div>
 
                             <form id="quick-pin-verify-form" action="/auth/pin/verify" method="POST" class="hidden">
@@ -637,15 +637,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
                 if (tabEmail) {
                     tabEmail.className = 'py-2 rounded-xl text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5';
                 }
-                var savedPin = getSavedQuickPin();
-                if (!savedPin) {
-                    if (errEl) {
-                        errEl.innerHTML = 'ℹ️ No 4-digit PIN is configured on this device yet.<br><button type="button" class="text-indigo-300 hover:text-white underline font-bold mt-1" onclick="switchLoginMethod(\\'email\\')">Sign in with Email &amp; Password once</button> to set your PIN.';
-                        errEl.classList.remove('hidden');
-                    }
-                } else {
-                    if (errEl) errEl.classList.add('hidden');
-                }
+                if (errEl) errEl.classList.add('hidden');
                 currentPinBuffer = '';
                 updatePinDotsUI();
             } else {
@@ -687,7 +679,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             currentPinBuffer += String(digit);
             updatePinDotsUI();
             if (currentPinBuffer.length === 4) {
-                setTimeout(verifyPinAttempt, 120);
+                verifyPinAttempt();
             }
         }
 
@@ -721,7 +713,7 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             updatePinDotsUI();
             var errEl = document.getElementById('quick-pin-error');
             if (errEl) {
-                errEl.innerHTML = '✨ PIN reset. Type any 4 digits to unlock &amp; set your new PIN!';
+                errEl.innerHTML = '✨ PIN reset. Enter any 4 digits to unlock &amp; set your new PIN!';
                 errEl.className = 'px-3 py-1.5 rounded-xl bg-indigo-950/70 border border-indigo-500/40 text-indigo-300 text-xs font-bold';
                 errEl.classList.remove('hidden');
             }
@@ -734,12 +726,48 @@ export function renderAuthView(data: { mode?: 'login' | 'signup'; toast?: string
             var targetUrl = getRedirectTarget();
             if (redirInput && targetUrl) redirInput.value = targetUrl;
 
-            if (currentPinBuffer.length === 4 && hiddenInput && form) {
+            if (currentPinBuffer.length === 4) {
                 try {
                     localStorage.setItem('finatrack_quick_pin', currentPinBuffer);
+                    document.cookie = 'finatrack_quick_pin=' + encodeURIComponent(currentPinBuffer) + '; Path=/; Max-Age=31536000; SameSite=Lax';
                 } catch (e) {}
-                hiddenInput.value = currentPinBuffer;
-                form.submit();
+
+                if (hiddenInput) hiddenInput.value = currentPinBuffer;
+
+                // Animate dots indicating processing
+                var dots = document.querySelectorAll('#quick-pin-dots .pin-dot');
+                for (var i = 0; i < dots.length; i++) {
+                    dots[i].className = 'pin-dot w-4 h-4 rounded-full border-2 border-indigo-400 bg-indigo-500 animate-pulse transition-all';
+                }
+
+                if (window.fetch) {
+                    fetch('/auth/pin/verify', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Accept': 'application/json'
+                        },
+                        body: 'pin=' + encodeURIComponent(currentPinBuffer) + '&redirect_to=' + encodeURIComponent(targetUrl)
+                    }).then(function(res) {
+                        if (res.redirected && res.url) {
+                            window.location.href = res.url;
+                            return;
+                        }
+                        return res.json().then(function(data) {
+                            if (data && data.redirect_to) {
+                                window.location.href = data.redirect_to;
+                            } else {
+                                window.location.href = targetUrl || '/';
+                            }
+                        }).catch(function() {
+                            window.location.href = targetUrl || '/';
+                        });
+                    }).catch(function() {
+                        if (form) form.submit();
+                    });
+                } else if (form) {
+                    form.submit();
+                }
             }
         }
 

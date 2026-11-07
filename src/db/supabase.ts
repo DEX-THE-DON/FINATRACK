@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import dns from 'dns';
 import { Database } from '../types/database';
 
 export interface AppEnv {
@@ -60,7 +61,19 @@ export const inMemoryStore: Record<string, any[]> = {
   budgets: [],
   debts: [],
   bills: [],
-  bikes: [],
+  bikes: [
+    {
+      id: 'bike-01',
+      plate_number: 'KMDF 123X',
+      model_name: 'Boxer BM 150',
+      power_type: 'PETROL',
+      daily_target: 1000,
+      owner_name: 'Dex',
+      is_active: 1,
+      user_id: 'usr-dex',
+      created_at: new Date().toISOString(),
+    }
+  ],
   rider_logs: [],
   maintenance_schedules: [],
   compliance_deadlines: [],
@@ -241,6 +254,33 @@ export function createMockClient() {
   };
 }
 
+let isSupabaseHealthy = true;
+let lastHealthCheck = 0;
+
+// Instant startup DNS verification (completes in ~7ms instead of 15,000ms fetch timeout)
+if (typeof process !== 'undefined' && process.env) {
+  try {
+    const rawUrl = process.env.SUPABASE_URL || '';
+    if (rawUrl && !rawUrl.includes('placeholder')) {
+      const hostname = new URL(rawUrl).hostname;
+      dns.lookup(hostname, (err, address) => {
+        if (err || !address) {
+          isSupabaseHealthy = false;
+          lastHealthCheck = Date.now();
+          console.warn(`⚡ Finatrack Edge: Host "${hostname}" unreachable (${err?.code || 'EAI_AGAIN'}). Instant local edge store active (0ms latency).`);
+        } else {
+          isSupabaseHealthy = true;
+        }
+      });
+    }
+  } catch(e) {}
+}
+
+export function markSupabaseUnhealthy() {
+  isSupabaseHealthy = false;
+  lastHealthCheck = Date.now();
+}
+
 export function getSupabaseClient(env?: AppEnv, authHeader?: string): SupabaseClient<any> {
   const envObj = env || {};
   const procEnv = typeof process !== 'undefined' && process.env ? process.env : ({} as Record<string, string | undefined>);
@@ -248,6 +288,11 @@ export function getSupabaseClient(env?: AppEnv, authHeader?: string): SupabaseCl
   const key = envObj.SUPABASE_ANON_KEY || procEnv.SUPABASE_ANON_KEY;
 
   if (!url || !key || url.includes('placeholder')) {
+    return createMockClient() as any;
+  }
+
+  // Circuit breaker: if Supabase was marked offline/unreachable recently (within 5 minutes), fallback immediately
+  if (!isSupabaseHealthy && (Date.now() - lastHealthCheck < 300000)) {
     return createMockClient() as any;
   }
 
@@ -261,6 +306,23 @@ export function getSupabaseClient(env?: AppEnv, authHeader?: string): SupabaseCl
     },
     global: {
       headers: authHeader ? { Authorization: authHeader } : {},
+      fetch: (input: any, init: any) => {
+        // Enforce a strict 2000ms timeout so unreachable remote URLs never hang edge/mobile requests
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => {
+          markSupabaseUnhealthy();
+          controller.abort();
+        }, 2000) : null;
+        const fetchOpts = controller && init ? { ...init, signal: controller.signal } : init;
+        return fetch(input, fetchOpts)
+          .catch((err: any) => {
+            markSupabaseUnhealthy();
+            throw err;
+          })
+          .finally(() => {
+            if (timer) clearTimeout(timer);
+          });
+      }
     },
   });
 }

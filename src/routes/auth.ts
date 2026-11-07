@@ -256,6 +256,8 @@ authRoutes.post('/auth/pin/verify', async (c) => {
     else redirectTo = '/';
   }
 
+  const wantsJson = c.req.header('accept')?.includes('application/json');
+
   if (enteredPin.length === 4) {
     // If no pin was saved yet or pin matches, unlock and restore full Dex session
     if (!savedPin || enteredPin === savedPin) {
@@ -271,11 +273,19 @@ authRoutes.post('/auth/pin/verify', async (c) => {
       setCookie(c, 'finatrack_pin_user', pinnedUser, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 365 });
       setCookie(c, 'finatrack_pin_email', pinnedEmail, { path: '/', sameSite: 'Lax', maxAge: 60 * 60 * 24 * 365 });
 
-      return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚡ Finatrack Unlocked with Quick PIN! Welcome back, ' + pinnedUser + '!')}`, 303);
+      const targetUrl = `${redirectTo}${redirectTo.includes('?') ? '&' : '?'}toast=${encodeURIComponent('⚡ Finatrack Unlocked with Quick PIN! Welcome back, ' + pinnedUser + '!')}`;
+      if (wantsJson) {
+        return c.json({ success: true, redirect_to: targetUrl });
+      }
+      return c.redirect(targetUrl, 303);
     }
   }
 
-  return c.redirect(`/login?pin_fallback=1&toast=${encodeURIComponent('⚠️ Incorrect PIN. Enter your 4-digit PIN or sign in with Email + Password.')}`, 303);
+  const failUrl = `/login?pin_fallback=1&toast=${encodeURIComponent('⚠️ Incorrect PIN. Enter your 4-digit PIN or sign in with Email + Password.')}`;
+  if (wantsJson) {
+    return c.json({ success: false, redirect_to: failUrl }, 401);
+  }
+  return c.redirect(failUrl, 303);
 });
 
 
