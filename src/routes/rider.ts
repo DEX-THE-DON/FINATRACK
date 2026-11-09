@@ -709,9 +709,12 @@ riderRoutes.post('/rider/logs', async (c) => {
   // Optional Platform Split & Cash-in-Hand vs App Wallet Reconciliation
   const uberEarned = Math.max(0, parseFloat(String(body['uber_earned'] || '0')) || 0);
   const boltEarned = Math.max(0, parseFloat(String(body['bolt_earned'] || '0')) || 0);
+  const glovoEarned = Math.max(0, parseFloat(String(body['glovo_earned'] || '0')) || 0);
+  const farasEarned = Math.max(0, parseFloat(String(body['faras_earned'] || '0')) || 0);
+  const yegoEarned = Math.max(0, parseFloat(String(body['yego_earned'] || '0')) || 0);
   const littleEarned = Math.max(0, parseFloat(String(body['little_earned'] || '0')) || 0);
   const directCashEarned = Math.max(0, parseFloat(String(body['direct_cash_earned'] || '0')) || 0);
-  const platformSum = uberEarned + boltEarned + littleEarned + directCashEarned;
+  const platformSum = uberEarned + boltEarned + glovoEarned + farasEarned + yegoEarned + littleEarned + directCashEarned;
 
   const totalEarnedKes = rawEarned > 0 ? rawEarned : platformSum;
   const rawCashInHand = parseFloat(String(body['cash_in_hand'] || '0')) || 0;
@@ -739,6 +742,9 @@ riderRoutes.post('/rider/logs', async (c) => {
     channel,
     uber_earned: uberEarned,
     bolt_earned: boltEarned,
+    glovo_earned: glovoEarned,
+    faras_earned: farasEarned,
+    yego_earned: yegoEarned,
     little_earned: littleEarned,
     direct_cash_earned: directCashEarned,
     cash_in_hand: cashInHandKes,

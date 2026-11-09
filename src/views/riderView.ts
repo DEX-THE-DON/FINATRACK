@@ -268,12 +268,43 @@ export function renderRiderDashboard(data: any): string {
   const dailyTarget = Number(active_bike?.daily_target || strictNetFloor);
   const dailyTargetMetPct = Math.min(100, Math.round((todayNetEarned / (dailyTarget || 1)) * 100));
 
-  // 📱 Platform Earnings Breakdown (Uber vs. Bolt vs. Glovo/Faras/Yego/Little vs. Direct Errands)
-  const platStatsMap: Record<string, { key: string; label: string; icon: string; gross: number; net: number; hours: number; km: number; shifts: number; color: string }> = {
-    UBER: { key: 'UBER', label: 'Uber (Delivery / Car / Boda / EV)', icon: '🚗', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'emerald' },
-    BOLT: { key: 'BOLT', label: 'Bolt (Delivery / Car / Boda / EV)', icon: '⚡', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'teal' },
-    LITTLE: { key: 'LITTLE', label: 'Glovo / Faras / Yego / Little (Car, Bike & EV)', icon: '🛵', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'indigo' },
-    DIRECT: { key: 'DIRECT', label: 'Private Errands & Direct Cash', icon: '🤝', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'amber' },
+  // 📱 Platform Earnings Breakdown synced with all shift choices:
+  // (Uber Delivery, Glovo Delivery, Bolt Delivery, Uber Car, Bolt Car, Faras, Yego, Boda & Private)
+  const platStatsMap: Record<string, {
+    key: string;
+    label: string;
+    icon: string;
+    category: 'DELIVERY' | 'CAR' | 'BODA' | 'OTHER';
+    categoryLabel: string;
+    gross: number;
+    net: number;
+    hours: number;
+    km: number;
+    shifts: number;
+    color: string;
+  }> = {
+    UBER_DELIVERY: { key: 'UBER_DELIVERY', label: 'Uber Delivery / Uber Eats', icon: '🛵', category: 'DELIVERY', categoryLabel: 'Delivery', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'emerald' },
+    GLOVO_DELIVERY: { key: 'GLOVO_DELIVERY', label: 'Glovo Delivery (Food & Courier)', icon: '🛵', category: 'DELIVERY', categoryLabel: 'Delivery', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'amber' },
+    BOLT_DELIVERY: { key: 'BOLT_DELIVERY', label: 'Bolt Delivery / Bolt Food', icon: '🛵', category: 'DELIVERY', categoryLabel: 'Delivery', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'teal' },
+    UBER_CAR: { key: 'UBER_CAR', label: 'Uber Car Rides (UberX/ChapChap)', icon: '🚗', category: 'CAR', categoryLabel: 'Car Ride', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'emerald' },
+    BOLT_CAR: { key: 'BOLT_CAR', label: 'Bolt Car Rides (Base/Lite)', icon: '🚗', category: 'CAR', categoryLabel: 'Car Ride', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'teal' },
+    FARAS: { key: 'FARAS', label: 'Faras (Car & Boda Rides)', icon: '🚗', category: 'CAR', categoryLabel: 'Car & Boda', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'cyan' },
+    YEGO: { key: 'YEGO', label: 'Yego (Car & Boda Rides)', icon: '🚗', category: 'CAR', categoryLabel: 'Car & Boda', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'purple' },
+    BODA_RIDES: { key: 'BODA_RIDES', label: 'Uber & Bolt Boda Passenger', icon: '🛵', category: 'BODA', categoryLabel: 'Boda', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'blue' },
+    LITTLE_INDRIVE: { key: 'LITTLE_INDRIVE', label: 'Little Cab & inDrive Car Rides', icon: '🚕', category: 'CAR', categoryLabel: 'Car Ride', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'indigo' },
+    DIRECT: { key: 'DIRECT', label: 'Private Clients & Stage Boda', icon: '🤝', category: 'OTHER', categoryLabel: 'Offline / Direct', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'rose' },
+  };
+
+  // ⚡ Electric EV Fleet Stats
+  const evFleetStats = {
+    shifts: 0,
+    gross: 0,
+    net: 0,
+    hours: 0,
+    km: 0,
+    cost: 0,
+    hourlyYield: 0,
+    cpk: 0,
   };
 
   // ⛽ Fuel Station & EV Swap Hub Efficiency Leaderboard
@@ -294,15 +325,33 @@ export function renderRiderDashboard(data: any): string {
     const hrs = Math.max(0.5, Number(l.shift_hours || 8));
     const km = Math.max(0, Number(l.kilometers || 0));
 
+    // Track Electric EV overlay
+    const isElectricShift =
+      String(l.power_type || '').toUpperCase() === 'ELECTRIC' ||
+      String(l.channel || '').toUpperCase().includes('_EV') ||
+      String(l.channel || '').toUpperCase().includes('ELECTRIC') ||
+      Number(l.swaps_count || 0) > 0;
+    if (isElectricShift && gross > 0) {
+      evFleetStats.shifts += 1;
+      evFleetStats.gross += gross;
+      evFleetStats.net += net;
+      evFleetStats.hours += hrs;
+      evFleetStats.km += km;
+      evFleetStats.cost += Number(l.fuel_cost || 0);
+    }
+
     const u = Number(l.uber_earned || 0);
     const b = Number(l.bolt_earned || 0);
+    const g = Number(l.glovo_earned || 0);
+    const f = Number(l.faras_earned || 0);
+    const y = Number(l.yego_earned || 0);
     const lt = Number(l.little_earned || 0);
     const dc = Number(l.direct_cash_earned || 0);
-    const explicitSum = u + b + lt + dc;
+    const explicitSum = u + b + g + f + y + lt + dc;
 
     if (explicitSum > 0) {
       const addPart = (key: string, amt: number) => {
-        if (amt <= 0) return;
+        if (amt <= 0 || !platStatsMap[key]) return;
         const ratio = amt / explicitSum;
         platStatsMap[key].gross += amt;
         platStatsMap[key].net += net * ratio;
@@ -310,49 +359,72 @@ export function renderRiderDashboard(data: any): string {
         platStatsMap[key].km += km * ratio;
         platStatsMap[key].shifts += 1;
       };
-      addPart('UBER', u);
-      addPart('BOLT', b);
-      addPart('LITTLE', lt);
+      const ch = String(l.channel || l.platform || '').toUpperCase();
+      const uKey = (ch.includes('DELIVERY') || ch.includes('EAT')) ? 'UBER_DELIVERY' : (ch.includes('BODA') ? 'BODA_RIDES' : 'UBER_CAR');
+      const bKey = (ch.includes('DELIVERY') || ch.includes('FOOD')) ? 'BOLT_DELIVERY' : (ch.includes('BODA') ? 'BODA_RIDES' : 'BOLT_CAR');
+      addPart(uKey, u);
+      addPart(bKey, b);
+      addPart('GLOVO_DELIVERY', g);
+      addPart('FARAS', f);
+      addPart('YEGO', y);
+      addPart('LITTLE_INDRIVE', lt);
       addPart('DIRECT', dc);
     } else if (gross > 0) {
-      const ch = String(l.channel || '').toUpperCase();
-      if (ch.includes('BOLT')) {
-        platStatsMap.BOLT.gross += gross;
-        platStatsMap.BOLT.net += net;
-        platStatsMap.BOLT.hours += hrs;
-        platStatsMap.BOLT.km += km;
-        platStatsMap.BOLT.shifts += 1;
-      } else if (ch.includes('LITTLE') || ch.includes('GLOVO') || ch.includes('FARAS') || ch.includes('YEGO') || ch.includes('INDRIVE')) {
-        platStatsMap.LITTLE.gross += gross;
-        platStatsMap.LITTLE.net += net;
-        platStatsMap.LITTLE.hours += hrs;
-        platStatsMap.LITTLE.km += km;
-        platStatsMap.LITTLE.shifts += 1;
-      } else if (ch.includes('DIRECT') || ch.includes('PRIVATE') || ch.includes('ERRAND')) {
-        platStatsMap.DIRECT.gross += gross;
-        platStatsMap.DIRECT.net += net;
-        platStatsMap.DIRECT.hours += hrs;
-        platStatsMap.DIRECT.km += km;
-        platStatsMap.DIRECT.shifts += 1;
-      } else if (ch.includes('UBER')) {
-        platStatsMap.UBER.gross += gross;
-        platStatsMap.UBER.net += net;
-        platStatsMap.UBER.hours += hrs;
-        platStatsMap.UBER.km += km;
-        platStatsMap.UBER.shifts += 1;
-      } else {
-        // Default multi-app blend (50% Uber, 35% Bolt, 15% Direct Errands) when shift wasn't explicitly split
-        platStatsMap.UBER.gross += gross * 0.5;
-        platStatsMap.UBER.net += net * 0.5;
-        platStatsMap.UBER.hours += hrs * 0.5;
-        platStatsMap.UBER.km += km * 0.5;
-        platStatsMap.UBER.shifts += 1;
+      const ch = String(l.channel || l.platform || '').toUpperCase();
+      const addSingle = (key: string) => {
+        if (!platStatsMap[key]) return;
+        platStatsMap[key].gross += gross;
+        platStatsMap[key].net += net;
+        platStatsMap[key].hours += hrs;
+        platStatsMap[key].km += km;
+        platStatsMap[key].shifts += 1;
+      };
 
-        platStatsMap.BOLT.gross += gross * 0.35;
-        platStatsMap.BOLT.net += net * 0.35;
-        platStatsMap.BOLT.hours += hrs * 0.35;
-        platStatsMap.BOLT.km += km * 0.35;
-        platStatsMap.BOLT.shifts += 1;
+      if (ch.includes('GLOVO')) {
+        addSingle('GLOVO_DELIVERY');
+      } else if (ch.includes('FARAS')) {
+        addSingle('FARAS');
+      } else if (ch.includes('YEGO')) {
+        addSingle('YEGO');
+      } else if (ch.includes('UBER_DELIVERY') || (ch.includes('UBER') && (ch.includes('DELIVERY') || ch.includes('EAT')))) {
+        addSingle('UBER_DELIVERY');
+      } else if (ch.includes('BOLT_DELIVERY') || (ch.includes('BOLT') && (ch.includes('DELIVERY') || ch.includes('FOOD')))) {
+        addSingle('BOLT_DELIVERY');
+      } else if (ch.includes('UBER_BODA') || ch.includes('BOLT_BODA') || (ch.includes('BODA') && (ch.includes('UBER') || ch.includes('BOLT')))) {
+        addSingle('BODA_RIDES');
+      } else if (ch.includes('UBER')) {
+        addSingle('UBER_CAR');
+      } else if (ch.includes('BOLT')) {
+        addSingle('BOLT_CAR');
+      } else if (ch.includes('LITTLE') || ch.includes('INDRIVE')) {
+        addSingle('LITTLE_INDRIVE');
+      } else if (ch.includes('DIRECT') || ch.includes('PRIVATE') || ch.includes('ERRAND') || ch.includes('BODA') || ch.includes('STAGE')) {
+        addSingle('DIRECT');
+      } else {
+        // Blended / ALL: distribute across primary Kenyan platforms proportionally
+        platStatsMap.UBER_CAR.gross += gross * 0.30;
+        platStatsMap.UBER_CAR.net += net * 0.30;
+        platStatsMap.UBER_CAR.hours += hrs * 0.30;
+        platStatsMap.UBER_CAR.km += km * 0.30;
+        platStatsMap.UBER_CAR.shifts += 1;
+
+        platStatsMap.BOLT_CAR.gross += gross * 0.25;
+        platStatsMap.BOLT_CAR.net += net * 0.25;
+        platStatsMap.BOLT_CAR.hours += hrs * 0.25;
+        platStatsMap.BOLT_CAR.km += km * 0.25;
+        platStatsMap.BOLT_CAR.shifts += 1;
+
+        platStatsMap.GLOVO_DELIVERY.gross += gross * 0.15;
+        platStatsMap.GLOVO_DELIVERY.net += net * 0.15;
+        platStatsMap.GLOVO_DELIVERY.hours += hrs * 0.15;
+        platStatsMap.GLOVO_DELIVERY.km += km * 0.15;
+        platStatsMap.GLOVO_DELIVERY.shifts += 1;
+
+        platStatsMap.FARAS.gross += gross * 0.15;
+        platStatsMap.FARAS.net += net * 0.15;
+        platStatsMap.FARAS.hours += hrs * 0.15;
+        platStatsMap.FARAS.km += km * 0.15;
+        platStatsMap.FARAS.shifts += 1;
 
         platStatsMap.DIRECT.gross += gross * 0.15;
         platStatsMap.DIRECT.net += net * 0.15;
@@ -386,6 +458,9 @@ export function renderRiderDashboard(data: any): string {
     }
   }
 
+  evFleetStats.hourlyYield = evFleetStats.hours > 0 ? Math.round(evFleetStats.net / evFleetStats.hours) : 0;
+  evFleetStats.cpk = evFleetStats.km > 0 ? Math.round((evFleetStats.cost / evFleetStats.km) * 100) / 100 : 0;
+
   const totalPlatformGross = Object.values(platStatsMap).reduce((s, p) => s + p.gross, 0) || 1;
   const platformBreakdownList = Object.values(platStatsMap)
     .map((p) => ({
@@ -397,6 +472,8 @@ export function renderRiderDashboard(data: any): string {
     .sort((a, b) => b.netPerHour - a.netPerHour);
 
   const topPlatformItem = platformBreakdownList.find((p) => p.gross > 0) || platformBreakdownList[0];
+  const activePlatforms = platformBreakdownList.filter((p) => p.gross > 0);
+  const displayPlatforms = activePlatforms.length >= 3 ? activePlatforms : platformBreakdownList.slice(0, 6);
 
   const stationEfficiencyList = Array.from(stationMap.values())
     .map((st) => {
@@ -1231,9 +1308,12 @@ export function renderRiderDashboard(data: any): string {
         function syncPlatformSplitToGross() {
             var uber = Math.max(0, parseFloat(document.getElementById('shift_uber_earned')?.value) || 0);
             var bolt = Math.max(0, parseFloat(document.getElementById('shift_bolt_earned')?.value) || 0);
+            var glovo = Math.max(0, parseFloat(document.getElementById('shift_glovo_earned')?.value) || 0);
+            var faras = Math.max(0, parseFloat(document.getElementById('shift_faras_earned')?.value) || 0);
+            var yego = Math.max(0, parseFloat(document.getElementById('shift_yego_earned')?.value) || 0);
             var little = Math.max(0, parseFloat(document.getElementById('shift_little_earned')?.value) || 0);
             var direct = Math.max(0, parseFloat(document.getElementById('shift_direct_cash_earned')?.value) || 0);
-            var sum = uber + bolt + little + direct;
+            var sum = uber + bolt + glovo + faras + yego + little + direct;
             if (sum > 0) {
                 var grossInp = document.querySelector('input[name="total_earned"]');
                 if (grossInp) {
@@ -1242,6 +1322,25 @@ export function renderRiderDashboard(data: any): string {
             }
             updateStrictSaverAudit();
         }
+
+        function filterPlatformStats(cat) {
+            document.querySelectorAll('.plat-filter-btn').forEach(function(b) {
+                b.className = 'plat-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition cursor-pointer text-[10px] font-bold';
+            });
+            var activeBtn = document.getElementById('plat-btn-' + cat);
+            if (activeBtn) {
+                activeBtn.className = 'plat-filter-btn px-2.5 py-1 rounded-lg bg-indigo-600 text-white shadow-xs font-bold transition cursor-pointer text-[10px]';
+            }
+            document.querySelectorAll('.platform-stat-row').forEach(function(row) {
+                var rCat = row.getAttribute('data-category');
+                if (cat === 'ALL' || rCat === cat) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+        }
+        window.filterPlatformStats = filterPlatformStats;
 
         function syncCashVsWalletSplit(fromCashOrWalletInput) {
             var gross = Math.max(0, parseFloat(document.querySelector('input[name="total_earned"]')?.value) || 0);
@@ -3810,7 +3909,7 @@ export function renderRiderDashboard(data: any): string {
 
         <!-- 📱 Platform Earnings Breakdown & ⛽ Fuel / Swap Station Efficiency Leaderboard -->
         <div id="platform-and-station-intelligence-card" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Left: Platform Yield Leaderboard (Uber vs. Bolt vs. Glovo vs. Direct Cash) -->
+            <!-- Left: Platform Yield Leaderboard (Uber vs. Bolt vs. Glovo vs. Faras vs. Yego vs. Direct Cash) -->
             <div class="bg-gradient-to-br from-slate-900 via-indigo-950/70 to-slate-900 rounded-3xl p-6 text-white shadow-lg border border-indigo-800/50 space-y-4">
                 <div class="flex items-start justify-between gap-2 border-b border-indigo-800/60 pb-3">
                     <div class="flex items-center space-x-2.5">
@@ -3822,21 +3921,62 @@ export function renderRiderDashboard(data: any): string {
                                 <span>Platform Earnings &amp; Yield Breakdown</span>
                                 ${topPlatformItem && topPlatformItem.gross > 0 ? `
                                 <span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-extrabold px-2 py-0.5 rounded-full">
-                                    🏆 Best Yield: ${topPlatformItem.icon} ${topPlatformItem.key}
+                                    🏆 Best Yield: ${topPlatformItem.icon} ${topPlatformItem.label}
                                 </span>` : ''}
                             </h2>
-                            <p class="text-[11px] text-indigo-200/80">Compare Net KES/hr and KES/km across Uber, Bolt, Little/Glovo &amp; Private Errands</p>
+                            <p class="text-[11px] text-indigo-200/80">Compare Net KES/hr and KES/km across Uber, Bolt, Glovo Delivery, Faras, Yego &amp; Private Errands</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="space-y-2.5">
-                    ${platformBreakdownList.map((p, idx) => `
-                    <div class="p-3 bg-slate-950/80 border ${idx === 0 && p.gross > 0 ? 'border-emerald-500/50' : 'border-indigo-900/50'} rounded-2xl space-y-1.5">
+                <!-- 🎛️ Category Filter Pills -->
+                <div class="flex items-center gap-1.5 p-1 bg-slate-950/90 rounded-xl border border-indigo-900/60 flex-wrap text-xs font-bold">
+                    <button type="button" onclick="filterPlatformStats('ALL')" id="plat-btn-ALL" class="plat-filter-btn px-2.5 py-1 rounded-lg bg-indigo-600 text-white shadow-xs transition cursor-pointer text-[10px]">
+                        🌐 All Channels (${displayPlatforms.length})
+                    </button>
+                    <button type="button" onclick="filterPlatformStats('DELIVERY')" id="plat-btn-DELIVERY" class="plat-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition cursor-pointer text-[10px]">
+                        📦 Delivery (Glovo/Uber/Bolt)
+                    </button>
+                    <button type="button" onclick="filterPlatformStats('CAR')" id="plat-btn-CAR" class="plat-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition cursor-pointer text-[10px]">
+                        🚗 Car Rides (Uber/Bolt/Faras/Yego)
+                    </button>
+                    <button type="button" onclick="filterPlatformStats('BODA')" id="plat-btn-BODA" class="plat-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition cursor-pointer text-[10px]">
+                        🛵 Boda
+                    </button>
+                    <button type="button" onclick="filterPlatformStats('OTHER')" id="plat-btn-OTHER" class="plat-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition cursor-pointer text-[10px]">
+                        🤝 Offline / Stage
+                    </button>
+                </div>
+
+                ${evFleetStats.shifts > 0 ? `
+                <!-- ⚡ Electric EV Performance Across Platforms -->
+                <div class="p-3 bg-emerald-950/70 border border-emerald-500/50 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">🔋</span>
+                        <div>
+                            <span class="font-extrabold text-emerald-200">⚡ Electric EV Shifts (${evFleetStats.shifts} shifts logged)</span>
+                            <p class="text-[10px] text-emerald-300/80">Gross ${formatKes(evFleetStats.gross)} • Net ${formatKes(evFleetStats.net)} • Swap Energy Spend: ${formatKes(evFleetStats.cost)}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="px-2 py-0.5 rounded-lg bg-emerald-900/80 text-emerald-300 font-extrabold text-[11px] border border-emerald-600/50">
+                            ⚡ ${formatKes(evFleetStats.hourlyYield)}/hr
+                        </span>
+                        <span class="px-2 py-0.5 rounded-lg bg-emerald-900/80 text-cyan-300 font-bold text-[11px] border border-emerald-600/50">
+                            ${evFleetStats.cpk > 0 ? `Ksh ${evFleetStats.cpk.toFixed(2)}/km` : 'EV Energy'}
+                        </span>
+                    </div>
+                </div>
+                ` : ''}
+
+                <div class="space-y-2.5" id="platform-stats-container">
+                    ${displayPlatforms.map((p, idx) => `
+                    <div class="platform-stat-row p-3 bg-slate-950/80 border ${idx === 0 && p.gross > 0 ? 'border-emerald-500/50' : 'border-indigo-900/50'} rounded-2xl space-y-1.5 transition" data-category="${p.category}">
                         <div class="flex items-center justify-between text-xs">
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 flex-wrap">
                                 <span class="text-base">${p.icon}</span>
                                 <span class="font-extrabold text-white">${p.label}</span>
+                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">${p.categoryLabel}</span>
                                 ${idx === 0 && p.gross > 0 ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">#1 Yield</span>` : ''}
                             </div>
                             <span class="font-black text-emerald-400 privacy-amount">${formatKes(p.gross)} <span class="text-[10px] text-gray-400 font-semibold">(${p.sharePct}%)</span></span>
@@ -4315,21 +4455,33 @@ export function renderRiderDashboard(data: any): string {
                     </summary>
 
                     <div class="pt-3 border-t border-emerald-200/70 dark:border-emerald-900/50 space-y-3 text-xs">
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🚗 Uber Earned (Ksh)</label>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🚗 Uber (Ksh)</label>
                                 <input type="number" step="any" min="0" name="uber_earned" id="shift_uber_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">⚡ Bolt Earned (Ksh)</label>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">⚡ Bolt (Ksh)</label>
                                 <input type="number" step="any" min="0" name="bolt_earned" id="shift_bolt_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🚕 Little / Faras / Glovo (Ksh)</label>
+                                <label class="block text-[10px] font-bold text-amber-600 dark:text-amber-400 mb-0.5">🛵 Glovo (Ksh)</label>
+                                <input type="number" step="any" min="0" name="glovo_earned" id="shift_glovo_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-cyan-600 dark:text-cyan-400 mb-0.5">🚗 Faras (Ksh)</label>
+                                <input type="number" step="any" min="0" name="faras_earned" id="shift_faras_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-cyan-300 dark:border-cyan-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-purple-600 dark:text-purple-400 mb-0.5">🚗 Yego (Ksh)</label>
+                                <input type="number" step="any" min="0" name="yego_earned" id="shift_yego_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-purple-300 dark:border-purple-700 rounded-xl font-bold text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🚕 Little / inDrive (Ksh)</label>
                                 <input type="number" step="any" min="0" name="little_earned" id="shift_little_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🤝 Direct / Offline Cash (Ksh)</label>
+                                <label class="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-0.5">🤝 Direct Cash / Stage (Ksh)</label>
                                 <input type="number" step="any" min="0" name="direct_cash_earned" id="shift_direct_cash_earned" oninput="syncPlatformSplitToGross()" placeholder="0" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-bold text-gray-900 dark:text-white">
                             </div>
                         </div>
@@ -5634,6 +5786,26 @@ export function renderRiderDashboard(data: any): string {
                 const totalShifts = rider_logs.length;
                 const shiftLimit = 5;
 
+                const formatChannelBadge = (ch: string) => {
+                    if (!ch || ch === 'ALL') return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">🌐 Blended</span>';
+                    const up = String(ch).toUpperCase();
+                    if (up.includes('GLOVO')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">🛵 Glovo Delivery</span>';
+                    if (up.includes('UBER_DELIVERY')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">🛵 Uber Delivery</span>';
+                    if (up.includes('BOLT_DELIVERY')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800">🛵 Bolt Delivery</span>';
+                    if (up.includes('FARAS_CAR')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">🚗 Faras Car</span>';
+                    if (up.includes('FARAS_BODA')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">🛵 Faras Boda</span>';
+                    if (up.includes('YEGO_CAR')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">🚗 Yego Car</span>';
+                    if (up.includes('YEGO_BODA')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">🛵 Yego Boda</span>';
+                    if (up.includes('UBER_CAR')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">🚗 Uber Car</span>';
+                    if (up.includes('BOLT_CAR')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800">🚗 Bolt Car</span>';
+                    if (up.includes('UBER_BODA')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">🛵 Uber Boda</span>';
+                    if (up.includes('BOLT_BODA')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800">🛵 Bolt Boda</span>';
+                    if (up.includes('LITTLE') || up.includes('INDRIVE')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">🚕 Little / inDrive</span>';
+                    if (up.includes('BODA')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">🛵 Stage Boda</span>';
+                    if (up.includes('PRIVATE')) return '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700">💼 Private Fares</span>';
+                    return `<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">${ch}</span>`;
+                };
+
                 if (totalShifts === 0) {
                     return `
                     <div class="p-8 text-center text-gray-400">
@@ -5658,6 +5830,7 @@ export function renderRiderDashboard(data: any): string {
                                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
                                         ⏰ ${l.start_time || '11:00'}–${l.end_time || '22:00'} (${l.shift_hours}h)
                                     </span>
+                                    ${formatChannelBadge(l.channel || '')}
                                 </div>
                                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${isElectric ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'} shrink-0">
                                     ${isElectric ? `🔋 ${l.fuel_station || 'SPIRO'}` : `⛽ ${l.fuel_station || 'RUBIS'}`}
@@ -5708,11 +5881,11 @@ export function renderRiderDashboard(data: any): string {
                         <thead class="bg-gray-50 dark:bg-gray-800/60 uppercase text-gray-400 text-[10px]">
                             <tr>
                                 <th class="p-4">Date</th>
-                                <th class="p-4">Shift Hours</th>
-                                <th class="p-4">Power & Station</th>
+                                <th class="p-4">Shift &amp; Platform</th>
+                                <th class="p-4">Power &amp; Station</th>
                                 <th class="p-4">Hourly Yield</th>
                                 <th class="p-4">Gross Earned</th>
-                                <th class="p-4">Energy & Upkeep</th>
+                                <th class="p-4">Energy &amp; Upkeep</th>
                                 <th class="p-4">Net Remittance</th>
                                 <th class="p-4 text-center">Action</th>
                             </tr>
@@ -5727,9 +5900,12 @@ export function renderRiderDashboard(data: any): string {
                             <tr class="shift-item shift-desktop-item hover:bg-gray-50 dark:hover:bg-gray-800/40 transition ${isHidden ? 'hidden' : ''}" data-power-type="${isElectric ? 'ELECTRIC' : 'PETROL'}">
                                 <td class="p-4 font-medium">${l.date}</td>
                                 <td class="p-4">
-                                    <span class="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold">
-                                        ⏰ ${l.start_time || '11:00'} – ${l.end_time || '22:00'} (${l.shift_hours}h)
-                                    </span>
+                                    <div class="flex flex-col gap-1 items-start">
+                                        <span class="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold whitespace-nowrap">
+                                            ⏰ ${l.start_time || '11:00'} – ${l.end_time || '22:00'} (${l.shift_hours}h)
+                                        </span>
+                                        <div>${formatChannelBadge(l.channel || '')}</div>
+                                    </div>
                                 </td>
                                 <td class="p-4">
                                     <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${isElectric ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}">
