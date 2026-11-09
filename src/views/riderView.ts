@@ -67,8 +67,8 @@ export function renderRiderDashboard(data: any): string {
   const shiftsWithKmCount = (rider_logs || []).filter((l: any) => Number(l.kilometers || 0) > 0).length;
 
   const lastServiceOdo = Number(odometer_config?.last_service_odo ?? 10000);
-  const baseOdometer = Number(odometer_config?.base_odometer ?? (totalKmCovered > 0 ? lastServiceOdo : 12450));
-  const currentOdometer = Number(odometer_config?.current_odometer ?? Number((baseOdometer + totalKmCovered).toFixed(1)));
+  const currentOdometer = Number(odometer_config?.current_odometer ?? odometer_config?.base_odometer ?? lastServiceOdo);
+  const baseOdometer = currentOdometer;
   const serviceIntervalKm = Number(odometer_config?.service_interval_km ?? 3000);
   const nextServiceOdo = Number((lastServiceOdo + serviceIntervalKm).toFixed(1));
   const remainingServiceKm = Number((nextServiceOdo - currentOdometer).toFixed(1));
@@ -970,7 +970,7 @@ export function renderRiderDashboard(data: any): string {
         const SHIFT_TOTAL_KM = ${totalKmCovered};
         const SHIFT_TOTAL_FUEL = ${totalFuelExp};
         const SHIFT_TOTAL_MAINT = ${totalMaintExp};
-        let BASE_ODOMETER = ${baseOdometer};
+        let BASE_ODOMETER = ${currentOdometer};
 
         window.addEventListener('DOMContentLoaded', () => {
             recalcStintsSummary();
@@ -1039,7 +1039,7 @@ export function renderRiderDashboard(data: any): string {
             const curEl = document.getElementById('current_odometer_input');
             const liveKm = parseFloat(document.getElementById('shift_km_input')?.value) || 0;
             const last = parseFloat(lastEl?.value) || 0;
-            const syncedCur = Number((last + SHIFT_TOTAL_KM + liveKm).toFixed(1));
+            const syncedCur = Number((last + liveKm).toFixed(1));
             BASE_ODOMETER = last;
             if (curEl) curEl.value = String(syncedCur);
             calcOdometerServiceStatus(true);
@@ -1051,7 +1051,7 @@ export function renderRiderDashboard(data: any): string {
             const curEl = document.getElementById('current_odometer_input');
             const last = parseFloat(document.getElementById('last_service_odo_input')?.value) || 0;
             const interval = parseFloat(document.getElementById('service_interval_km_select')?.value) || 3000;
-            const projectedOdo = Number((BASE_ODOMETER + SHIFT_TOTAL_KM + liveKm).toFixed(1));
+            const projectedOdo = Number((BASE_ODOMETER + liveKm).toFixed(1));
 
             if (curEl && (liveKm > 0 || document.activeElement?.id === 'shift_km_input')) {
                 curEl.value = String(projectedOdo);
@@ -1284,7 +1284,7 @@ export function renderRiderDashboard(data: any): string {
             const liveFuel = Math.max(0, parseFloat(document.getElementById('shift_fuel_cost_input')?.value) || 0);
 
             if (fromUserEdit) {
-                BASE_ODOMETER = Math.max(0, Number((cur - SHIFT_TOTAL_KM - liveKm).toFixed(1)));
+                BASE_ODOMETER = Math.max(0, Number((cur - liveKm).toFixed(1)));
             }
 
             const nextOdo = Number((last + interval).toFixed(1));
@@ -1335,15 +1335,16 @@ export function renderRiderDashboard(data: any): string {
             }
             const shiftKmBadgeEl = document.getElementById('odo_shift_km_total_badge');
             if (shiftKmBadgeEl) {
-                shiftKmBadgeEl.innerText = totalKmWithLive.toLocaleString() + ' km logged in shifts';
+                shiftKmBadgeEl.innerText = 'Driven since service: ' + drivenSinceService.toLocaleString() + ' km';
             }
 
             try {
-                localStorage.setItem('finatrack_current_odo', String(cur));
+                localStorage.setItem('finatrack_current_odo', String(BASE_ODOMETER));
                 localStorage.setItem('finatrack_last_service_odo', String(last));
                 localStorage.setItem('finatrack_interval_km', String(interval));
                 const cfgObj = {
                     base_odometer: BASE_ODOMETER,
+                    current_odometer: BASE_ODOMETER,
                     last_service_odo: last,
                     service_interval_km: interval,
                     updated_at: new Date().toISOString()
@@ -4665,10 +4666,10 @@ export function renderRiderDashboard(data: any): string {
                             <div class="flex flex-wrap items-center gap-2">
                                 <h3 class="font-bold text-sm text-indigo-200">Odometer, Service Countdown & Real CPK</h3>
                                 <span id="odo_shift_km_total_badge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
-                                    +${totalKmCovered.toLocaleString()} km logged in ${shiftsWithKmCount} shift${shiftsWithKmCount === 1 ? '' : 's'}
+                                    Driven since service: ${kmSinceLastService.toLocaleString()} km
                                 </span>
                             </div>
-                            <p class="text-[11px] text-gray-400">Auto-increments from Daily Shift <strong class="text-indigo-300">Kilometers Covered (KM)</strong> & calculates real fuel + maintenance CPK</p>
+                            <p class="text-[11px] text-gray-400">Auto-increments from new Daily Shift <strong class="text-indigo-300">Kilometers Covered (KM)</strong> & calculates real fuel + maintenance CPK</p>
                         </div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
@@ -4682,7 +4683,7 @@ export function renderRiderDashboard(data: any): string {
                     <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950 space-y-1">
                         <div class="flex items-center justify-between">
                             <label class="block text-[10px] text-gray-400">Current Odometer (km)</label>
-                            <span class="text-[9px] text-emerald-400 font-bold">Base ${baseOdometer.toLocaleString()} + ${totalKmCovered.toLocaleString()} km</span>
+                            <span class="text-[9px] text-emerald-400 font-bold">Live Bike Odometer</span>
                         </div>
                         <input type="number" step="any" name="current_odometer" id="current_odometer_input" value="${currentOdometer}" oninput="calcOdometerServiceStatus(true)" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-emerald-400 text-sm">
                         <p class="text-[9px] text-gray-400">Driven since service: <strong id="km_since_service_display" class="text-emerald-300">${kmSinceLastService.toLocaleString()} km</strong></p>
@@ -4691,7 +4692,7 @@ export function renderRiderDashboard(data: any): string {
                         <label class="block text-[10px] text-gray-400">Last Service Odometer (km)</label>
                         <input type="number" step="any" name="last_service_odo" id="last_service_odo_input" value="${lastServiceOdo}" oninput="calcOdometerServiceStatus(false)" class="w-full p-1.5 bg-slate-900 border border-indigo-800 rounded-lg font-black text-white text-sm">
                         <button type="button" onclick="syncOdoFromLastService()" class="text-[9px] text-indigo-300 hover:text-indigo-200 underline font-semibold text-left">
-                            🔄 Set Current = Last Service + Shift KM
+                            🔄 Set Current = Last Service Odo
                         </button>
                     </div>
                     <div class="p-2.5 bg-slate-950/80 rounded-xl border border-indigo-950 space-y-1">

@@ -160,7 +160,7 @@ export function getOdometerConfig(c: any, shiftLogs: any[] = []): OdometerConfig
     (shiftLogs || []).reduce((acc: number, l: any) => acc + (Number(l.kilometers) || 0), 0) * 10
   ) / 10;
 
-  let baseOdo = 10000;
+  let currentOdo = 10000;
   let lastServiceOdo = 10000;
   let intervalKm = 3000;
 
@@ -171,10 +171,12 @@ export function getOdometerConfig(c: any, shiftLogs: any[] = []): OdometerConfig
       if (typeof parsed.last_service_odo === 'number' && !isNaN(parsed.last_service_odo)) {
         lastServiceOdo = parsed.last_service_odo;
       }
-      if (typeof parsed.base_odometer === 'number' && !isNaN(parsed.base_odometer)) {
-        baseOdo = parsed.base_odometer;
+      if (typeof parsed.current_odometer === 'number' && !isNaN(parsed.current_odometer) && parsed.current_odometer > 0) {
+        currentOdo = parsed.current_odometer;
+      } else if (typeof parsed.base_odometer === 'number' && !isNaN(parsed.base_odometer) && parsed.base_odometer > 0) {
+        currentOdo = parsed.base_odometer;
       } else {
-        baseOdo = lastServiceOdo;
+        currentOdo = lastServiceOdo;
       }
       if (typeof parsed.service_interval_km === 'number' && parsed.service_interval_km > 0) {
         intervalKm = parsed.service_interval_km;
@@ -182,23 +184,27 @@ export function getOdometerConfig(c: any, shiftLogs: any[] = []): OdometerConfig
     }
   } catch (e) {}
 
-  const currentOdometer = Math.round((baseOdo + totalShiftKm) * 10) / 10;
+  const roundedOdo = Math.round(currentOdo * 10) / 10;
 
   return {
-    base_odometer: baseOdo,
+    base_odometer: roundedOdo,
     last_service_odo: lastServiceOdo,
     service_interval_km: intervalKm,
-    current_odometer: currentOdometer,
+    current_odometer: roundedOdo,
     total_shift_km: totalShiftKm,
   };
 }
 
 export function saveOdometerConfigCookie(
   c: any,
-  config: { base_odometer: number; last_service_odo: number; service_interval_km: number }
+  config: { base_odometer: number; current_odometer?: number; last_service_odo: number; service_interval_km: number }
 ): void {
   try {
-    setCookie(c, 'finatrack_odometer_config', encodeURIComponent(JSON.stringify(config)), {
+    const normalized = {
+      ...config,
+      current_odometer: config.current_odometer ?? config.base_odometer,
+    };
+    setCookie(c, 'finatrack_odometer_config', encodeURIComponent(JSON.stringify(normalized)), {
       path: '/',
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'Lax',
@@ -739,6 +745,17 @@ riderRoutes.post('/rider/logs', async (c) => {
 
   saveRiderLogsCookie(c, savedCookieLogs);
 
+  if (km > 0) {
+    const existingOdo = getOdometerConfig(c, []);
+    const nextCurrentOdo = Math.round((existingOdo.current_odometer + km) * 10) / 10;
+    saveOdometerConfigCookie(c, {
+      base_odometer: nextCurrentOdo,
+      current_odometer: nextCurrentOdo,
+      last_service_odo: existingOdo.last_service_odo,
+      service_interval_km: existingOdo.service_interval_km,
+    });
+  }
+
   // Automatic Finance Ledger Integration (Sync Income AND Expenses)
   if (primaryLogId) {
     const targetAccId = earningsAccId || expenseAccId || null;
@@ -919,7 +936,19 @@ riderRoutes.post('/rider/logs/delete/:id', async (c) => {
     await supabase.from('transactions').delete().eq('rider_log_id', id);
     await supabase.from('rider_logs').delete().eq('id', id);
   } catch (e) {}
-  const remainingLogs = getSavedRiderLogs(c).filter((l: any) => String(l.id) !== String(id));
+  const currentSavedLogs = getSavedRiderLogs(c);
+  const deletedShift = currentSavedLogs.find((l: any) => String(l.id) === String(id));
+  if (deletedShift && Number(deletedShift.kilometers || 0) > 0) {
+    const existingOdo = getOdometerConfig(c, []);
+    const nextCurrentOdo = Math.max(0, Math.round((existingOdo.current_odometer - Number(deletedShift.kilometers || 0)) * 10) / 10);
+    saveOdometerConfigCookie(c, {
+      base_odometer: nextCurrentOdo,
+      current_odometer: nextCurrentOdo,
+      last_service_odo: existingOdo.last_service_odo,
+      service_interval_km: existingOdo.service_interval_km,
+    });
+  }
+  const remainingLogs = currentSavedLogs.filter((l: any) => String(l.id) !== String(id));
   saveRiderLogsCookie(c, remainingLogs);
   return c.redirect('/rider?toast=Shift+log+removed+(Finance+accounts+re-synced)', 303);
 });
@@ -1304,26 +1333,24 @@ riderRoutes.post('/rider/odometer/update', async (c) => {
   const body = await c.req.parseBody();
   const lastServiceOdo = parseFloat(String(body['last_service_odo'] || '10000')) || 10000;
   const intervalKm = parseFloat(String(body['service_interval_km'] || '3000')) || 3000;
-  const totalShiftKm = parseFloat(String(body['total_shift_km'] || '0')) || 0;
   const syncMode = String(body['sync_mode'] || '');
 
   let currentOdo = parseFloat(String(body['current_odometer'] || '0')) || 0;
-  let baseOdo = lastServiceOdo;
 
   if (syncMode === 'FROM_SERVICE' || currentOdo <= 0) {
-    baseOdo = lastServiceOdo;
-    currentOdo = Math.round((lastServiceOdo + totalShiftKm) * 10) / 10;
-  } else {
-    baseOdo = Math.round((currentOdo - totalShiftKm) * 10) / 10;
+    currentOdo = lastServiceOdo;
   }
 
+  const roundedCurrentOdo = Math.round(currentOdo * 10) / 10;
+
   saveOdometerConfigCookie(c, {
-    base_odometer: baseOdo,
+    base_odometer: roundedCurrentOdo,
+    current_odometer: roundedCurrentOdo,
     last_service_odo: lastServiceOdo,
     service_interval_km: intervalKm,
   });
 
-  return c.redirect(`/rider?toast=${encodeURIComponent(`Odometer synced at ${currentOdo.toLocaleString()} km (Next service at ${(lastServiceOdo + intervalKm).toLocaleString()} km)`)}`, 303);
+  return c.redirect(`/rider?toast=${encodeURIComponent(`Odometer synced at ${roundedCurrentOdo.toLocaleString()} km (Next service at ${(lastServiceOdo + intervalKm).toLocaleString()} km)`)}`, 303);
 });
 
 // ------------------------------------------------------------------------------
@@ -1358,9 +1385,10 @@ riderRoutes.post('/rider/maintenance/log', async (c) => {
 
   if (serviceOdometer > 0) {
     const existingOdo = getOdometerConfig(c, []);
-    const totalShiftKm = parseFloat(String(body['total_shift_km'] || '0')) || 0;
+    const updatedCurrentOdo = Math.round(Math.max(existingOdo.current_odometer, serviceOdometer) * 10) / 10;
     saveOdometerConfigCookie(c, {
-      base_odometer: Math.round((serviceOdometer - totalShiftKm) * 10) / 10,
+      base_odometer: updatedCurrentOdo,
+      current_odometer: updatedCurrentOdo,
       last_service_odo: serviceOdometer,
       service_interval_km: existingOdo.service_interval_km || 3000,
     });
