@@ -2883,6 +2883,8 @@ financeRoutes.post('/finance/daily-logger', async (c) => {
   const maintenanceCost = Math.max(0, parseFloat(String(body['maintenance_cost'] || '0')) || 0);
   const miscExpenses = Math.max(0, parseFloat(String(body['misc_expenses'] || '0')) || 0);
   const kilometers = Math.max(0, parseFloat(String(body['kilometers'] || '0')) || 0);
+  const channel = body['channel'] ? String(body['channel']).trim() : 'ALL';
+  const powerType = String(channel || '').toUpperCase().includes('_EV') ? 'ELECTRIC' : 'PETROL';
   const notes = String(body['notes'] || '').trim() || 'Daily Logger Closeout';
   let accountId = body['account_id'] ? String(body['account_id']).trim() : null;
 
@@ -2939,6 +2941,8 @@ financeRoutes.post('/finance/daily-logger', async (c) => {
     id: primaryLogId,
     ...(userId ? { user_id: userId } : {}),
     date: shiftDate,
+    channel,
+    power_type: powerType,
     total_earned: totalEarned,
     fuel_cost: fuelCost,
     food_spent: foodSpent,
@@ -2963,12 +2967,13 @@ financeRoutes.post('/finance/daily-logger', async (c) => {
 
   const txInserts: any[] = [];
   if (totalEarned > 0) {
+    const chLabel = channel && channel !== 'ALL' ? ` • ${channel}` : '';
     txInserts.push({
       ...baseRow,
       transaction_type: 'INCOME',
       category: 'Rider Earnings',
       amount: totalEarned,
-      description: `Shift Gross Earnings (${shiftDate})`,
+      description: `Shift Gross Earnings${chLabel} (${shiftDate})`,
     });
   }
   if (fuelCost > 0) {

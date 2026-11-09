@@ -268,11 +268,11 @@ export function renderRiderDashboard(data: any): string {
   const dailyTarget = Number(active_bike?.daily_target || strictNetFloor);
   const dailyTargetMetPct = Math.min(100, Math.round((todayNetEarned / (dailyTarget || 1)) * 100));
 
-  // 📱 Platform Earnings Breakdown (Uber vs. Bolt vs. Little/Glovo vs. Direct Errands)
+  // 📱 Platform Earnings Breakdown (Uber vs. Bolt vs. Glovo/Faras/Yego/Little vs. Direct Errands)
   const platStatsMap: Record<string, { key: string; label: string; icon: string; gross: number; net: number; hours: number; km: number; shifts: number; color: string }> = {
-    UBER: { key: 'UBER', label: 'Uber (Boda / ChapChap / X)', icon: '🚗', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'emerald' },
-    BOLT: { key: 'BOLT', label: 'Bolt (Boda / Economy)', icon: '⚡', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'teal' },
-    LITTLE: { key: 'LITTLE', label: 'Little / Glovo / Faras', icon: '🛵', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'indigo' },
+    UBER: { key: 'UBER', label: 'Uber (Delivery / Car / Boda / EV)', icon: '🚗', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'emerald' },
+    BOLT: { key: 'BOLT', label: 'Bolt (Delivery / Car / Boda / EV)', icon: '⚡', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'teal' },
+    LITTLE: { key: 'LITTLE', label: 'Glovo / Faras / Yego / Little (Car, Bike & EV)', icon: '🛵', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'indigo' },
     DIRECT: { key: 'DIRECT', label: 'Private Errands & Direct Cash', icon: '🤝', gross: 0, net: 0, hours: 0, km: 0, shifts: 0, color: 'amber' },
   };
 
@@ -322,7 +322,7 @@ export function renderRiderDashboard(data: any): string {
         platStatsMap.BOLT.hours += hrs;
         platStatsMap.BOLT.km += km;
         platStatsMap.BOLT.shifts += 1;
-      } else if (ch.includes('LITTLE') || ch.includes('GLOVO') || ch.includes('FARAS')) {
+      } else if (ch.includes('LITTLE') || ch.includes('GLOVO') || ch.includes('FARAS') || ch.includes('YEGO') || ch.includes('INDRIVE')) {
         platStatsMap.LITTLE.gross += gross;
         platStatsMap.LITTLE.net += net;
         platStatsMap.LITTLE.hours += hrs;
@@ -766,16 +766,40 @@ export function renderRiderDashboard(data: any): string {
                 '</div>' +
                 '<div class="sm:col-span-2">' +
                     '<select class="stint-platform w-full p-2 border dark:border-gray-700 dark:bg-gray-800 rounded-lg text-xs font-medium">' +
-                        '<option value="Uber Car / Ride"' + (platform === 'Uber Car / Ride' ? ' selected' : '') + '>Uber Car / Ride</option>' +
-                        '<option value="Bolt Car / Ride"' + (platform === 'Bolt Car / Ride' ? ' selected' : '') + '>Bolt Car / Ride</option>' +
-                        '<option value="Little Cab"' + (platform === 'Little Cab' ? ' selected' : '') + '>Little Cab</option>' +
-                        '<option value="Faras"' + (platform === 'Faras' ? ' selected' : '') + '>Faras</option>' +
-                        '<option value="inDrive"' + (platform === 'inDrive' ? ' selected' : '') + '>inDrive</option>' +
-                        '<option value="Uber Eats"' + (platform === 'Uber Eats' ? ' selected' : '') + '>Uber Eats</option>' +
-                        '<option value="Bolt Deliveries"' + (platform === 'Bolt Deliveries' ? ' selected' : '') + '>Bolt</option>' +
-                        '<option value="Glovo / Jumia"' + (platform === 'Glovo / Jumia' ? ' selected' : '') + '>Glovo/Jumia</option>' +
-                        '<option value="Boda Passenger"' + (platform === 'Boda Passenger' ? ' selected' : '') + '>Boda Passenger</option>' +
-                        '<option value="Direct Client"' + (platform === 'Direct Client' ? ' selected' : '') + '>Direct Client</option>' +
+                        '<optgroup label="📦 Delivery (Motorbike & Electric EV)">' +
+                            '<option value="Uber Delivery (Motorbike)"' + (platform === 'Uber Delivery (Motorbike)' || platform === 'Uber Eats' ? ' selected' : '') + '>🛵 Uber Delivery / Uber Eats (Motorbike)</option>' +
+                            '<option value="Uber Delivery (Electric EV)"' + (platform === 'Uber Delivery (Electric EV)' ? ' selected' : '') + '>🔋 Uber Delivery / Uber Eats (Electric EV)</option>' +
+                            '<option value="Glovo Delivery (Motorbike)"' + (platform === 'Glovo Delivery (Motorbike)' || platform === 'Glovo / Jumia' ? ' selected' : '') + '>🛵 Glovo Delivery (Motorbike)</option>' +
+                            '<option value="Glovo Delivery (Electric EV)"' + (platform === 'Glovo Delivery (Electric EV)' ? ' selected' : '') + '>🔋 Glovo Delivery (Electric EV)</option>' +
+                            '<option value="Bolt Delivery (Motorbike)"' + (platform === 'Bolt Delivery (Motorbike)' || platform === 'Bolt Deliveries' ? ' selected' : '') + '>🛵 Bolt Delivery / Bolt Food (Motorbike)</option>' +
+                            '<option value="Bolt Delivery (Electric EV)"' + (platform === 'Bolt Delivery (Electric EV)' ? ' selected' : '') + '>🔋 Bolt Delivery / Bolt Food (Electric EV)</option>' +
+                        '</optgroup>' +
+                        '<optgroup label="🚗 Car Rides (Uber, Bolt, Faras, Yego — Petrol & EV)">' +
+                            '<option value="Uber Car / Ride"' + (platform === 'Uber Car / Ride' ? ' selected' : '') + '>🚗 Uber Car Ride (UberX / ChapChap)</option>' +
+                            '<option value="Uber Electric Car (EV)"' + (platform === 'Uber Electric Car (EV)' ? ' selected' : '') + '>⚡ Uber Electric Car Ride (EV)</option>' +
+                            '<option value="Bolt Car / Ride"' + (platform === 'Bolt Car / Ride' ? ' selected' : '') + '>🚗 Bolt Car Ride (Bolt / Economy)</option>' +
+                            '<option value="Bolt Electric Car (EV)"' + (platform === 'Bolt Electric Car (EV)' ? ' selected' : '') + '>⚡ Bolt Electric Car Ride (EV)</option>' +
+                            '<option value="Faras Car Ride"' + (platform === 'Faras Car Ride' || platform === 'Faras' ? ' selected' : '') + '>🚗 Faras Car Ride</option>' +
+                            '<option value="Faras Electric Car (EV)"' + (platform === 'Faras Electric Car (EV)' ? ' selected' : '') + '>⚡ Faras Electric Car Ride (EV)</option>' +
+                            '<option value="Yego Car Ride"' + (platform === 'Yego Car Ride' ? ' selected' : '') + '>🚗 Yego Car Ride</option>' +
+                            '<option value="Yego Electric Car (EV)"' + (platform === 'Yego Electric Car (EV)' ? ' selected' : '') + '>⚡ Yego Electric Car Ride (EV)</option>' +
+                            '<option value="Little Cab"' + (platform === 'Little Cab' ? ' selected' : '') + '>🚗 Little Cab Car Ride</option>' +
+                            '<option value="inDrive"' + (platform === 'inDrive' ? ' selected' : '') + '>🚗 inDrive Car Ride</option>' +
+                        '</optgroup>' +
+                        '<optgroup label="🛵 Motorbike / Boda Rides (Uber, Bolt, Faras, Yego — Petrol & EV)">' +
+                            '<option value="Uber Boda (Motorbike)"' + (platform === 'Uber Boda (Motorbike)' ? ' selected' : '') + '>🛵 Uber Boda (Motorbike)</option>' +
+                            '<option value="Uber Electric Boda (EV)"' + (platform === 'Uber Electric Boda (EV)' ? ' selected' : '') + '>🔋 Uber Electric Boda (EV)</option>' +
+                            '<option value="Bolt Boda (Motorbike)"' + (platform === 'Bolt Boda (Motorbike)' ? ' selected' : '') + '>🛵 Bolt Boda (Motorbike)</option>' +
+                            '<option value="Bolt Electric Boda (EV)"' + (platform === 'Bolt Electric Boda (EV)' ? ' selected' : '') + '>🔋 Bolt Electric Boda (EV)</option>' +
+                            '<option value="Faras Boda (Motorbike)"' + (platform === 'Faras Boda (Motorbike)' ? ' selected' : '') + '>🛵 Faras Boda (Motorbike)</option>' +
+                            '<option value="Faras Electric Boda (EV)"' + (platform === 'Faras Electric Boda (EV)' ? ' selected' : '') + '>🔋 Faras Electric Boda (EV)</option>' +
+                            '<option value="Yego Boda (Motorbike)"' + (platform === 'Yego Boda (Motorbike)' ? ' selected' : '') + '>🛵 Yego Boda (Motorbike)</option>' +
+                            '<option value="Yego Electric Boda (EV)"' + (platform === 'Yego Electric Boda (EV)' ? ' selected' : '') + '>🔋 Yego Electric Boda (EV)</option>' +
+                            '<option value="Boda Passenger"' + (platform === 'Boda Passenger' ? ' selected' : '') + '>🛵 Stage / Private Boda (Motorbike / EV)</option>' +
+                        '</optgroup>' +
+                        '<optgroup label="💼 Offline / Direct">' +
+                            '<option value="Direct Client"' + (platform === 'Direct Client' ? ' selected' : '') + '>💼 Private / Direct Client</option>' +
+                        '</optgroup>' +
                     '</select>' +
                 '</div>' +
                 '<div class="sm:col-span-2">' +
@@ -2983,11 +3007,29 @@ export function renderRiderDashboard(data: any): string {
         }
 
         function onBikeSelectChanged(bikeId) {
+            if (!bikeId) return;
+            if (String(bikeId).indexOf('_EV') !== -1 || String(bikeId).indexOf('ELECTRIC') !== -1) {
+                setPowerType('ELECTRIC');
+                return;
+            }
+            if (String(bikeId).indexOf('PRESET_') === 0) {
+                setPowerType('PETROL');
+                return;
+            }
             const bike = bikesData.find(b => b.id === bikeId);
             if (bike && bike.power_type) {
-                setPowerType(bike.power_type);
+                setPowerType(bike.power_type === 'ELECTRIC' ? 'ELECTRIC' : 'PETROL');
             }
         }
+
+        function onShiftChannelChange(channelVal) {
+            if (!channelVal) return;
+            const upper = String(channelVal).toUpperCase();
+            if (upper.indexOf('_EV') !== -1 || upper.indexOf('ELECTRIC') !== -1) {
+                setPowerType('ELECTRIC');
+            }
+        }
+        window.onShiftChannelChange = onShiftChannelChange;
 
         function updateThemeIcon() {
             const isDark = document.documentElement.classList.contains('dark');
@@ -4032,9 +4074,19 @@ export function renderRiderDashboard(data: any): string {
                 <input type="hidden" name="paystack_reference" id="shift_paystack_ref" value="">
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Assigned Fleet Bike</label>
+                    <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Assigned Vehicle / Bike / EV</label>
                     <select name="bike_id" onchange="onBikeSelectChanged(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-bold">
-                        ${bikes.length > 0 ? bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Bike'}) - ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}</option>`).join('') : '<option value="">-- No Vehicle (Register Above) --</option>'}
+                        ${bikes.length > 0 ? `<optgroup label="🚘 My Registered Fleet">${bikes.map((b: any) => `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.plate_number} (${b.model_name || 'Vehicle'}) - ${b.power_type === 'ELECTRIC' ? '⚡ EV' : '⛽ ICE'}</option>`).join('')}</optgroup>` : ''}
+                        <optgroup label="🛵 Motorbikes &amp; Delivery Bikes (Petrol &amp; Electric EV)">
+                            <option value="PRESET_MOTO_DELIVERY">🛵 Delivery Motorbike (Uber Eats / Glovo / Bolt Food)</option>
+                            <option value="PRESET_MOTO_DELIVERY_EV">🔋 Electric Delivery Bike — EV (Uber / Glovo / Bolt)</option>
+                            <option value="PRESET_BODA_PETROL">🛵 Boda Motorbike — Petrol (Uber / Bolt / Faras / Yego)</option>
+                            <option value="PRESET_BODA_EV">🔋 Electric Boda — EV (Spiro / Roam / Ampersand / Kiri)</option>
+                        </optgroup>
+                        <optgroup label="🚗 Ride-Hailing Cars (Petrol/Hybrid &amp; Electric EV)">
+                            <option value="PRESET_CAR_PETROL">🚗 Car Ride — Petrol / Hybrid (Uber / Bolt / Faras / Yego)</option>
+                            <option value="PRESET_CAR_EV">⚡ Electric Car Ride — EV (Uber / Bolt / Faras / Yego)</option>
+                        </optgroup>
                     </select>
                 </div>
 
@@ -4205,15 +4257,42 @@ export function renderRiderDashboard(data: any): string {
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">🚖 Main Platform / Channel</label>
-                    <select name="channel" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium">
-                        <option value="ALL">All Platforms (Blended)</option>
-                        <option value="UBER">🚗 Uber Car / Uber ChapChap</option>
-                        <option value="BOLT">🚗 Bolt Car / Boda</option>
-                        <option value="LITTLE">🚗 Little Cab</option>
-                        <option value="FARAS">🚗 Faras</option>
-                        <option value="INDRIVE">🚗 inDrive</option>
-                        <option value="BODA">🛵 Boda Passenger / Delivery</option>
-                        <option value="PRIVATE">💼 Private Clients / Offline Fares</option>
+                    <select name="channel" onchange="onShiftChannelChange(this.value)" class="w-full p-2.5 border dark:border-gray-700 dark:bg-gray-800 rounded-xl text-base sm:text-sm font-medium">
+                        <option value="ALL">🌐 All Platforms (Blended Multi-App)</option>
+                        <optgroup label="📦 Delivery Platforms (Motorbike &amp; Electric EV)">
+                            <option value="UBER_DELIVERY">🛵 Uber Delivery / Uber Eats (Motorbike)</option>
+                            <option value="UBER_DELIVERY_EV">🔋 Uber Delivery / Uber Eats (Electric Bike / EV)</option>
+                            <option value="GLOVO_DELIVERY">🛵 Glovo Delivery (Motorbike)</option>
+                            <option value="GLOVO_DELIVERY_EV">🔋 Glovo Delivery (Electric Bike / EV)</option>
+                            <option value="BOLT_DELIVERY">🛵 Bolt Delivery / Bolt Food (Motorbike)</option>
+                            <option value="BOLT_DELIVERY_EV">🔋 Bolt Delivery / Bolt Food (Electric Bike / EV)</option>
+                        </optgroup>
+                        <optgroup label="🚗 Car Rides (Uber, Bolt, Faras, Yego — Petrol &amp; Electric EV)">
+                            <option value="UBER_CAR">🚗 Uber Car Ride (UberX / ChapChap / Comfort)</option>
+                            <option value="UBER_CAR_EV">⚡ Uber Electric Car Ride (Green / EV)</option>
+                            <option value="BOLT_CAR">🚗 Bolt Car Ride (Bolt / Base / Lite)</option>
+                            <option value="BOLT_CAR_EV">⚡ Bolt Electric Car Ride (EV)</option>
+                            <option value="FARAS_CAR">🚗 Faras Car Ride</option>
+                            <option value="FARAS_CAR_EV">⚡ Faras Electric Car Ride (EV)</option>
+                            <option value="YEGO_CAR">🚗 Yego Car Ride</option>
+                            <option value="YEGO_CAR_EV">⚡ Yego Electric Car Ride (EV)</option>
+                            <option value="LITTLE">🚗 Little Cab Car Ride</option>
+                            <option value="INDRIVE">🚗 inDrive Car Ride</option>
+                        </optgroup>
+                        <optgroup label="🛵 Motorbike / Boda Rides (Uber, Bolt, Faras, Yego — Petrol &amp; EV)">
+                            <option value="UBER_BODA">🛵 Uber Boda (Motorbike)</option>
+                            <option value="UBER_BODA_EV">🔋 Uber Electric Boda (EV)</option>
+                            <option value="BOLT_BODA">🛵 Bolt Boda (Motorbike)</option>
+                            <option value="BOLT_BODA_EV">🔋 Bolt Electric Boda (EV)</option>
+                            <option value="FARAS_BODA">🛵 Faras Boda (Motorbike)</option>
+                            <option value="FARAS_BODA_EV">🔋 Faras Electric Boda (EV)</option>
+                            <option value="YEGO_BODA">🛵 Yego Boda (Motorbike)</option>
+                            <option value="YEGO_BODA_EV">🔋 Yego Electric Boda (EV)</option>
+                            <option value="BODA">🛵 Stage / Private Boda (Motorbike / EV)</option>
+                        </optgroup>
+                        <optgroup label="💼 Offline &amp; Direct Clients">
+                            <option value="PRIVATE">💼 Private Clients / Offline Fares</option>
+                        </optgroup>
                     </select>
                 </div>
 

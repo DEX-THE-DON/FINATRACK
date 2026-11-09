@@ -658,8 +658,15 @@ riderRoutes.post('/rider/logs', async (c) => {
     paystackToastPrefix = `⚡ Paystack Verified (Ref: ${paystackRef.slice(-7)}, Ksh ${verifyResult.amountKes || paystackCfg.shiftFeeKes}) • `;
   }
 
-  const bikeId = body['bike_id'] ? String(body['bike_id']) : null;
-  const powerType = String(body['power_type'] || 'PETROL').toUpperCase();
+  const rawBikeId = body['bike_id'] ? String(body['bike_id']).trim() : null;
+  const bikeId = rawBikeId && !rawBikeId.startsWith('PRESET_') ? rawBikeId : null;
+  const channel = body['channel'] ? String(body['channel']).trim() : 'ALL';
+  const isEvSelection =
+    String(rawBikeId || '').toUpperCase().includes('_EV') ||
+    String(channel || '').toUpperCase().includes('_EV');
+  const powerType = isEvSelection
+    ? 'ELECTRIC'
+    : String(body['power_type'] || 'PETROL').toUpperCase();
   const logDate = String(body['date'] || new Date().toISOString().slice(0, 10));
   const startTime = body['start_time'] ? String(body['start_time']).trim() : null;
   const endTime = body['end_time'] ? String(body['end_time']).trim() : null;
@@ -698,7 +705,6 @@ riderRoutes.post('/rider/logs', async (c) => {
     earningsAccId = strictCfg.savings_account_id;
   }
   const expenseAccId = body['expense_account_id'] ? String(body['expense_account_id']).trim() : null;
-  const channel = body['channel'] ? String(body['channel']).trim() : 'ALL';
 
   // Optional Platform Split & Cash-in-Hand vs App Wallet Reconciliation
   const uberEarned = Math.max(0, parseFloat(String(body['uber_earned'] || '0')) || 0);

@@ -5767,6 +5767,43 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
                         <div class="flex flex-wrap items-center gap-2 flex-1">
+                            <select name="channel" class="p-2 bg-slate-900 border border-emerald-600/60 text-white rounded-xl text-xs font-semibold">
+                                <option value="ALL">🌐 All Platforms (Blended Multi-App)</option>
+                                <optgroup label="📦 Delivery Platforms (Motorbike &amp; Electric EV)">
+                                    <option value="UBER_DELIVERY">🛵 Uber Delivery / Uber Eats (Motorbike)</option>
+                                    <option value="UBER_DELIVERY_EV">🔋 Uber Delivery / Uber Eats (Electric Bike / EV)</option>
+                                    <option value="GLOVO_DELIVERY">🛵 Glovo Delivery (Motorbike)</option>
+                                    <option value="GLOVO_DELIVERY_EV">🔋 Glovo Delivery (Electric Bike / EV)</option>
+                                    <option value="BOLT_DELIVERY">🛵 Bolt Delivery / Bolt Food (Motorbike)</option>
+                                    <option value="BOLT_DELIVERY_EV">🔋 Bolt Delivery / Bolt Food (Electric Bike / EV)</option>
+                                </optgroup>
+                                <optgroup label="🚗 Car Rides (Uber, Bolt, Faras, Yego — Petrol &amp; Electric EV)">
+                                    <option value="UBER_CAR">🚗 Uber Car Ride (UberX / ChapChap / Comfort)</option>
+                                    <option value="UBER_CAR_EV">⚡ Uber Electric Car Ride (Green / EV)</option>
+                                    <option value="BOLT_CAR">🚗 Bolt Car Ride (Bolt / Base / Lite)</option>
+                                    <option value="BOLT_CAR_EV">⚡ Bolt Electric Car Ride (EV)</option>
+                                    <option value="FARAS_CAR">🚗 Faras Car Ride</option>
+                                    <option value="FARAS_CAR_EV">⚡ Faras Electric Car Ride (EV)</option>
+                                    <option value="YEGO_CAR">🚗 Yego Car Ride</option>
+                                    <option value="YEGO_CAR_EV">⚡ Yego Electric Car Ride (EV)</option>
+                                    <option value="LITTLE">🚗 Little Cab Car Ride</option>
+                                    <option value="INDRIVE">🚗 inDrive Car Ride</option>
+                                </optgroup>
+                                <optgroup label="🛵 Motorbike / Boda Rides (Uber, Bolt, Faras, Yego — Petrol &amp; EV)">
+                                    <option value="UBER_BODA">🛵 Uber Boda (Motorbike)</option>
+                                    <option value="UBER_BODA_EV">🔋 Uber Electric Boda (EV)</option>
+                                    <option value="BOLT_BODA">🛵 Bolt Boda (Motorbike)</option>
+                                    <option value="BOLT_BODA_EV">🔋 Bolt Electric Boda (EV)</option>
+                                    <option value="FARAS_BODA">🛵 Faras Boda (Motorbike)</option>
+                                    <option value="FARAS_BODA_EV">🔋 Faras Electric Boda (EV)</option>
+                                    <option value="YEGO_BODA">🛵 Yego Boda (Motorbike)</option>
+                                    <option value="YEGO_BODA_EV">🔋 Yego Electric Boda (EV)</option>
+                                    <option value="BODA">🛵 Stage / Private Boda (Motorbike / EV)</option>
+                                </optgroup>
+                                <optgroup label="💼 Offline &amp; Direct Clients">
+                                    <option value="PRIVATE">💼 Private Clients / Offline Fares</option>
+                                </optgroup>
+                            </select>
                             <select name="account_id" class="p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-semibold">
                                 <option value="">-- Auto-Select Primary Wallet (M-Pesa) --</option>
                                 ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (${formatKes(a.balance)})</option>`).join('')}
