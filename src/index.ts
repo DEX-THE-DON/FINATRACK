@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext, inMemoryStore } from './db/supabase';
-import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
+import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon, getSavedMmfSettings, saveMmfSettingsCookie } from './routes/finance';
 import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, reconcileRiderShiftLogsWithTransactions, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
@@ -19,6 +19,8 @@ import {
   calculateMonthlyYield,
   calculateDailyYield,
   calculateAnnualYield,
+  calculateBankMmfYieldBreakdown,
+  inferKenyanInstitutionRate,
   calculateBudgetPace,
   calculateTargetPace,
   calculateDebtDeadline,
@@ -606,59 +608,186 @@ app.get('/', async (c) => {
     };
   });
 
-  // MMF passive yield calculations & accrued profit tracking
+  // MMF & Bank Daily Compounding Interest Engine (Britam, Ziidi, Sanlam, CIC, Banks & SACCOs)
+  const mmfSettings = getSavedMmfSettings(c);
+  let mmfSettingsDirty = false;
+  const todayIsoForMmf = today.toISOString().slice(0, 10);
   const mmfAccounts = [];
   let totalMonthlyPassive = new Decimal(0);
-  for (const a of accs) {
-    const rate = Number(a.interest_rate_p_a || 0);
-    const bal = Number(a.balance || 0);
-    if (rate > 0 || a.account_type === 'MMF' || a.account_type === 'SAVINGS') {
-      const mYield = calculateMonthlyYield(bal, rate);
-      const dYield = calculateDailyYield(bal, rate);
-      const aYield = calculateAnnualYield(bal, rate);
-      totalMonthlyPassive = totalMonthlyPassive.plus(mYield);
 
-      // Accrued real profits & interest logged to this MMF account
-      const accTxs = txs.filter((t: any) =>
-        String(t.account_id) === String(a.id) &&
-        (
-          (t.category || '').toLowerCase().includes('interest') ||
-          (t.category || '').toLowerCase().includes('yield') ||
-          (t.description || '').toLowerCase().includes('interest') ||
-          (t.description || '').toLowerCase().includes('yield') ||
-          (t.description || '').toLowerCase().includes('profit')
-        ) &&
-        t.transaction_type === 'INCOME'
+  for (let i = 0; i < accs.length; i++) {
+    const a = accs[i];
+    const accIdStr = String(a.id);
+    const savedSetting = mmfSettings[accIdStr] || {};
+    const inferred = inferKenyanInstitutionRate(a.name, a.account_type, savedSetting.rate_p_a ?? a.interest_rate_p_a);
+    const effectiveRate =
+      savedSetting.rate_p_a !== undefined
+        ? Number(savedSetting.rate_p_a)
+        : Number(a.interest_rate_p_a || 0) > 0
+        ? Number(a.interest_rate_p_a)
+        : inferred.ratePa;
+
+    const applyWht15 = savedSetting.apply_wht_15 !== undefined ? Boolean(savedSetting.apply_wht_15) : true;
+    const autoDailyAccrual = savedSetting.auto_daily_accrual !== undefined ? Boolean(savedSetting.auto_daily_accrual) : true;
+    let bal = savedSetting.balance_override !== undefined ? Number(savedSetting.balance_override) : Number(a.balance || 0);
+
+    const isEligibleYieldAccount =
+      effectiveRate > 0 ||
+      inferred.isMmfOrYieldAccount ||
+      ['MMF', 'SAVINGS', 'INVESTMENT'].includes(String(a.account_type || '').toUpperCase());
+
+    if (isEligibleYieldAccount) {
+      // Find existing interest transactions for this account
+      const dbAccTxs = txs.filter(
+        (t: any) =>
+          String(t.account_id) === accIdStr &&
+          ((t.category || '').toLowerCase().includes('interest') ||
+            (t.category || '').toLowerCase().includes('yield') ||
+            (t.description || '').toLowerCase().includes('interest') ||
+            (t.description || '').toLowerCase().includes('yield') ||
+            (t.description || '').toLowerCase().includes('profit')) &&
+          t.transaction_type === 'INCOME'
       );
-      const accruedProfit = accTxs.reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
-      const principalDeposited = Math.max(0, bal - accruedProfit);
 
-      const recentProfitLogs = [...accTxs]
-        .sort((x: any, y: any) => new Date(y.date || 0).getTime() - new Date(x.date || 0).getTime())
-        .slice(0, 5)
-        .map((t: any) => {
-          const d = t.date ? new Date(t.date) : new Date();
-          const dayName = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short' });
-          return {
-            id: t.id,
-            date: t.date,
-            day_name: dayName,
-            amount: Number(t.amount || 0),
-            description: t.description || 'MMF Interest Yield',
-          };
-        });
+      const cookieLogs = [...(savedSetting.accrued_logs || [])];
+      const hasTodayTx =
+        savedSetting.last_accrued_date === todayIsoForMmf ||
+        dbAccTxs.some((t: any) => String(t.date || '').slice(0, 10) === todayIsoForMmf) ||
+        cookieLogs.some((l: any) => String(l.date || '').slice(0, 10) === todayIsoForMmf);
+
+      // Automatic Daily Interest Accrual (just like Britam / Ziidi / Banks add daily at midnight)
+      if (autoDailyAccrual && bal > 0 && effectiveRate > 0 && !hasTodayTx) {
+        let daysToAccrue = 1;
+        if (savedSetting.last_accrued_date) {
+          const prevMs = Date.parse(savedSetting.last_accrued_date);
+          const todayMs = Date.parse(todayIsoForMmf);
+          if (!isNaN(prevMs) && !isNaN(todayMs) && todayMs > prevMs) {
+            daysToAccrue = Math.min(30, Math.max(1, Math.round((todayMs - prevMs) / 86400000)));
+          }
+        }
+        const netRatePa = applyWht15 ? effectiveRate * 0.85 : effectiveRate;
+        const dailyNetFactor = netRatePa / 100 / 365;
+
+        for (let d = daysToAccrue - 1; d >= 0; d--) {
+          const dt = new Date(today.getTime() - d * 86400000).toISOString().slice(0, 10);
+          if (
+            dbAccTxs.some((t: any) => String(t.date || '').slice(0, 10) === dt) ||
+            cookieLogs.some((l: any) => String(l.date || '').slice(0, 10) === dt)
+          ) {
+            continue;
+          }
+          const dayGross = Number(((bal * (effectiveRate / 100)) / 365).toFixed(2));
+          const dayNet = Number((bal * dailyNetFactor).toFixed(2));
+          const dayTax = Number(Math.max(0, dayGross - dayNet).toFixed(2));
+          if (dayNet > 0) {
+            bal = Number((bal + dayNet).toFixed(2));
+            const desc = `Auto Daily Interest (${a.name} @ ${effectiveRate}% p.a.${applyWht15 ? ' less 15% WHT' : ''})`;
+            const logEntry = {
+              id: `auto-mmf-${accIdStr}-${dt}`,
+              date: dt,
+              amount: dayNet,
+              gross_amount: dayGross,
+              wht_tax: dayTax,
+              description: desc,
+            };
+            cookieLogs.unshift(logEntry);
+            txs.unshift({
+              id: logEntry.id,
+              account_id: a.id,
+              transaction_type: 'INCOME',
+              category: 'Interest & Yield',
+              amount: dayNet,
+              description: desc,
+              date: dt,
+            });
+          }
+        }
+
+        accs[i] = { ...a, balance: bal, interest_rate_p_a: effectiveRate };
+        mmfSettings[accIdStr] = {
+          ...savedSetting,
+          rate_p_a: effectiveRate,
+          apply_wht_15: applyWht15,
+          auto_daily_accrual: autoDailyAccrual,
+          last_accrued_date: todayIsoForMmf,
+          balance_override: bal,
+          accrued_logs: cookieLogs.slice(0, 35),
+        };
+        mmfSettingsDirty = true;
+      } else {
+        accs[i] = { ...a, balance: bal, interest_rate_p_a: effectiveRate };
+      }
+
+      // Merge DB interest transactions + cookie accrued logs (deduplicated by date)
+      const byDate = new Map<string, any>();
+      for (const l of cookieLogs) {
+        if (l && l.date) byDate.set(String(l.date).slice(0, 10), l);
+      }
+      for (const t of dbAccTxs) {
+        if (t && t.date) {
+          const dKey = String(t.date).slice(0, 10);
+          if (!byDate.has(dKey)) {
+            byDate.set(dKey, {
+              id: t.id,
+              date: dKey,
+              amount: Number(t.amount || 0),
+              description: t.description || 'MMF Interest Yield',
+            });
+          }
+        }
+      }
+      const mergedProfitLogs = Array.from(byDate.values()).sort(
+        (x: any, y: any) => new Date(y.date || 0).getTime() - new Date(x.date || 0).getTime()
+      );
+
+      const accruedProfit = Number(
+        mergedProfitLogs.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0).toFixed(2)
+      );
+      const principalDeposited = Number(Math.max(0, bal - accruedProfit).toFixed(2));
+
+      const recentProfitLogs = mergedProfitLogs.slice(0, 7).map((t: any) => {
+        const d = t.date ? new Date(t.date) : new Date();
+        const dayName = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        return {
+          id: t.id,
+          date: t.date,
+          day_name: dayName,
+          amount: Number(t.amount || 0),
+          gross_amount: t.gross_amount,
+          wht_tax: t.wht_tax,
+          description: t.description || 'MMF Interest Yield',
+        };
+      });
+
+      const yieldBreakdown = calculateBankMmfYieldBreakdown(bal, effectiveRate, applyWht15, daysInMonth);
+      totalMonthlyPassive = totalMonthlyPassive.plus(yieldBreakdown.monthlyNetCompounded);
 
       mmfAccounts.push({
-        ...a,
+        ...accs[i],
+        interest_rate_p_a: effectiveRate,
+        net_rate_p_a: yieldBreakdown.netRatePa,
+        effective_net_apy: yieldBreakdown.effectiveNetApyPct,
+        apply_wht_15: applyWht15,
+        auto_daily_accrual: autoDailyAccrual,
+        institution_label: inferred.institutionLabel,
         total_balance: bal,
         total_accrued_profit: accruedProfit,
         principal_deposited: principalDeposited,
         recent_profit_logs: recentProfitLogs,
-        monthly_return: mYield.toFixed(2),
-        daily_return: dYield.toFixed(2),
-        annual_return: aYield.toFixed(2),
+        daily_gross: yieldBreakdown.dailyGross.toFixed(2),
+        daily_wht_tax: yieldBreakdown.dailyWhtTax.toFixed(2),
+        daily_return: yieldBreakdown.dailyNet.toFixed(2),
+        weekly_return: yieldBreakdown.weeklyNetCompounded.toFixed(2),
+        monthly_gross: yieldBreakdown.monthlyGrossCompounded.toFixed(2),
+        monthly_return: yieldBreakdown.monthlyNetCompounded.toFixed(2),
+        annual_gross: yieldBreakdown.annualGrossCompounded.toFixed(2),
+        annual_return: yieldBreakdown.annualNetCompounded.toFixed(2),
       });
     }
+  }
+
+  if (mmfSettingsDirty) {
+    saveMmfSettingsCookie(c, mmfSettings);
   }
 
   const totalMmfBalance = mmfAccounts.reduce((sum, m) => sum + Number(m.balance || 0), 0);

@@ -5,6 +5,8 @@ import {
   toDecimal,
   calculateMonthlyYield,
   calculateDailyYield,
+  calculateBankMmfYieldBreakdown,
+  inferKenyanInstitutionRate,
   allocateWaterfallSplit,
   allocateGoalSubSplits,
   calculateBudgetPace,
@@ -201,6 +203,46 @@ function getExchangeRate(): number {
 }
 
 // ------------------------------------------------------------------------------
+// MMF & BANK DAILY INTEREST ENGINE (BRITAM / ZIIDI / SANLAM / BANK DAILY ACCRUAL)
+// ------------------------------------------------------------------------------
+export interface MmfAccountSetting {
+  rate_p_a?: number;
+  apply_wht_15?: boolean; // Kenyan 15% Withholding Tax on MMF/Bank interest (default: true)
+  auto_daily_accrual?: boolean; // Automatically add daily interest every day like banks/MMFs (default: true)
+  last_accrued_date?: string; // YYYY-MM-DD
+  balance_override?: number;
+  accrued_logs?: Array<{
+    id: string;
+    date: string;
+    amount: number;
+    gross_amount?: number;
+    wht_tax?: number;
+    description: string;
+  }>;
+}
+
+export function getSavedMmfSettings(c: any): Record<string, MmfAccountSetting> {
+  try {
+    const raw = getCookie(c, 'finatrack_mmf_settings');
+    if (raw) return JSON.parse(decodeURIComponent(raw));
+    const cookieHeader = c.req?.header('cookie') || '';
+    const match = cookieHeader.match(/finatrack_mmf_settings=([^;]+)/);
+    if (match) return JSON.parse(decodeURIComponent(match[1]));
+  } catch (e) {}
+  return {};
+}
+
+export function saveMmfSettingsCookie(c: any, settings: Record<string, MmfAccountSetting>): void {
+  try {
+    setCookie(c, 'finatrack_mmf_settings', encodeURIComponent(JSON.stringify(settings)), {
+      path: '/',
+      maxAge: 31536000,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+// ------------------------------------------------------------------------------
 // ACCOUNTS CRUD
 // ------------------------------------------------------------------------------
 financeRoutes.post('/accounts/create', async (c) => {
@@ -209,24 +251,37 @@ financeRoutes.post('/accounts/create', async (c) => {
   const name = String(body['name'] || '').trim();
   const accountNumber = body['account_number'] ? String(body['account_number']).trim() : null;
   const accountType = String(body['account_type'] || 'BANK');
-  const interestRate = parseFloat(String(body['interest_rate_p_a'] || '0.0')) || 0.0;
+  const rawRate = parseFloat(String(body['interest_rate_p_a'] || '0.0')) || 0.0;
+  const inferred = inferKenyanInstitutionRate(name, accountType, rawRate);
+  const interestRate = rawRate > 0 ? rawRate : inferred.ratePa;
   const finalBalance = parseFloat(String(body['balance'] || '0.0')) || 0.0;
 
-  const { error } = await supabase.from('accounts').insert({
+  const { data: createdAcc, error } = await supabase.from('accounts').insert({
     ...(userId ? { user_id: userId } : {}),
     name,
     account_number: accountNumber,
     account_type: accountType,
     interest_rate_p_a: interestRate,
     balance: finalBalance,
-  });
+  }).select().single();
 
   if (error) {
     console.error('Failed to create account:', error);
     return c.redirect(`/?toast=${encodeURIComponent('Failed to create account: ' + error.message)}`, 303);
   }
 
-  return c.redirect('/?toast=Account+created+successfully', 303);
+  if (createdAcc && createdAcc.id && interestRate > 0) {
+    const mmfSettings = getSavedMmfSettings(c);
+    mmfSettings[String(createdAcc.id)] = {
+      ...(mmfSettings[String(createdAcc.id)] || {}),
+      rate_p_a: interestRate,
+      apply_wht_15: true,
+      auto_daily_accrual: true,
+    };
+    saveMmfSettingsCookie(c, mmfSettings);
+  }
+
+  return c.redirect('/?toast=Account+created+successfully#mmf-card', 303);
 });
 
 financeRoutes.post('/accounts/update/:id', async (c) => {
@@ -236,7 +291,9 @@ financeRoutes.post('/accounts/update/:id', async (c) => {
   const name = String(body['name'] || '').trim();
   const accountNumber = body['account_number'] ? String(body['account_number']).trim() : null;
   const accountType = String(body['account_type'] || 'BANK');
-  const interestRate = parseFloat(String(body['interest_rate_p_a'] || '0.0')) || 0.0;
+  const rawRate = parseFloat(String(body['interest_rate_p_a'] || '0.0')) || 0.0;
+  const inferred = inferKenyanInstitutionRate(name, accountType, rawRate);
+  const interestRate = rawRate > 0 ? rawRate : inferred.ratePa;
   const finalBalance = parseFloat(String(body['balance'] || '0.0')) || 0.0;
 
   const { error } = await supabase.from('accounts').update({
@@ -248,8 +305,16 @@ financeRoutes.post('/accounts/update/:id', async (c) => {
     updated_at: new Date().toISOString(),
   }).eq('id', id);
 
+  const mmfSettings = getSavedMmfSettings(c);
+  mmfSettings[String(id)] = {
+    ...(mmfSettings[String(id)] || {}),
+    rate_p_a: interestRate,
+    balance_override: finalBalance,
+  };
+  saveMmfSettingsCookie(c, mmfSettings);
+
   if (error) {
-    return c.redirect(`/?toast=${encodeURIComponent('Failed to update account: ' + error.message)}`, 303);
+    return c.redirect(`/?toast=${encodeURIComponent('Account rate/balance saved locally: ' + error.message)}#mmf-card`, 303);
   }
 
   // Keep Rider Hub Strict Saver account in 100% sync if this account is linked
@@ -294,6 +359,127 @@ financeRoutes.post('/accounts/delete/:id', async (c) => {
   return c.redirect('/?toast=Account+deleted+successfully', 303);
 });
 
+financeRoutes.post('/accounts/interest/config/:id', async (c) => {
+  const { supabase } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const body = await c.req.parseBody();
+
+  const ratePa = Math.max(0, parseFloat(String(body['interest_rate_p_a'] || '12.0')) || 12.0);
+  const applyWht15 = body['apply_wht_15'] === '1' || body['apply_wht_15'] === 'on' || body['apply_wht_15'] === 'true';
+  const autoDaily = body['auto_daily_accrual'] === '1' || body['auto_daily_accrual'] === 'on' || body['auto_daily_accrual'] === 'true';
+  const balanceInput = body['balance'] !== undefined && body['balance'] !== '' ? parseFloat(String(body['balance'])) : undefined;
+
+  try {
+    const updatePayload: any = {
+      interest_rate_p_a: ratePa,
+      updated_at: new Date().toISOString(),
+    };
+    if (balanceInput !== undefined && !isNaN(balanceInput) && balanceInput >= 0) {
+      updatePayload.balance = balanceInput;
+    }
+    await supabase.from('accounts').update(updatePayload).eq('id', id);
+  } catch (e) {}
+
+  const mmfSettings = getSavedMmfSettings(c);
+  mmfSettings[String(id)] = {
+    ...(mmfSettings[String(id)] || {}),
+    rate_p_a: ratePa,
+    apply_wht_15: applyWht15,
+    auto_daily_accrual: autoDaily,
+    ...(balanceInput !== undefined && !isNaN(balanceInput) ? { balance_override: balanceInput } : {}),
+  };
+  saveMmfSettingsCookie(c, mmfSettings);
+
+  return c.redirect(
+    `/?toast=${encodeURIComponent(`✅ Bank/MMF Interest updated: ${ratePa}% p.a. (${applyWht15 ? '15% KRA WHT deducted -> ' + (ratePa * 0.85).toFixed(2) + '% Net' : 'Net Rate'}) • Auto-Daily Accrual: ${autoDaily ? 'ON' : 'OFF'}`)}#mmf-card`,
+    303
+  );
+});
+
+financeRoutes.post('/accounts/interest/backfill/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const id = c.req.param('id');
+  const body = await c.req.parseBody();
+  const days = Math.min(90, Math.max(1, parseInt(String(body['days'] || '7'), 10) || 7));
+
+  const { data: acc } = await supabase.from('accounts').select('*').eq('id', id).single();
+  if (!acc) {
+    return c.redirect('/?toast=Account+not+found#mmf-card', 303);
+  }
+
+  const mmfSettings = getSavedMmfSettings(c);
+  const curSetting = mmfSettings[String(id)] || {};
+  const inferred = inferKenyanInstitutionRate(acc.name, acc.account_type, curSetting.rate_p_a ?? acc.interest_rate_p_a);
+  const grossRate = curSetting.rate_p_a ?? (Number(acc.interest_rate_p_a) > 0 ? Number(acc.interest_rate_p_a) : inferred.ratePa);
+  const applyWht15 = curSetting.apply_wht_15 !== undefined ? curSetting.apply_wht_15 : true;
+  const netRate = applyWht15 ? grossRate * 0.85 : grossRate;
+  const dailyNetFactor = netRate / 100 / 365;
+
+  let runningBal = Number(curSetting.balance_override ?? acc.balance ?? 0);
+  if (runningBal <= 0 || grossRate <= 0) {
+    return c.redirect('/?toast=Ensure+account+has+a+positive+balance+and+interest+rate#mmf-card', 303);
+  }
+
+  let totalAddedNet = 0;
+  const newLogs = [...(curSetting.accrued_logs || [])];
+  const txRows: any[] = [];
+  const todayObj = new Date();
+
+  for (let d = days - 1; d >= 0; d--) {
+    const dt = new Date(todayObj.getTime() - d * 86400000);
+    const dateStr = dt.toISOString().slice(0, 10);
+    const dayGross = Number(((runningBal * (grossRate / 100)) / 365).toFixed(2));
+    const dayNet = Number((runningBal * dailyNetFactor).toFixed(2));
+    const dayTax = Number(Math.max(0, dayGross - dayNet).toFixed(2));
+
+    if (dayNet > 0) {
+      runningBal = Number((runningBal + dayNet).toFixed(2));
+      totalAddedNet = Number((totalAddedNet + dayNet).toFixed(2));
+      const desc = `Daily MMF/Bank Interest (${acc.name} @ ${grossRate}% p.a.${applyWht15 ? ` -> Net +Ksh ${dayNet.toFixed(2)} after 15% WHT` : ''})`;
+      newLogs.unshift({
+        id: `mmf-int-${id}-${dateStr}-${d}`,
+        date: dateStr,
+        amount: dayNet,
+        gross_amount: dayGross,
+        wht_tax: dayTax,
+        description: desc,
+      });
+      txRows.push({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: acc.id,
+        transaction_type: 'INCOME',
+        category: 'Interest & Yield',
+        amount: dayNet,
+        description: desc,
+        date: dateStr,
+      });
+    }
+  }
+
+  try {
+    await supabase.from('accounts').update({ balance: runningBal, interest_rate_p_a: grossRate }).eq('id', id);
+    if (txRows.length > 0) {
+      await supabase.from('transactions').insert(txRows);
+    }
+  } catch (e) {}
+
+  mmfSettings[String(id)] = {
+    ...curSetting,
+    rate_p_a: grossRate,
+    apply_wht_15: applyWht15,
+    auto_daily_accrual: true,
+    last_accrued_date: todayObj.toISOString().slice(0, 10),
+    balance_override: runningBal,
+    accrued_logs: newLogs.slice(0, 35),
+  };
+  saveMmfSettingsCookie(c, mmfSettings);
+
+  return c.redirect(
+    `/?toast=${encodeURIComponent(`📈 Compounded & added ${days} day(s) of daily interest (+Ksh ${totalAddedNet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Net) to ${acc.name}!`)}#mmf-card`,
+    303
+  );
+});
+
 financeRoutes.post('/accounts/interest/log/:id', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
@@ -305,40 +491,72 @@ financeRoutes.post('/accounts/interest/log/:id', async (c) => {
   }
 
   const customAmt = parseFloat(String(body['amount'] || '0.0')) || 0.0;
-  const period = String(body['period'] || (customAmt > 0 ? 'custom' : 'monthly')).toLowerCase();
+  const period = String(body['period'] || (customAmt > 0 ? 'custom' : 'daily')).toLowerCase();
   const txDate = String(body['date'] || new Date().toISOString().slice(0, 10));
   const notes = String(body['notes'] || '').trim();
 
   const { data: acc } = await supabase.from('accounts').select('*').eq('id', id).single();
   if (acc) {
+    const mmfSettings = getSavedMmfSettings(c);
+    const curSetting = mmfSettings[String(id)] || {};
+    const inferred = inferKenyanInstitutionRate(acc.name, acc.account_type, curSetting.rate_p_a ?? acc.interest_rate_p_a);
+    const effectiveRate = curSetting.rate_p_a ?? (Number(acc.interest_rate_p_a) > 0 ? Number(acc.interest_rate_p_a) : inferred.ratePa);
+    const applyWht15 = curSetting.apply_wht_15 !== undefined ? curSetting.apply_wht_15 : true;
+    const currentBal = Number(curSetting.balance_override ?? acc.balance ?? 0);
+
+    const breakdown = calculateBankMmfYieldBreakdown(currentBal, effectiveRate, applyWht15);
+
     let yieldAmount = new Decimal(0);
     let desc = '';
 
     if (customAmt > 0) {
       yieldAmount = toDecimal(customAmt).toDecimalPlaces(2);
-      desc = notes || `Daily MMF Profit Yield (${acc.name})`;
+      desc = notes || `Daily MMF/Bank Profit Yield (${acc.name})`;
     } else if (period === 'daily') {
-      yieldAmount = calculateDailyYield(acc.balance, acc.interest_rate_p_a || 0).toDecimalPlaces(2);
-      desc = notes || `Daily MMF Interest Yield (${acc.name} @ ${acc.interest_rate_p_a}% p.a.)`;
+      yieldAmount = toDecimal(breakdown.dailyNet).toDecimalPlaces(2);
+      desc = notes || `Daily MMF/Bank Interest (${acc.name} @ ${effectiveRate}% p.a.${applyWht15 ? ` less 15% WHT` : ''})`;
     } else {
-      yieldAmount = calculateMonthlyYield(acc.balance, acc.interest_rate_p_a || 0).toDecimalPlaces(2);
-      desc = notes || `Monthly MMF Interest Yield (${acc.name} @ ${acc.interest_rate_p_a}% p.a.)`;
+      yieldAmount = toDecimal(breakdown.monthlyNetCompounded).toDecimalPlaces(2);
+      desc = notes || `Monthly Compounded MMF/Bank Interest (${acc.name} @ ${effectiveRate}% p.a.)`;
     }
 
     if (yieldAmount.greaterThan(0)) {
-      const newBal = toDecimal(acc.balance).plus(yieldAmount).toNumber();
-      await supabase.from('accounts').update({ balance: newBal }).eq('id', id);
-      await supabase.from('transactions').insert({
-        ...(userId ? { user_id: userId } : {}),
-        account_id: acc.id,
-        transaction_type: 'INCOME',
-        category: 'Interest & Yield',
-        amount: yieldAmount.toNumber(),
-        description: desc,
-        date: txDate,
-      });
+      const newBal = toDecimal(currentBal).plus(yieldAmount).toNumber();
+      try {
+        await supabase.from('accounts').update({ balance: newBal, interest_rate_p_a: effectiveRate }).eq('id', id);
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: acc.id,
+          transaction_type: 'INCOME',
+          category: 'Interest & Yield',
+          amount: yieldAmount.toNumber(),
+          description: desc,
+          date: txDate,
+        });
+      } catch (e) {}
 
-      return c.redirect(`/?toast=${encodeURIComponent(`MMF Profit of Ksh ${yieldAmount.toNumber().toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} credited successfully`)}#mmf-card`, 303);
+      const prevLogs = curSetting.accrued_logs || [];
+      mmfSettings[String(id)] = {
+        ...curSetting,
+        rate_p_a: effectiveRate,
+        apply_wht_15: applyWht15,
+        last_accrued_date: txDate,
+        balance_override: newBal,
+        accrued_logs: [
+          {
+            id: `mmf-int-${id}-${Date.now()}`,
+            date: txDate,
+            amount: yieldAmount.toNumber(),
+            gross_amount: period === 'daily' ? breakdown.dailyGross : undefined,
+            wht_tax: period === 'daily' ? breakdown.dailyWhtTax : undefined,
+            description: desc,
+          },
+          ...prevLogs,
+        ].slice(0, 35),
+      };
+      saveMmfSettingsCookie(c, mmfSettings);
+
+      return c.redirect(`/?toast=${encodeURIComponent(`✅ Added +Ksh ${yieldAmount.toNumber().toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Net Interest to ${acc.name} (New Balance: Ksh ${newBal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`)}#mmf-card`, 303);
     }
   }
 

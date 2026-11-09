@@ -4957,13 +4957,116 @@ export function renderFinanceDashboard(data: any): string {
 
         <!-- 📈 MMF & Passive Yields Section -->
         <div id="mmf-card" class="bg-white dark:bg-gray-900 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-sm space-y-5">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <span>📈 Money Market Funds &amp; Sacco Yields</span>
-                        <span class="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/60">${mmf_accounts.length} Total</span>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                        <span>📈 Money Market Funds (Britam / Ziidi / Sanlam) &amp; Bank Daily Interest</span>
+                        <span class="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/60">${mmf_accounts.length} Active</span>
+                        <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-black px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">🔄 Auto-Adding Daily (Actual/365)</span>
                     </h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Track passive interest compounding daily (Ziidi MMF 13.5%, Sanlam 14.5%, Britam 13.8%) and differentiate real profit gains from deposited capital.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Calculates &amp; adds daily compounded interest the exact way Kenyan MMFs &amp; Banks do: <code class="text-[11px] font-bold text-amber-700 dark:text-amber-300">(Balance × Rate% ÷ 365) − 15% KRA WHT</code> (e.g. Ksh 40,000 in Britam @ 12% p.a. adds <strong>+Ksh 11.18 net every day</strong>).</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <button type="button" onclick="document.getElementById('mmf-bank-calc-drawer')?.classList.toggle('hidden')" class="px-3 py-1.5 bg-amber-100 dark:bg-amber-950/80 hover:bg-amber-200 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-extrabold transition shadow-2xs">
+                        🧮 Bank/MMF Daily Calculator
+                    </button>
+                    <button type="button" onclick="document.getElementById('mmf-quick-add-drawer')?.classList.toggle('hidden')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition shadow-xs">
+                        ➕ Add Britam / MMF / Bank
+                    </button>
+                </div>
+            </div>
+
+            <!-- ➕ Quick-Add Britam / Ziidi / Sanlam / Bank Interest Account Drawer -->
+            <div id="mmf-quick-add-drawer" class="hidden p-4 bg-slate-900 text-white rounded-2xl border border-emerald-600/50 space-y-3 shadow-lg">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div>
+                        <h3 class="text-xs font-black text-emerald-400 uppercase tracking-wider">➕ Add MMF or Interest-Bearing Bank Account (Auto-Daily Accrual)</h3>
+                        <p class="text-[11px] text-slate-300">Tap a preset below (Britam, Ziidi, Sanlam, CIC, Etica, or Bank Savings) or enter your custom balance &amp; rate.</p>
+                    </div>
+                    <button type="button" onclick="document.getElementById('mmf-quick-add-drawer')?.classList.add('hidden')" class="text-slate-400 hover:text-white text-sm font-bold">✕</button>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase mr-1">1-Tap Presets:</span>
+                    <button type="button" onclick="fillMmfQuickPreset('Britam Money Market Fund (MMF)', 'MMF', 12.0, 40000)" class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 rounded-lg text-[11px] font-extrabold transition">🏦 Britam MMF (12.0% • Ksh 40k → +Ksh 11.18/d)</button>
+                    <button type="button" onclick="fillMmfQuickPreset('Ziidi MMF (Safaricom)', 'MMF', 13.5, 40000)" class="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/50 text-emerald-300 rounded-lg text-[11px] font-extrabold transition">📱 Ziidi MMF (13.5%)</button>
+                    <button type="button" onclick="fillMmfQuickPreset('Sanlam Pesa MMF', 'MMF', 14.5, 40000)" class="px-2.5 py-1 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-sky-300 rounded-lg text-[11px] font-extrabold transition">📈 Sanlam MMF (14.5%)</button>
+                    <button type="button" onclick="fillMmfQuickPreset('CIC Money Market Fund', 'MMF', 13.2, 40000)" class="px-2.5 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/50 text-indigo-300 rounded-lg text-[11px] font-extrabold transition">🛡️ CIC MMF (13.2%)</button>
+                    <button type="button" onclick="fillMmfQuickPreset('Etica Wealth MMF', 'MMF', 15.5, 40000)" class="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/50 text-purple-300 rounded-lg text-[11px] font-extrabold transition">🚀 Etica MMF (15.5%)</button>
+                    <button type="button" onclick="fillMmfQuickPreset('Bank Goal Savings Account', 'SAVINGS', 9.0, 40000)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 rounded-lg text-[11px] font-bold transition">🏛️ Bank Savings (9.0%)</button>
+                </div>
+                <form action="/accounts/create" method="POST" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 items-end">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-300 uppercase mb-1">Fund / Bank Name</label>
+                        <input type="text" name="name" id="mmf-quick-name" value="Britam Money Market Fund (MMF)" class="w-full p-2 bg-slate-950 border border-slate-700 text-white rounded-xl text-xs font-bold" required>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-300 uppercase mb-1">Account Type</label>
+                        <select name="account_type" id="mmf-quick-type" class="w-full p-2 bg-slate-950 border border-slate-700 text-white rounded-xl text-xs font-bold">
+                            <option value="MMF" selected>Money Market Fund (MMF)</option>
+                            <option value="SAVINGS">Bank / SACCO Savings</option>
+                            <option value="BANK">Bank Account</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-amber-300 uppercase mb-1">Annual Rate (% p.a.)</label>
+                        <input type="number" step="any" name="interest_rate_p_a" id="mmf-quick-rate" value="12.0" class="w-full p-2 bg-slate-950 border border-amber-600/60 text-amber-300 rounded-xl text-xs font-black" required>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-emerald-300 uppercase mb-1">Current Balance (Ksh)</label>
+                        <input type="number" step="any" name="balance" id="mmf-quick-bal" value="40000" class="w-full p-2 bg-slate-950 border border-emerald-600/60 text-emerald-300 rounded-xl text-xs font-black" required>
+                    </div>
+                    <button type="submit" class="w-full py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition shadow-md">
+                        ✅ Save &amp; Start Daily Interest
+                    </button>
+                </form>
+            </div>
+
+            <!-- 🧮 Interactive Kenyan Bank & MMF Daily Interest Simulator (Britam Ksh 40,000 -> +Ksh 11.18/day Demo) -->
+            <div id="mmf-bank-calc-drawer" class="p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl border border-indigo-500/40 space-y-3 shadow-md">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-900/60 pb-2.5">
+                    <div>
+                        <h3 class="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <span>🏦 How Banks &amp; MMFs (Britam / Ziidi / Sanlam) Calculate Your Daily Interest</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-300">Formula: <code class="text-emerald-300 font-bold">Daily Gross = Balance × (Rate% ÷ 365)</code> → <code class="text-amber-300 font-bold">Less 15% KRA WHT Tax</code> = <strong class="text-white">Net Added Daily to Balance</strong></p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button type="button" onclick="setMmfSimPreset(40000, 12.0, true)" class="px-2 py-1 bg-amber-500/20 border border-amber-400/50 text-amber-300 rounded-lg text-[10px] font-black hover:bg-amber-500/30 transition">Britam 40k @ 12% (+Ksh 11.18/d)</button>
+                        <button type="button" onclick="setMmfSimPreset(40000, 13.5, true)" class="px-2 py-1 bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition">Ziidi 40k @ 13.5% (+Ksh 12.58/d)</button>
+                        <button type="button" onclick="setMmfSimPreset(100000, 14.5, true)" class="px-2 py-1 bg-sky-500/20 border border-sky-400/50 text-sky-300 rounded-lg text-[10px] font-bold hover:bg-sky-500/30 transition">Sanlam 100k @ 14.5% (+Ksh 33.77/d)</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 items-center text-xs">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-300 uppercase mb-1">Principal / Balance (Ksh)</label>
+                        <input type="number" step="any" id="mmf-sim-balance" value="40000" oninput="recalcMmfBankSimulator()" class="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl font-black text-white text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-amber-300 uppercase mb-1">Annual Rate (% p.a.)</label>
+                        <input type="number" step="any" id="mmf-sim-rate" value="12.0" oninput="recalcMmfBankSimulator()" class="w-full p-2 bg-slate-950 border border-amber-600/60 rounded-xl font-black text-amber-300 text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-300 uppercase mb-1">KRA 15% WHT Tax</label>
+                        <select id="mmf-sim-wht" onchange="recalcMmfBankSimulator()" class="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl font-bold text-white text-xs">
+                            <option value="1" selected>Deduct 15% WHT (Bank/MMF)</option>
+                            <option value="0">No WHT (Already Net Rate)</option>
+                        </select>
+                    </div>
+                    <div class="p-2.5 bg-slate-950/90 border border-emerald-500/50 rounded-xl">
+                        <span class="text-[10px] font-bold text-emerald-300 uppercase block">✅ Net Added Daily</span>
+                        <span id="mmf-sim-daily-net" class="text-base font-black text-emerald-400">+Ksh 11.18 / day</span>
+                        <span id="mmf-sim-daily-gross" class="text-[10px] text-slate-400 block">Gross: Ksh 13.15 − WHT: Ksh 1.97</span>
+                    </div>
+                    <div class="p-2.5 bg-slate-950/90 border border-cyan-500/40 rounded-xl">
+                        <span class="text-[10px] font-bold text-cyan-300 uppercase block">📅 30-Day Compounded</span>
+                        <span id="mmf-sim-monthly-net" class="text-base font-black text-cyan-300">+Ksh 336.98 / mo</span>
+                        <span id="mmf-sim-weekly-net" class="text-[10px] text-slate-400 block">7-Day: +Ksh 78.30</span>
+                    </div>
+                    <div class="p-2.5 bg-slate-950/90 border border-amber-500/40 rounded-xl">
+                        <span class="text-[10px] font-bold text-amber-300 uppercase block">🏆 1-Yr Compounded</span>
+                        <span id="mmf-sim-annual-net" class="text-base font-black text-amber-300">+Ksh 4,291.85 / yr</span>
+                        <span id="mmf-sim-net-rate-lbl" class="text-[10px] text-slate-400 block">Net Rate: 10.20% p.a.</span>
+                    </div>
                 </div>
             </div>
 
@@ -4972,11 +5075,11 @@ export function renderFinanceDashboard(data: any): string {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="p-3 bg-slate-950/70 border border-amber-400/40 rounded-xl">
                         <div class="flex items-center justify-between text-xs text-amber-300 font-bold mb-1">
-                            <span>🏦 Total MMF Account Balance</span>
+                            <span>🏦 Total MMF &amp; Yield Balance</span>
                             <span class="text-[10px] px-2 py-0.2 rounded-full bg-amber-500/20 text-amber-300">Live App Match</span>
                         </div>
                         <p class="text-2xl font-black text-amber-400 convertible-amount" data-kes="${total_mmf_balance}">${formatKes(total_mmf_balance)}</p>
-                        <p class="text-[10px] text-gray-400 mt-0.5">Grand balance that should match your Ziidi / Britam / Sanlam app.</p>
+                        <p class="text-[10px] text-gray-400 mt-0.5">Grand balance matching your Britam / Ziidi / Sanlam / Bank statement.</p>
                     </div>
 
                     <div class="p-3 bg-slate-950/70 border border-emerald-400/40 rounded-xl">
@@ -4985,7 +5088,7 @@ export function renderFinanceDashboard(data: any): string {
                             <span class="text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300">Pure Yield</span>
                         </div>
                         <p class="text-2xl font-black text-emerald-400 convertible-amount" data-kes="${total_mmf_accrued_profit}">+${formatKes(total_mmf_accrued_profit)}</p>
-                        <p class="text-[10px] text-gray-400 mt-0.5">Cumulative interest &amp; daily profits gained while you sleep.</p>
+                        <p class="text-[10px] text-gray-400 mt-0.5">Cumulative daily compounded interest added to your capital.</p>
                     </div>
 
                     <div class="p-3 bg-slate-950/70 border border-cyan-400/40 rounded-xl">
@@ -5013,16 +5116,31 @@ export function renderFinanceDashboard(data: any): string {
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                ${mmf_accounts.length > 0 ? mmf_accounts.map((m: any, idx: number) => `
+                ${mmf_accounts.length > 0 ? mmf_accounts.map((m: any, idx: number) => {
+                  const applyWht = m.apply_wht_15 !== undefined ? Boolean(m.apply_wht_15) : true;
+                  const autoDaily = m.auto_daily_accrual !== undefined ? Boolean(m.auto_daily_accrual) : true;
+                  const netRatePa = m.net_rate_p_a !== undefined ? Number(m.net_rate_p_a) : Number(((Number(m.interest_rate_p_a || 0)) * (applyWht ? 0.85 : 1)).toFixed(2));
+                  const dailyGrossVal = m.daily_gross !== undefined ? Number(m.daily_gross) : Number(((Number(m.balance || 0) * Number(m.interest_rate_p_a || 0)) / 100 / 365).toFixed(2));
+                  const dailyTaxVal = m.daily_wht_tax !== undefined ? Number(m.daily_wht_tax) : Number((dailyGrossVal - Number(m.daily_return || 0)).toFixed(2));
+                  const weeklyReturnVal = m.weekly_return !== undefined ? Number(m.weekly_return) : Number((Number(m.daily_return || 0) * 7).toFixed(2));
+                  return `
                 <div class="mmf-card-item ${idx >= 3 ? 'hidden ' : ''}bg-white dark:bg-gray-900 p-4 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-xs space-y-3 transition-all">
-                    <div class="flex justify-between items-start">
+                    <div class="flex justify-between items-start gap-2">
                         <div>
-                            <h3 class="font-bold text-gray-900 dark:text-white text-base">${m.name}</h3>
-                            <span class="text-[10px] font-mono text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-semibold"># ${m.account_number || m.account_type}</span>
+                            <h3 class="font-bold text-gray-900 dark:text-white text-base leading-tight">${m.name}</h3>
+                            <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span class="text-[10px] font-mono text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-semibold"># ${m.account_number || m.account_type}</span>
+                                <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded ${autoDaily ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}">
+                                    ${autoDaily ? '🟢 Auto-Daily ON' : '⏸️ Manual'}
+                                </span>
+                            </div>
                         </div>
-                        <span class="text-xs font-black px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
-                            ${m.interest_rate_p_a}% p.a.
-                        </span>
+                        <div class="text-right shrink-0">
+                            <span class="text-xs font-black px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 block">
+                                ${m.interest_rate_p_a}% p.a. ${applyWht ? 'Gross' : 'Net'}
+                            </span>
+                            ${applyWht ? `<span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block mt-0.5">Net: ${netRatePa}% (after 15% WHT)</span>` : ''}
+                        </div>
                     </div>
 
                     <!-- Dual Metric Display: Total MMF Balance vs Accrued Profit -->
@@ -5035,55 +5153,121 @@ export function renderFinanceDashboard(data: any): string {
                         <div class="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800/60">
                             <p class="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wider">💰 Accrued Real Profit</p>
                             <p class="font-black text-emerald-600 dark:text-emerald-400 text-base convertible-amount" data-kes="${m.total_accrued_profit || 0}">+${formatKes(m.total_accrued_profit || 0)}</p>
-                            <p class="text-[9px] text-emerald-600/80 dark:text-emerald-400/80">Est. / mo: <span class="font-bold">${formatKes(m.monthly_return)}</span></p>
+                            <p class="text-[9px] text-emerald-600/80 dark:text-emerald-400/80">30-Day Compounded: <span class="font-bold">+${formatKes(m.monthly_return)}</span></p>
                         </div>
                     </div>
 
-                    <!-- Daily Compounding Pace & Accrued Daily Profits Breakdown -->
-                    <div class="p-2 bg-amber-50/60 dark:bg-amber-950/30 rounded-lg border border-amber-200/50 dark:border-amber-900/40 text-[11px] space-y-1.5">
-                        <div class="flex justify-between items-center text-gray-500 dark:text-gray-400 text-[10px]">
-                            <span>Compounding Pace:</span>
-                            <span>Daily: <strong class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${m.daily_return}">${formatKes(m.daily_return)}</strong> • Annual: <strong class="convertible-amount" data-kes="${m.annual_return}">${formatKes(m.annual_return)}</strong></span>
+                    <!-- Bank-Grade Daily Interest Breakdown Box -->
+                    <div class="p-2.5 bg-amber-50/70 dark:bg-amber-950/30 rounded-xl border border-amber-200/60 dark:border-amber-900/50 text-[11px] space-y-1.5">
+                        <div class="flex justify-between items-center pb-1 border-b border-amber-200/50 dark:border-amber-900/40">
+                            <span class="font-bold text-gray-700 dark:text-gray-200">📈 Added Daily (Net):</span>
+                            <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${m.daily_return}">+${formatKes(m.daily_return)} / day</span>
+                        </div>
+                        ${applyWht ? `
+                        <div class="flex justify-between items-center text-[10px] text-gray-500 dark:text-gray-400">
+                            <span>Gross Daily: <strong>${formatKes(dailyGrossVal)}</strong></span>
+                            <span>15% KRA WHT: <strong class="text-rose-500">-${formatKes(dailyTaxVal)}</strong></span>
+                        </div>
+                        ` : ''}
+                        <div class="flex justify-between items-center text-[10px] text-gray-600 dark:text-gray-300">
+                            <span>7-Day: <strong class="text-emerald-600 dark:text-emerald-400">+${formatKes(weeklyReturnVal)}</strong></span>
+                            <span>30-Day: <strong>+${formatKes(m.monthly_return)}</strong></span>
+                            <span>1-Yr: <strong>+${formatKes(m.annual_return)}</strong></span>
                         </div>
                         ${m.recent_profit_logs && m.recent_profit_logs.length > 0 ? `
                         <div class="pt-1 border-t border-amber-200/40 dark:border-amber-900/40">
-                            <span class="text-[10px] font-bold text-amber-800 dark:text-amber-300 block mb-0.5">📊 Recent Accrued Daily Profits:</span>
+                            <span class="text-[10px] font-bold text-amber-800 dark:text-amber-300 block mb-0.5">📊 Daily Interest Credits (Auto &amp; Manual):</span>
                             <div class="flex flex-wrap gap-1">
                                 ${m.recent_profit_logs.map((l: any) => `
                                 <span class="px-1.5 py-0.5 rounded bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]" title="${l.date}: ${l.description}">
-                                    ${l.day_name || l.date}: +${Number(l.amount).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}
+                                    ${l.day_name || l.date}: +Ksh ${Number(l.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                                 </span>`).join('')}
                             </div>
-                        </div>` : `
-                        <div class="text-[10px] text-gray-400 dark:text-gray-500 italic">
-                            💡 No daily interest logged yet. Deposit today's profit below to track real yield!
-                        </div>`}
+                        </div>` : ''}
                     </div>
 
-                    <!-- Action Bar: 1-Tap Daily Credit + Custom SMS Profit Logger -->
+                    <!-- Action Bar: 1-Tap Daily Credit + Multi-Day Backfill + Edit Rate/WHT -->
                     <div class="space-y-2 pt-1">
-                        <div class="grid grid-cols-2 gap-2">
+                        <div class="grid grid-cols-3 gap-1.5">
                             <form action="/accounts/interest/log/${m.id}" method="POST">
                                 <input type="hidden" name="period" value="daily">
-                                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold py-2 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1" title="Credit estimated daily interest of ${formatKes(m.daily_return)}">
-                                    <span>⚡ Credit Today (${formatKes(m.daily_return)})</span>
+                                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold py-2 px-1.5 rounded-lg text-[11px] transition shadow-xs flex items-center justify-center gap-1" title="Add today's net interest of ${formatKes(m.daily_return)}">
+                                    <span>⚡ +${formatKes(m.daily_return)}</span>
                                 </button>
                             </form>
-                            <button type="button" onclick="toggleMmfProfitForm('${m.id}')" class="w-full bg-amber-50 dark:bg-amber-950/70 hover:bg-amber-100 dark:hover:bg-amber-900 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-bold py-2 rounded-lg text-xs transition active:scale-95 flex items-center justify-center gap-1">
-                                <span>📝 Custom Profit</span>
+                            <button type="button" onclick="toggleMmfProfitForm('${m.id}')" class="w-full bg-amber-50 dark:bg-amber-950/70 hover:bg-amber-100 dark:hover:bg-amber-900 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-bold py-2 px-1.5 rounded-lg text-[11px] transition active:scale-95 flex items-center justify-center gap-1">
+                                <span>📝 Custom</span>
                             </button>
+                            <button type="button" onclick="document.getElementById('mmf-config-form-${m.id}')?.classList.toggle('hidden')" class="w-full bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold py-2 px-1.5 rounded-lg text-[11px] transition active:scale-95 flex items-center justify-center gap-1">
+                                <span>⚙️ Rate / Days</span>
+                            </button>
+                        </div>
+
+                        <!-- ⚙️ Expandable Rate, 15% WHT & Multi-Day Compounding Backfill Drawer -->
+                        <div id="mmf-config-form-${m.id}" class="hidden p-3 bg-slate-900 text-white rounded-xl border border-indigo-500/40 space-y-2.5 text-xs">
+                            <form action="/accounts/interest/config/${m.id}" method="POST" class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-black text-amber-300 text-[11px]">⚙️ Bank / MMF Rate &amp; Tax Settings</span>
+                                    <div class="flex gap-1">
+                                        <button type="button" onclick="this.closest('form').querySelector('input[name=interest_rate_p_a]').value='12.0'" class="px-1.5 py-0.5 bg-slate-800 hover:bg-amber-900 text-amber-300 rounded text-[9px] font-bold">Britam 12%</button>
+                                        <button type="button" onclick="this.closest('form').querySelector('input[name=interest_rate_p_a]').value='13.5'" class="px-1.5 py-0.5 bg-slate-800 hover:bg-emerald-900 text-emerald-300 rounded text-[9px] font-bold">Ziidi 13.5%</button>
+                                        <button type="button" onclick="this.closest('form').querySelector('input[name=interest_rate_p_a]').value='14.5'" class="px-1.5 py-0.5 bg-slate-800 hover:bg-sky-900 text-sky-300 rounded text-[9px] font-bold">Sanlam 14.5%</button>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-300 mb-0.5">Annual Rate (% p.a.)</label>
+                                        <input type="number" step="any" name="interest_rate_p_a" value="${m.interest_rate_p_a}" class="w-full p-1.5 bg-slate-950 border border-slate-700 rounded-lg font-black text-amber-300 text-xs" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-300 mb-0.5">Balance (Ksh)</label>
+                                        <input type="number" step="any" name="balance" value="${m.balance}" class="w-full p-1.5 bg-slate-950 border border-slate-700 rounded-lg font-black text-emerald-300 text-xs" required>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col gap-1.5 pt-1">
+                                    <label class="flex items-center gap-2 cursor-pointer text-[11px] text-slate-200">
+                                        <input type="checkbox" name="apply_wht_15" value="1" ${applyWht ? 'checked' : ''} class="rounded text-amber-500">
+                                        <span>Deduct 15% KRA Withholding Tax (Standard for Britam/Ziidi/Banks)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer text-[11px] text-slate-200">
+                                        <input type="checkbox" name="auto_daily_accrual" value="1" ${autoDaily ? 'checked' : ''} class="rounded text-emerald-500">
+                                        <span>Automatically add daily interest every day at midnight</span>
+                                    </label>
+                                </div>
+                                <button type="submit" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition">
+                                    💾 Save Rate &amp; Auto-Daily Settings
+                                </button>
+                            </form>
+
+                            <div class="pt-2 border-t border-slate-800 space-y-1.5">
+                                <span class="block text-[10px] font-bold text-emerald-300">📅 Backfill Past Daily Compounded Interest:</span>
+                                <div class="grid grid-cols-3 gap-1.5">
+                                    <form action="/accounts/interest/backfill/${m.id}" method="POST">
+                                        <input type="hidden" name="days" value="7">
+                                        <button type="submit" class="w-full py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 rounded-lg text-[10px] font-bold transition">+7 Days</button>
+                                    </form>
+                                    <form action="/accounts/interest/backfill/${m.id}" method="POST">
+                                        <input type="hidden" name="days" value="15">
+                                        <button type="submit" class="w-full py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 rounded-lg text-[10px] font-bold transition">+15 Days</button>
+                                    </form>
+                                    <form action="/accounts/interest/backfill/${m.id}" method="POST">
+                                        <input type="hidden" name="days" value="30">
+                                        <button type="submit" class="w-full py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 rounded-lg text-[10px] font-bold transition">+30 Days</button>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Expandable Custom SMS / App Profit Logger Form -->
                         <form id="mmf-profit-form-${m.id}" action="/accounts/interest/log/${m.id}" method="POST" class="hidden p-2.5 bg-gray-50 dark:bg-gray-800/90 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2 text-xs">
                             <div class="flex justify-between items-center font-bold text-gray-700 dark:text-gray-300 text-[11px]">
                                 <span>Enter Exact Interest Received:</span>
-                                <span class="text-[10px] text-gray-400">(e.g. from Ziidi / M-Pesa SMS)</span>
+                                <span class="text-[10px] text-gray-400">(e.g. from Britam / Ziidi SMS)</span>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <label class="block text-[10px] text-gray-400 mb-0.5">Profit Amount (Ksh)</label>
-                                    <input type="number" step="any" name="amount" placeholder="e.g. 50.00" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-emerald-600 dark:text-emerald-400 text-xs" required>
+                                    <input type="number" step="any" name="amount" value="${m.daily_return}" placeholder="e.g. 11.18" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-emerald-600 dark:text-emerald-400 text-xs" required>
                                 </div>
                                 <div>
                                     <label class="block text-[10px] text-gray-400 mb-0.5">Date Received</label>
@@ -5103,13 +5287,14 @@ export function renderFinanceDashboard(data: any): string {
                         <form action="/accounts/interest/log/${m.id}" method="POST">
                             <input type="hidden" name="period" value="monthly">
                             <button type="submit" class="w-full text-center text-[10px] font-bold text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition py-0.5">
-                                📅 Or Deposit Full Monthly Yield (+${formatKes(m.monthly_return)})
+                                📅 Or Credit 30-Day Compounded Yield (+${formatKes(m.monthly_return)})
                             </button>
                         </form>
                     </div>
-                </div>`).join('') : `
-                <div class="md:col-span-3 p-6 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
-                    <p class="text-xs text-gray-500">No MMF or High-Yield accounts setup yet. Add Ziidi MMF (Safaricom) or Sacco savings below with an APY rate!</p>
+                </div>`;
+                }).join('') : `
+                <div class="md:col-span-3 p-6 text-center bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 space-y-2">
+                    <p class="text-xs text-gray-500">No MMF or High-Yield accounts setup yet. Click <strong>"➕ Add Britam / MMF / Bank"</strong> above to start auto-adding daily interest!</p>
                 </div>`}
             </div>
 
@@ -6496,6 +6681,62 @@ export function renderFinanceDashboard(data: any): string {
                     }
                 }
             });
+        }
+
+        function fillMmfQuickPreset(name, type, rate, bal) {
+            const nameEl = document.getElementById('mmf-quick-name');
+            const typeEl = document.getElementById('mmf-quick-type');
+            const rateEl = document.getElementById('mmf-quick-rate');
+            const balEl = document.getElementById('mmf-quick-bal');
+            if (nameEl) nameEl.value = name;
+            if (typeEl) typeEl.value = type;
+            if (rateEl) rateEl.value = String(rate);
+            if (balEl && (!balEl.value || Number(balEl.value) === 0)) balEl.value = String(bal);
+        }
+
+        function setMmfSimPreset(bal, rate, applyWht) {
+            const balEl = document.getElementById('mmf-sim-balance');
+            const rateEl = document.getElementById('mmf-sim-rate');
+            const whtEl = document.getElementById('mmf-sim-wht');
+            if (balEl) balEl.value = String(bal);
+            if (rateEl) rateEl.value = String(rate);
+            if (whtEl) whtEl.value = applyWht ? '1' : '0';
+            recalcMmfBankSimulator();
+        }
+
+        function recalcMmfBankSimulator() {
+            const bal = Math.max(0, parseFloat(document.getElementById('mmf-sim-balance')?.value || '0') || 0);
+            const grossRate = Math.max(0, parseFloat(document.getElementById('mmf-sim-rate')?.value || '0') || 0);
+            const applyWht = (document.getElementById('mmf-sim-wht')?.value || '1') === '1';
+            const netRate = applyWht ? grossRate * 0.85 : grossRate;
+
+            const dailyGross = (bal * (grossRate / 100)) / 365;
+            const dailyNet = (bal * (netRate / 100)) / 365;
+            const dailyTax = Math.max(0, dailyGross - dailyNet);
+
+            const dailyNetFactor = netRate / 100 / 365;
+            const weeklyNet = bal * (Math.pow(1 + dailyNetFactor, 7) - 1);
+            const monthlyNet = bal * (Math.pow(1 + dailyNetFactor, 30) - 1);
+            const annualNet = bal * (Math.pow(1 + dailyNetFactor, 365) - 1);
+
+            const fmt = (n) => 'Ksh ' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const dNetEl = document.getElementById('mmf-sim-daily-net');
+            const dGrossEl = document.getElementById('mmf-sim-daily-gross');
+            const mNetEl = document.getElementById('mmf-sim-monthly-net');
+            const wNetEl = document.getElementById('mmf-sim-weekly-net');
+            const aNetEl = document.getElementById('mmf-sim-annual-net');
+            const rLblEl = document.getElementById('mmf-sim-net-rate-lbl');
+
+            if (dNetEl) dNetEl.textContent = '+' + fmt(dailyNet) + ' / day';
+            if (dGrossEl) {
+                dGrossEl.textContent = applyWht
+                    ? ('Gross: ' + fmt(dailyGross) + ' − WHT: ' + fmt(dailyTax))
+                    : ('Exact Net Rate (0% WHT deducted)');
+            }
+            if (mNetEl) mNetEl.textContent = '+' + fmt(monthlyNet) + ' / mo';
+            if (wNetEl) wNetEl.textContent = '7-Day: +' + fmt(weeklyNet);
+            if (aNetEl) aNetEl.textContent = '+' + fmt(annualNet) + ' / yr';
+            if (rLblEl) rLblEl.textContent = 'Net Rate: ' + netRate.toFixed(2) + '% p.a.';
         }
 
         document.addEventListener('click', (e) => {

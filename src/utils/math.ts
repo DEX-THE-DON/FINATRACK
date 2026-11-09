@@ -40,6 +40,144 @@ export function calculateDailyYield(balance: number | string | Decimal, apyPerce
   return calculateAnnualYield(balance, apyPercent).dividedBy(365);
 }
 
+export interface BankMmfYieldBreakdown {
+  grossRatePa: number;
+  netRatePa: number;
+  applyWht15: boolean;
+  dailyGross: number;
+  dailyWhtTax: number;
+  dailyNet: number;
+  weeklyNetCompounded: number;
+  monthlyGrossCompounded: number;
+  monthlyNetCompounded: number;
+  annualGrossCompounded: number;
+  annualNetCompounded: number;
+  effectiveNetApyPct: number;
+}
+
+/**
+ * Calculates daily, weekly, monthly, and annual interest the exact way Kenyan MMFs
+ * (Britam, Ziidi, Sanlam, CIC, Etica) and Banks calculate it:
+ * - Daily Accrual = Balance * (Rate p.a. / 100) / 365
+ * - Less 15% KRA Withholding Tax (WHT) when applyWht15 is true
+ *   (e.g. Ksh 40,000 in Britam @ 12.0% gross -> Ksh 13.15 gross/day - Ksh 1.97 WHT = Ksh 11.18 net added daily)
+ * - Daily compounding over 7, 30, and 365 days: Balance * ((1 + dailyRate)^N - 1)
+ */
+export function calculateBankMmfYieldBreakdown(
+  balance: number | string | Decimal,
+  ratePa: number | string | Decimal,
+  applyWht15: boolean = true,
+  daysInMonth: number = 30
+): BankMmfYieldBreakdown {
+  const bal = Math.max(0, toDecimal(balance).toNumber());
+  const grossRate = Math.max(0, toDecimal(ratePa).toNumber());
+  const netRate = applyWht15 ? grossRate * 0.85 : grossRate;
+
+  const dailyGrossRate = grossRate / 100 / 365;
+  const dailyNetRate = netRate / 100 / 365;
+
+  const dailyGross = bal * dailyGrossRate;
+  const dailyNet = bal * dailyNetRate;
+  const dailyWhtTax = Math.max(0, dailyGross - dailyNet);
+
+  // Daily compounding (Actual/365) as used by Kenyan MMF fund managers
+  const weeklyNetCompounded = bal * (Math.pow(1 + dailyNetRate, 7) - 1);
+  const monthlyGrossCompounded = bal * (Math.pow(1 + dailyGrossRate, daysInMonth) - 1);
+  const monthlyNetCompounded = bal * (Math.pow(1 + dailyNetRate, daysInMonth) - 1);
+  const annualGrossCompounded = bal * (Math.pow(1 + dailyGrossRate, 365) - 1);
+  const annualNetCompounded = bal * (Math.pow(1 + dailyNetRate, 365) - 1);
+  const effectiveNetApyPct = (Math.pow(1 + dailyNetRate, 365) - 1) * 100;
+
+  return {
+    grossRatePa: Number(grossRate.toFixed(2)),
+    netRatePa: Number(netRate.toFixed(2)),
+    applyWht15,
+    dailyGross: Number(dailyGross.toFixed(2)),
+    dailyWhtTax: Number(dailyWhtTax.toFixed(2)),
+    dailyNet: Number(dailyNet.toFixed(2)),
+    weeklyNetCompounded: Number(weeklyNetCompounded.toFixed(2)),
+    monthlyGrossCompounded: Number(monthlyGrossCompounded.toFixed(2)),
+    monthlyNetCompounded: Number(monthlyNetCompounded.toFixed(2)),
+    annualGrossCompounded: Number(annualGrossCompounded.toFixed(2)),
+    annualNetCompounded: Number(annualNetCompounded.toFixed(2)),
+    effectiveNetApyPct: Number(effectiveNetApyPct.toFixed(2)),
+  };
+}
+
+/**
+ * Infers realistic Kenyan MMF / Bank / SACCO annual interest rates (% p.a.)
+ * when an account has interest_rate_p_a = 0 or unset.
+ */
+export function inferKenyanInstitutionRate(accountName: string, accountType: string, explicitRate?: number | null): {
+  ratePa: number;
+  institutionLabel: string;
+  isMmfOrYieldAccount: boolean;
+} {
+  const cleanExplicit = Number(explicitRate || 0);
+  const name = String(accountName || '').toLowerCase();
+  const type = String(accountType || '').toUpperCase();
+
+  const isKnownMmfName =
+    /britam|ziidi|sanlam|cic|cytonn|etica|lofty|corban|kuza|nabo|apollo|old mutual|madison|icea|jubilee|genafrica|orient|dry associates|zimele|faulu|m-shwari|mshwari|kcb m-pesa|loop|mmf|money market|yield|lock|sacco|stima|mwalimu|tower|unaitas|hazina|harambee|afya|shirika/i.test(
+      name
+    );
+
+  const isYieldType = ['MMF', 'SAVINGS', 'INVESTMENT'].includes(type);
+  const isBankWithYield = type === 'BANK' && (cleanExplicit > 0 || isKnownMmfName || /saving|fixed|call|goal|deposit|interest/i.test(name));
+
+  if (cleanExplicit > 0) {
+    return {
+      ratePa: cleanExplicit,
+      institutionLabel: isKnownMmfName ? 'Kenyan MMF / Yield Rate' : 'Custom Bank / MMF Rate',
+      isMmfOrYieldAccount: true,
+    };
+  }
+
+  if (/britam/i.test(name)) {
+    // Britam MMF: 12.0% Gross p.a. -> less 15% WHT (10.2% Net) = Ksh 11.18/day on Ksh 40,000!
+    return { ratePa: 12.0, institutionLabel: 'Britam MMF Standard Rate', isMmfOrYieldAccount: true };
+  }
+  if (/ziidi/i.test(name)) {
+    return { ratePa: 13.5, institutionLabel: 'Safaricom Ziidi MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (/sanlam/i.test(name)) {
+    return { ratePa: 14.5, institutionLabel: 'Sanlam MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (/etica/i.test(name)) {
+    return { ratePa: 15.5, institutionLabel: 'Etica MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (/cytonn/i.test(name)) {
+    return { ratePa: 16.0, institutionLabel: 'Cytonn MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (/lofty|corban|kuza|nabo|apollo/i.test(name)) {
+    return { ratePa: 14.8, institutionLabel: 'Tier-1 High-Yield MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (/cic/i.test(name)) {
+    return { ratePa: 13.2, institutionLabel: 'CIC MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (/old mutual|madison|icea|jubilee|genafrica|zimele/i.test(name)) {
+    return { ratePa: 13.0, institutionLabel: 'Kenyan MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (/sacco|stima|mwalimu|tower|unaitas|hazina|harambee|afya/i.test(name)) {
+    return { ratePa: 12.0, institutionLabel: 'Kenyan SACCO Dividend/Interest Rate', isMmfOrYieldAccount: true };
+  }
+  if (/m-shwari|mshwari|kcb m-pesa|loop/i.test(name)) {
+    return { ratePa: 7.5, institutionLabel: 'Mobile Lock Savings Rate', isMmfOrYieldAccount: true };
+  }
+  if (type === 'MMF' || type === 'INVESTMENT') {
+    return { ratePa: 12.5, institutionLabel: 'Standard Kenyan MMF Rate', isMmfOrYieldAccount: true };
+  }
+  if (type === 'SAVINGS' || isBankWithYield) {
+    return { ratePa: 9.0, institutionLabel: 'Bank Savings Daily Accrual Rate', isMmfOrYieldAccount: true };
+  }
+
+  return {
+    ratePa: 0,
+    institutionLabel: 'Current / Transactional Wallet',
+    isMmfOrYieldAccount: false,
+  };
+}
+
 // ------------------------------------------------------------------------------
 // WATERFALL DYNAMIC SPLIT ALLOCATOR (ZERO CENT LEAKAGE)
 // ------------------------------------------------------------------------------

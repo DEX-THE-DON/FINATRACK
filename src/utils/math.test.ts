@@ -236,6 +236,16 @@ console.assert(isTransferTransaction({ transaction_type: 'EXPENSE', category: 'F
 console.assert(isTransferTransaction({ transaction_type: 'INCOME', category: 'Rider & Boda Deliveries' }) === false, 'Deliveries should NOT be transfer');
 console.log('✅ Internal Transfer Detection: Accurately isolates internal transfers from operating expenses & income');
 
+// Test 21: Kenyan Bank & MMF Daily Compounding Interest (Britam Ksh 40,000 example)
+import { calculateBankMmfYieldBreakdown, inferKenyanInstitutionRate } from './math';
+const britamInferred = inferKenyanInstitutionRate('Britam Money Market Fund', 'MMF', 0);
+console.assert(britamInferred.ratePa === 12.0, `Britam inferred rate should be 12.0, got ${britamInferred.ratePa}`);
+const britam40k = calculateBankMmfYieldBreakdown(40000, britamInferred.ratePa, true, 30);
+console.assert(britam40k.dailyGross === 13.15, `Britam 40k daily gross should be 13.15, got ${britam40k.dailyGross}`);
+console.assert(britam40k.dailyWhtTax === 1.97, `Britam 40k daily WHT should be 1.97, got ${britam40k.dailyWhtTax}`);
+console.assert(britam40k.dailyNet === 11.18, `Britam 40k daily net should be 11.18 (>= Ksh 11/day), got ${britam40k.dailyNet}`);
+console.log(`✅ Britam MMF (Ksh 40,000 @ ${britam40k.grossRatePa}% gross / ${britam40k.netRatePa}% net): Gross=Ksh ${britam40k.dailyGross}/d, WHT=-Ksh ${britam40k.dailyWhtTax}/d, Net Added Daily=+Ksh ${britam40k.dailyNet}/d, 30-Day Compounded=+Ksh ${britam40k.monthlyNetCompounded}`);
+
 console.log('🎉 ALL PRECISION MATH TESTS PASSED 100%!');
 
 
