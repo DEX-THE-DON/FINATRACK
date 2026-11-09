@@ -18,7 +18,8 @@ import { parseMultipleMpesaMessages } from '../utils/mpesa';
 import { parseMultipleBankMessages } from '../utils/bankSms';
 import { renderFinancialStatement } from '../views/statementView';
 import { Decimal } from 'decimal.js';
-import { getStrictSaverConfig, saveStrictSaverConfigCookie } from './rider';
+import { getStrictSaverConfig, saveStrictSaverConfigCookie, getSavedRiderLogs, saveRiderLogsCookie } from './rider';
+import { getSavedSalariedLoans, saveSalariedLoansCookie, SalariedLoanRecord } from './salaried';
 
 export const financeRoutes = new Hono<{ Bindings: AppEnv }>();
 
@@ -1117,8 +1118,8 @@ financeRoutes.post('/goals/clear-all', async (c) => {
 financeRoutes.post('/debts/create', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
-  const personName = String(body['person_name'] || '').trim();
-  const debtType = String(body['debt_type'] || 'I_OWE'); // 'I_OWE' (Borrowed) or 'OWED_TO_ME' (Lent)
+  const personName = String(body['person_name'] || '').trim() || 'Lender / Counterparty';
+  const debtType = String(body['debt_type'] || 'I_OWE') === 'OWED_TO_ME' ? 'OWED_TO_ME' : 'I_OWE';
   const rawTotal = parseFloat(String(body['total_amount'] || '0.0')) || 0.0;
   const rawPaid = parseFloat(String(body['paid_amount'] || '0.0')) || 0.0;
   const issuedAt = String(body['issued_at'] || new Date().toISOString().slice(0, 10));
@@ -1128,23 +1129,45 @@ financeRoutes.post('/debts/create', async (c) => {
   const linkAccount = body['link_account'] === '1' || body['link_account'] === 'on';
 
   const isPaid = rawPaid >= rawTotal && rawTotal > 0;
+  const statusVal: 'ACTIVE' | 'PAID' = isPaid ? 'PAID' : 'ACTIVE';
 
-  const { data: newDebt, error } = await supabase.from('debts').insert({
+  let recordId = `loan-${Date.now()}`;
+  try {
+    const { data: newDebt, error } = await supabase.from('debts').insert({
+      ...(userId ? { user_id: userId } : {}),
+      person_name: personName,
+      debt_type: debtType,
+      total_amount: rawTotal,
+      paid_amount: rawPaid,
+      issued_at: issuedAt,
+      due_at: dueAt,
+      status: statusVal,
+      description,
+    }).select().single();
+
+    if (!error && newDebt && newDebt.id) {
+      recordId = String(newDebt.id);
+    }
+  } catch (e) {}
+
+  // Also save in cookie so loans always appear in Upcoming Loans & Loans card even if DB is offline/restricted
+  const currentCookieLoans = getSavedSalariedLoans(c);
+  const newCookieLoan: SalariedLoanRecord = {
+    id: recordId,
     ...(userId ? { user_id: userId } : {}),
     person_name: personName,
     debt_type: debtType,
+    loan_category: debtType === 'OWED_TO_ME' ? 'Personal Credit / Lent' : 'Personal / Mobile Loan',
     total_amount: rawTotal,
     paid_amount: rawPaid,
+    monthly_installment: 0,
     issued_at: issuedAt,
     due_at: dueAt,
-    status: isPaid ? 'PAID' : 'ACTIVE',
-    description,
-  }).select().single();
-
-  if (error) {
-    console.error('Failed to create debt:', error);
-    return c.redirect(`/?toast=${encodeURIComponent('Failed to save debt: ' + error.message)}`, 303);
-  }
+    status: statusVal,
+    description: description || undefined,
+    created_at: new Date().toISOString(),
+  };
+  saveSalariedLoansCookie(c, [newCookieLoan, ...currentCookieLoans.filter((l) => String(l.id) !== recordId)]);
 
   // If linking account for initial loan disbursement
   if (linkAccount && accountId && rawTotal > 0) {
@@ -1180,8 +1203,23 @@ financeRoutes.post('/debts/create', async (c) => {
     }
   }
 
+  // If initial paid_amount > 0 on a borrowed loan, record that repayment in expenses
+  if (rawPaid > 0 && debtType === 'I_OWE') {
+    try {
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        ...(accountId ? { account_id: accountId } : {}),
+        transaction_type: 'EXPENSE',
+        category: 'Debt & Loan Repayments',
+        amount: rawPaid,
+        date: issuedAt.slice(0, 10),
+        description: `Loan Repayment: ${personName}`,
+      });
+    } catch (e) {}
+  }
+
   const label = debtType === 'I_OWE' ? 'Borrowed loan' : 'Lending record';
-  return c.redirect(`/?toast=${encodeURIComponent(`${label} saved successfully!`)}`, 303);
+  return c.redirect(`/?toast=${encodeURIComponent(`✅ ${label} (${personName}) saved & synced with Upcoming Deadlines!`)}#debts-card`, 303);
 });
 
 financeRoutes.post('/debts/repay/:id', async (c) => {
@@ -1192,79 +1230,151 @@ financeRoutes.post('/debts/repay/:id', async (c) => {
   const accountId = body['account_id'] ? String(body['account_id']).trim() : null;
   const paymentDate = String(body['payment_date'] || new Date().toISOString().slice(0, 10));
 
-  const { data: debt } = await supabase.from('debts').select('*').eq('id', id).single();
-  if (debt && rawAmt > 0) {
-    const newPaid = toDecimal(debt.paid_amount).plus(rawAmt).toNumber();
-    const isPaid = newPaid >= Number(debt.total_amount);
-    
-    await supabase.from('debts').update({
-      paid_amount: newPaid,
-      status: isPaid ? 'PAID' : 'ACTIVE',
-      updated_at: new Date().toISOString(),
-    }).eq('id', id);
+  const cookieLoans = getSavedSalariedLoans(c);
+  const cookieIdx = cookieLoans.findIndex((l) => String(l.id) === String(id));
+  const { data: dbDebt } = await supabase.from('debts').select('*').eq('id', id).single();
 
-    // Account ledger sync
+  const targetDebt: any = dbDebt || (cookieIdx >= 0 ? cookieLoans[cookieIdx] : null);
+  if (targetDebt && rawAmt > 0) {
+    const newPaid = toDecimal(targetDebt.paid_amount || 0).plus(rawAmt).toNumber();
+    const isPaid = newPaid >= Number(targetDebt.total_amount || 0);
+    const newStatus: 'ACTIVE' | 'PAID' = isPaid ? 'PAID' : 'ACTIVE';
+
+    try {
+      await supabase.from('debts').update({
+        paid_amount: newPaid,
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id);
+    } catch (e) {}
+
+    if (cookieIdx >= 0) {
+      cookieLoans[cookieIdx] = {
+        ...cookieLoans[cookieIdx],
+        paid_amount: newPaid,
+        status: newStatus,
+      };
+      saveSalariedLoansCookie(c, cookieLoans);
+    } else {
+      saveSalariedLoansCookie(c, [
+        {
+          id: String(targetDebt.id),
+          person_name: String(targetDebt.person_name || 'Lender'),
+          debt_type: targetDebt.debt_type === 'OWED_TO_ME' ? 'OWED_TO_ME' : 'I_OWE',
+          loan_category: 'Personal / Mobile Loan',
+          total_amount: Number(targetDebt.total_amount) || 0,
+          paid_amount: newPaid,
+          issued_at: String(targetDebt.issued_at || paymentDate),
+          due_at: String(targetDebt.due_at || paymentDate),
+          status: newStatus,
+          description: targetDebt.description,
+        },
+        ...cookieLoans,
+      ]);
+    }
+
+    // Account balance update if account was selected
     if (accountId) {
       const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
       if (acc) {
-        if (debt.debt_type === 'I_OWE') {
-          // Repaying a loan I borrowed -> expense from account
+        if (targetDebt.debt_type === 'I_OWE') {
           const newBal = toDecimal(acc.balance).minus(rawAmt).toNumber();
           await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
-          await supabase.from('transactions').insert({
-            ...(userId ? { user_id: userId } : {}),
-            account_id: accountId,
-            transaction_type: 'EXPENSE',
-            category: 'Debt & Loan Repayments',
-            amount: rawAmt,
-            date: paymentDate,
-            description: `Loan Repayment: ${debt.person_name}`,
-          });
         } else {
-          // Receiving repayment for money I lent -> income to account
           const newBal = toDecimal(acc.balance).plus(rawAmt).toNumber();
           await supabase.from('accounts').update({ balance: newBal }).eq('id', accountId);
-          await supabase.from('transactions').insert({
-            ...(userId ? { user_id: userId } : {}),
-            account_id: accountId,
-            transaction_type: 'INCOME',
-            category: 'Debt Collections',
-            amount: rawAmt,
-            date: paymentDate,
-            description: `Debt Recovery from: ${debt.person_name}`,
-          });
         }
       }
     }
+
+    // Always log the repayment/recovery in transactions so Monthly Expenses & Income stay in sync
+    try {
+      if (targetDebt.debt_type === 'I_OWE') {
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          ...(accountId ? { account_id: accountId } : {}),
+          transaction_type: 'EXPENSE',
+          category: 'Debt & Loan Repayments',
+          amount: rawAmt,
+          date: paymentDate,
+          description: `Loan Repayment: ${targetDebt.person_name}`,
+        });
+      } else {
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          ...(accountId ? { account_id: accountId } : {}),
+          transaction_type: 'INCOME',
+          category: 'Debt Collections',
+          amount: rawAmt,
+          date: paymentDate,
+          description: `Debt Recovery from: ${targetDebt.person_name}`,
+        });
+      }
+    } catch (e) {}
   }
 
-  return c.redirect('/?toast=Payment+recorded+and+ledger+updated', 303);
+  return c.redirect('/?toast=Payment+recorded+and+expenses+synced#debts-card', 303);
 });
 
 financeRoutes.post('/debts/toggle-status/:id', async (c) => {
-  const { supabase } = await getRequestContext(c);
+  const { supabase, userId } = await getRequestContext(c);
   const id = c.req.param('id');
-  const { data: debt } = await supabase.from('debts').select('*').eq('id', id).single();
+  const cookieLoans = getSavedSalariedLoans(c);
+  const cookieIdx = cookieLoans.findIndex((l) => String(l.id) === String(id));
+  const { data: dbDebt } = await supabase.from('debts').select('*').eq('id', id).single();
+
+  const debt: any = dbDebt || (cookieIdx >= 0 ? cookieLoans[cookieIdx] : null);
   if (debt) {
-    const newStatus = debt.status === 'PAID' ? 'ACTIVE' : 'PAID';
-    const newPaid = newStatus === 'PAID' ? Number(debt.total_amount) : 0.00;
-    await supabase.from('debts').update({
-      status: newStatus,
-      paid_amount: newPaid,
-      updated_at: new Date().toISOString(),
-    }).eq('id', id);
+    const newStatus: 'ACTIVE' | 'PAID' = debt.status === 'PAID' ? 'ACTIVE' : 'PAID';
+    const prevPaid = Number(debt.paid_amount || 0);
+    const totalAmt = Number(debt.total_amount || 0);
+    const newPaid = newStatus === 'PAID' ? totalAmt : 0.00;
+    const settledDelta = Math.max(0, totalAmt - prevPaid);
+
+    try {
+      await supabase.from('debts').update({
+        status: newStatus,
+        paid_amount: newPaid,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id);
+    } catch (e) {}
+
+    if (cookieIdx >= 0) {
+      cookieLoans[cookieIdx] = {
+        ...cookieLoans[cookieIdx],
+        status: newStatus,
+        paid_amount: newPaid,
+      };
+      saveSalariedLoansCookie(c, cookieLoans);
+    }
+
+    if (newStatus === 'PAID' && settledDelta > 0) {
+      try {
+        await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          transaction_type: debt.debt_type === 'I_OWE' ? 'EXPENSE' : 'INCOME',
+          category: debt.debt_type === 'I_OWE' ? 'Debt & Loan Repayments' : 'Debt Collections',
+          amount: settledDelta,
+          date: new Date().toISOString().slice(0, 10),
+          description: debt.debt_type === 'I_OWE'
+            ? `Loan Repayment: ${debt.person_name} (Marked Settled)`
+            : `Debt Recovery from: ${debt.person_name} (Marked Settled)`,
+        });
+      } catch (e) {}
+    }
   }
-  return c.redirect('/?toast=Debt+status+updated', 303);
+  return c.redirect('/?toast=Debt+status+updated#debts-card', 303);
 });
 
 financeRoutes.post('/debts/delete/:id', async (c) => {
   const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
-  const { error } = await supabase.from('debts').delete().eq('id', id);
-  if (error) {
-    return c.redirect(`/?toast=${encodeURIComponent('Failed to delete debt: ' + error.message)}`, 303);
-  }
-  return c.redirect('/?toast=Debt+record+deleted', 303);
+  try {
+    await supabase.from('debts').delete().eq('id', id);
+  } catch (e) {}
+  const remainingCookieLoans = getSavedSalariedLoans(c).filter((l) => String(l.id) !== String(id));
+  saveSalariedLoansCookie(c, remainingCookieLoans);
+  return c.redirect('/?toast=Debt+record+deleted#debts-card', 303);
 });
 
 
@@ -2539,6 +2649,183 @@ financeRoutes.post('/finance/bills/delete/:id', async (c) => {
   saveRecurringBillsCookie(c, bills);
   return c.redirect('/?toast=Recurring+bill+removed#recurring-bills-card', 303);
 });
+
+// ------------------------------------------------------------------------------
+// QUICK DAILY LOGGER (1-TAP DAILY EARNINGS & EXPENSES CLOSEOUT FROM FINANCE HUB)
+// ------------------------------------------------------------------------------
+financeRoutes.post('/finance/daily-logger', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+
+  const shiftDate = String(body['date'] || new Date().toISOString().slice(0, 10));
+  const totalEarned = Math.max(0, parseFloat(String(body['total_earned'] || '0')) || 0);
+  const fuelCost = Math.max(0, parseFloat(String(body['fuel_cost'] || '0')) || 0);
+  const foodSpent = Math.max(0, parseFloat(String(body['food_spent'] || '0')) || 0);
+  const airtimeSpent = Math.max(0, parseFloat(String(body['airtime_spent'] || '0')) || 0);
+  const maintenanceCost = Math.max(0, parseFloat(String(body['maintenance_cost'] || '0')) || 0);
+  const miscExpenses = Math.max(0, parseFloat(String(body['misc_expenses'] || '0')) || 0);
+  const kilometers = Math.max(0, parseFloat(String(body['kilometers'] || '0')) || 0);
+  const notes = String(body['notes'] || '').trim() || 'Daily Logger Closeout';
+  let accountId = body['account_id'] ? String(body['account_id']).trim() : null;
+
+  const totalExpenses = toDecimal(fuelCost)
+    .plus(foodSpent)
+    .plus(airtimeSpent)
+    .plus(maintenanceCost)
+    .plus(miscExpenses)
+    .toNumber();
+  const netProfit = toDecimal(totalEarned).minus(totalExpenses).toNumber();
+
+  // Auto-select primary account if none selected
+  if (!accountId) {
+    try {
+      const { data: allAccs } = await supabase.from('accounts').select('*');
+      if (allAccs && allAccs.length > 0) {
+        const primary =
+          allAccs.find((a: any) => /m-pesa|mpesa|wallet|cash/i.test(String(a.name || ''))) ||
+          allAccs[0];
+        if (primary && primary.id) {
+          accountId = String(primary.id);
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 1. Insert into rider_logs (DB + Cookie) so Rider Command Center & Daily Logger stay 100% synced
+  let primaryLogId = `shift-${Date.now()}`;
+  try {
+    const { data: insertedLog, error: logErr } = await supabase
+      .from('rider_logs')
+      .insert({
+        ...(userId ? { user_id: userId } : {}),
+        date: shiftDate,
+        total_earned: totalEarned,
+        fuel_cost: fuelCost,
+        food_spent: foodSpent,
+        airtime_spent: airtimeSpent,
+        maintenance_cost: maintenanceCost,
+        misc_expenses: miscExpenses,
+        kilometers,
+        net_profit: netProfit,
+        notes,
+      })
+      .select()
+      .single();
+    if (!logErr && insertedLog && insertedLog.id) {
+      primaryLogId = String(insertedLog.id);
+    }
+  } catch (e) {}
+
+  const existingLogs = getSavedRiderLogs(c);
+  const cookieEntry = {
+    id: primaryLogId,
+    ...(userId ? { user_id: userId } : {}),
+    date: shiftDate,
+    total_earned: totalEarned,
+    fuel_cost: fuelCost,
+    food_spent: foodSpent,
+    airtime_spent: airtimeSpent,
+    maintenance_cost: maintenanceCost,
+    misc_expenses: miscExpenses,
+    kilometers,
+    net_profit: netProfit,
+    notes,
+    created_at: new Date().toISOString(),
+  };
+  saveRiderLogsCookie(c, [cookieEntry, ...existingLogs]);
+
+  // 2. Insert Income & Expense records into `transactions`
+  const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(primaryLogId);
+  const baseRow: any = {
+    ...(userId ? { user_id: userId } : {}),
+    ...(accountId ? { account_id: accountId } : {}),
+    ...(isValidUuid ? { rider_log_id: primaryLogId } : {}),
+    date: shiftDate,
+  };
+
+  const txInserts: any[] = [];
+  if (totalEarned > 0) {
+    txInserts.push({
+      ...baseRow,
+      transaction_type: 'INCOME',
+      category: 'Rider Earnings',
+      amount: totalEarned,
+      description: `Shift Gross Earnings (${shiftDate})`,
+    });
+  }
+  if (fuelCost > 0) {
+    txInserts.push({
+      ...baseRow,
+      transaction_type: 'EXPENSE',
+      category: 'Fuel',
+      amount: fuelCost,
+      description: `Shift Fuel (${shiftDate})`,
+    });
+  }
+  if (foodSpent > 0) {
+    txInserts.push({
+      ...baseRow,
+      transaction_type: 'EXPENSE',
+      category: 'Food & Lunch',
+      amount: foodSpent,
+      description: `Shift Food & Lunch (${shiftDate})`,
+    });
+  }
+  if (airtimeSpent > 0) {
+    txInserts.push({
+      ...baseRow,
+      transaction_type: 'EXPENSE',
+      category: 'Airtime & Data',
+      amount: airtimeSpent,
+      description: `Shift Airtime & Data (${shiftDate})`,
+    });
+  }
+  if (maintenanceCost > 0) {
+    txInserts.push({
+      ...baseRow,
+      transaction_type: 'EXPENSE',
+      category: 'Maintenance & Spares',
+      amount: maintenanceCost,
+      description: `Shift Maintenance (${shiftDate})`,
+    });
+  }
+  if (miscExpenses > 0) {
+    txInserts.push({
+      ...baseRow,
+      transaction_type: 'EXPENSE',
+      category: 'Misc Expenses',
+      amount: miscExpenses,
+      description: `Shift Misc (${shiftDate})`,
+    });
+  }
+
+  if (txInserts.length > 0) {
+    try {
+      const { error: txErr } = await supabase.from('transactions').insert(txInserts);
+      if (txErr) {
+        const cleanTxInserts = txInserts.map(({ rider_log_id, ...rest }) => rest);
+        await supabase.from('transactions').insert(cleanTxInserts);
+      }
+    } catch (e) {}
+  }
+
+  // 3. Update account balance by Net Profit if an account was linked
+  if (accountId && netProfit !== 0) {
+    try {
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (acc) {
+        const updatedBal = toDecimal(acc.balance).plus(netProfit).toNumber();
+        await supabase.from('accounts').update({ balance: updatedBal }).eq('id', accountId);
+      }
+    } catch (e) {}
+  }
+
+  return c.redirect(
+    `/?toast=${encodeURIComponent(`✅ Daily Logger Synced! Earned Ksh ${totalEarned.toLocaleString()} | Expenses Ksh ${totalExpenses.toLocaleString()} | Net Ksh ${netProfit.toLocaleString()}`)}#tx-card`,
+    303
+  );
+});
+
 
 
 

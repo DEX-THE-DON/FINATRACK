@@ -199,8 +199,16 @@ export function resolveEffectiveSalariedLoans(c: any, dbDebts: any[] = []): Sala
     if (!cl || !cl.id) continue;
     const existing = byId.get(String(cl.id));
     if (existing) {
+      const mergedPaid = Math.max(Number(existing.paid_amount) || 0, Number(cl.paid_amount) || 0);
+      const mergedTotal = Number(existing.total_amount) || Number(cl.total_amount) || 0;
+      const mergedStatus =
+        existing.status === 'PAID' || cl.status === 'PAID' || (mergedTotal > 0 && mergedPaid >= mergedTotal)
+          ? 'PAID'
+          : 'ACTIVE';
       byId.set(String(cl.id), {
         ...existing,
+        paid_amount: mergedPaid,
+        status: mergedStatus,
         loan_category: cl.loan_category || existing.loan_category,
         monthly_installment: cl.monthly_installment || existing.monthly_installment,
       });
@@ -640,34 +648,33 @@ salariedRoutes.post('/salaried/loans/repay/:id', async (c) => {
     ]);
   }
 
-  // Optional Account Sync
-  if (accountId) {
-    try {
+  // Always record transaction in ledger (and update account balance if an account was selected)
+  try {
+    if (accountId) {
       const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
       if (acc) {
         const currentBal = toDecimal(acc.balance);
-        // Repaying a loan I_OWE reduces account balance; collecting a credit OWED_TO_ME increases account balance
         const updatedBal =
           targetLoan.debt_type === 'I_OWE' ? currentBal.minus(repayAmount) : currentBal.plus(repayAmount);
         await supabase.from('accounts').update({ balance: updatedBal.toFixed(2) }).eq('id', accountId);
-
-        await supabase.from('transactions').insert([
-          {
-            ...(userId ? { user_id: userId } : {}),
-            account_id: accountId,
-            transaction_type: targetLoan.debt_type === 'I_OWE' ? 'EXPENSE' : 'INCOME',
-            category: targetLoan.debt_type === 'I_OWE' ? 'Loan Repayment' : 'Credit Collection',
-            amount: toDecimal(repayAmount).toFixed(2),
-            description:
-              targetLoan.debt_type === 'I_OWE'
-                ? `Loan repayment to ${targetLoan.person_name}`
-                : `Collected credit repayment from ${targetLoan.person_name}`,
-            date: new Date().toISOString().slice(0, 10),
-          },
-        ]);
       }
-    } catch (e) {}
-  }
+    }
+
+    await supabase.from('transactions').insert([
+      {
+        ...(userId ? { user_id: userId } : {}),
+        ...(accountId ? { account_id: accountId } : {}),
+        transaction_type: targetLoan.debt_type === 'I_OWE' ? 'EXPENSE' : 'INCOME',
+        category: targetLoan.debt_type === 'I_OWE' ? 'Debt & Loan Repayments' : 'Debt Collections',
+        amount: toDecimal(repayAmount).toFixed(2),
+        description:
+          targetLoan.debt_type === 'I_OWE'
+            ? `Loan Repayment: ${targetLoan.person_name}`
+            : `Debt Recovery from: ${targetLoan.person_name}`,
+        date: new Date().toISOString().slice(0, 10),
+      },
+    ]);
+  } catch (e) {}
 
   const actionVerb = targetLoan.debt_type === 'I_OWE' ? 'Repaid' : 'Collected';
   return c.redirect(

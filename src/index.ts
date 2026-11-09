@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext, inMemoryStore } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
-import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, reconcileRiderShiftLogsWithTransactions, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
 import { exportRoutes } from './routes/export';
@@ -36,6 +36,158 @@ import { Decimal } from 'decimal.js';
 export const app = new Hono<{ Bindings: AppEnv }>();
 
 const USD_TO_KES = 129.0;
+
+export interface SmartNotificationItem {
+  id: string;
+  category: 'DAILY_LOGGER' | 'UPCOMING_LOAN' | 'RECURRING_BILL' | 'FLEET_ALERT';
+  urgency: 'OVERDUE' | 'CRITICAL' | 'WARNING' | 'SAFE';
+  icon: string;
+  title: string;
+  subtitle: string;
+  amount_kes?: number;
+  action_href: string;
+  action_label: string;
+}
+
+export function buildSmartNotifications(opts: {
+  todayIso: string;
+  currentDay: number;
+  riderLogs: any[];
+  enrichedDebts: any[];
+  recurringBills: any[];
+  complianceDeadlines: any[];
+  odometerConfig?: any;
+  isRiderView?: boolean;
+}): SmartNotificationItem[] {
+  const items: SmartNotificationItem[] = [];
+  const todayShifts = (opts.riderLogs || []).filter((l: any) => String(l.date || '').slice(0, 10) === opts.todayIso);
+  const todayGross = todayShifts.reduce((s: number, l: any) => s + Number(l.total_earned || 0), 0);
+  const todayExp = todayShifts.reduce(
+    (s: number, l: any) =>
+      s +
+      Number(l.fuel_cost || 0) +
+      Number(l.food_spent || 0) +
+      Number(l.airtime_spent || 0) +
+      Number(l.maintenance_cost || 0) +
+      Number(l.misc_expenses || 0),
+    0
+  );
+  const todayNet = todayGross - todayExp;
+
+  // 1. Daily Logger Notification
+  if (todayShifts.length === 0) {
+    items.push({
+      id: `notif-daily-logger-${opts.todayIso}`,
+      category: 'DAILY_LOGGER',
+      urgency: 'WARNING',
+      icon: '📝',
+      title: 'Daily Logger Pending Today',
+      subtitle: `No shift or daily closeout logged yet for ${opts.todayIso}. Log earnings & expenses to keep your ledger synced.`,
+      action_href: opts.isRiderView ? '#log-shift-card' : '#daily-logger-card',
+      action_label: '⚡ Log Today',
+    });
+  } else {
+    items.push({
+      id: `notif-daily-logger-done-${opts.todayIso}`,
+      category: 'DAILY_LOGGER',
+      urgency: 'SAFE',
+      icon: '✅',
+      title: `Daily Logger Synced (${todayShifts.length} entry)`,
+      subtitle: `Today's Gross Ksh ${todayGross.toLocaleString()} • Expenses Ksh ${todayExp.toLocaleString()} • Net Ksh ${todayNet.toLocaleString()}`,
+      amount_kes: todayNet,
+      action_href: opts.isRiderView ? '#log-shift-card' : '#daily-logger-card',
+      action_label: '+ Add Entry',
+    });
+  }
+
+  // 2. Upcoming & Overdue Loans
+  const activeDebts = (opts.enrichedDebts || [])
+    .filter((d: any) => !d.is_settled && Number(d.remaining || 0) > 0)
+    .sort((a: any, b: any) => Number(a.danger_status?.daysRemaining ?? 999) - Number(b.danger_status?.daysRemaining ?? 999));
+
+  for (const d of activeDebts) {
+    const daysRem = Number(d.danger_status?.daysRemaining ?? 14);
+    const urgency: 'OVERDUE' | 'CRITICAL' | 'WARNING' | 'SAFE' =
+      daysRem < 0 ? 'OVERDUE' : daysRem <= 3 ? 'CRITICAL' : daysRem <= 7 ? 'WARNING' : 'SAFE';
+    const typeLabel = d.debt_type === 'OWED_TO_ME' ? 'Loan Collection Due' : 'Upcoming Loan Repayment';
+    items.push({
+      id: `notif-loan-${d.id}`,
+      category: 'UPCOMING_LOAN',
+      urgency,
+      icon: d.debt_type === 'OWED_TO_ME' ? '🤝' : '💳',
+      title: `${typeLabel}: ${d.person_name}`,
+      subtitle: `${d.danger_status?.badgeLabel || `Due ${d.due_at}`} • Remaining Ksh ${Number(d.remaining || 0).toLocaleString()}`,
+      amount_kes: Number(d.remaining || 0),
+      action_href: opts.isRiderView ? '/#debts-card' : '#debts-card',
+      action_label: d.debt_type === 'OWED_TO_ME' ? 'Record Collection' : '💳 Repay Now',
+    });
+  }
+
+  // 3. Unpaid Recurring Bills Due Soon or Overdue This Month
+  const unpaidBills = (opts.recurringBills || []).filter((b: any) => !b.is_paid_this_month);
+  for (const b of unpaidBills) {
+    const dueDay = Number(b.due_day || 5);
+    const diffDays = dueDay - opts.currentDay;
+    if (diffDays <= 7) {
+      const urgency: 'OVERDUE' | 'CRITICAL' | 'WARNING' =
+        diffDays < 0 ? 'OVERDUE' : diffDays <= 2 ? 'CRITICAL' : 'WARNING';
+      const dueText =
+        diffDays < 0
+          ? `Overdue by ${Math.abs(diffDays)} day(s) (Due Day ${dueDay})`
+          : diffDays === 0
+          ? `Due Today (Day ${dueDay})!`
+          : `Due in ${diffDays} day(s) (Day ${dueDay})`;
+      items.push({
+        id: `notif-bill-${b.id}`,
+        category: 'RECURRING_BILL',
+        urgency,
+        icon: b.icon || '⚡',
+        title: `Unpaid Bill: ${b.name}`,
+        subtitle: `${dueText} • Ksh ${Number(b.amount || 0).toLocaleString()}`,
+        amount_kes: Number(b.amount || 0),
+        action_href: opts.isRiderView ? '/#recurring-bills-card' : '#recurring-bills-card',
+        action_label: '✅ Mark Paid',
+      });
+    }
+  }
+
+  // 4. Odometer Service & Compliance Alerts
+  if (opts.odometerConfig && Number(opts.odometerConfig.remaining_to_service_km ?? 9999) <= 300) {
+    const remKm = Number(opts.odometerConfig.remaining_to_service_km || 0);
+    items.push({
+      id: 'notif-odo-service',
+      category: 'FLEET_ALERT',
+      urgency: remKm <= 50 ? 'CRITICAL' : 'WARNING',
+      icon: '🛢️',
+      title: remKm <= 0 ? 'Oil & Bike Service Overdue!' : `Bike Service Due in ${remKm.toLocaleString()} km`,
+      subtitle: `Odometer at ${Number(opts.odometerConfig.current_odometer_km || 0).toLocaleString()} km (Target: ${Number(opts.odometerConfig.next_service_km || 0).toLocaleString()} km)`,
+      action_href: opts.isRiderView ? '#odometer-card' : '/rider#odometer-card',
+      action_label: '🔧 View Odometer',
+    });
+  }
+
+  for (const comp of opts.complianceDeadlines || []) {
+    if (!comp || !comp.expiry_date) continue;
+    const dl = calculateDebtDeadline(comp.expiry_date);
+    if (dl.daysRemaining <= 10) {
+      const compUrgency: 'OVERDUE' | 'CRITICAL' | 'WARNING' | 'SAFE' =
+        dl.daysRemaining < 0 ? 'OVERDUE' : dl.daysRemaining <= 3 ? 'CRITICAL' : 'WARNING';
+      items.push({
+        id: `notif-comp-${comp.id}`,
+        category: 'FLEET_ALERT',
+        urgency: compUrgency,
+        icon: '🛡️',
+        title: `Permit/Insurance Alert: ${comp.title || comp.item_type || 'Document'}`,
+        subtitle: `${dl.badgeLabel} • Renewal Ksh ${Number(comp.renewal_cost || 0).toLocaleString()}`,
+        amount_kes: Number(comp.renewal_cost || 0),
+        action_href: opts.isRiderView ? '#compliance-card' : '/rider#compliance-card',
+        action_label: 'Renew',
+      });
+    }
+  }
+
+  return items;
+}
 
 // ------------------------------------------------------------------------------
 // PWA MANIFEST & SERVICE WORKER
@@ -340,9 +492,11 @@ app.get('/', async (c) => {
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const currentDay = today.getDate();
 
-  // Reconcile Recurring Bills & Standing Orders with Expenses (Transactions) bidirectionally
+  // Reconcile Rider Daily Logger shifts AND Recurring Bills & Standing Orders with Expenses (Transactions) bidirectionally
+  const effectiveRiderLogs = resolveEffectiveRiderLogs(c, riderLogs);
+  const txsWithRiderShifts = reconcileRiderShiftLogsWithTransactions(effectiveRiderLogs || [], transactions || []);
   const { recurringBills: reconciledRecurringBills, syncedTransactions: txs } =
-    reconcileRecurringBillsAndTransactions(c, getRecurringBills(c), bills || [], transactions || [], currentMonth);
+    reconcileRecurringBillsAndTransactions(c, getRecurringBills(c), bills || [], txsWithRiderShifts, currentMonth);
   const totalRecurringBillsKes = reconciledRecurringBills.reduce((s, b) => s + Number(b.amount || 0), 0);
 
   // Weekly calculation (Mon - Sun)
@@ -512,8 +666,9 @@ app.get('/', async (c) => {
   const totalMmfPrincipal = mmfAccounts.reduce((sum, m) => sum + Number(m.principal_deposited || 0), 0);
   const strictSaverConfig = getStrictSaverConfig(c);
 
-  // Enriched Debts & Loans with Danger Zone Intelligence
-  const enrichedDebts = (debts || []).map((d: any) => {
+  // Enriched Debts & Loans with Danger Zone Intelligence (merged from DB + cookie so no loan is ever lost)
+  const mergedDebts = resolveEffectiveSalariedLoans(c, debts || []);
+  const enrichedDebts = (mergedDebts || []).map((d: any) => {
     const total = Number(d.total_amount || 0);
     const paid = Number(d.paid_amount || 0);
     const remaining = Math.max(0, total - paid);
@@ -550,7 +705,6 @@ app.get('/', async (c) => {
   });
 
   // EV vs Petrol ROI Intelligence & Shift Net Take-Home for Pay Yourself First
-  const effectiveRiderLogs = resolveEffectiveRiderLogs(c, riderLogs);
   const evRoiStats = calculateEvRoiSavings(effectiveRiderLogs || []);
   const todayIsoStr = today.toISOString().slice(0, 10);
   const todayShiftNet = (effectiveRiderLogs || [])
@@ -605,10 +759,23 @@ app.get('/', async (c) => {
   })).sort((a, b) => b.amount - a.amount);
 
   const userCurrency = getCookie(c, 'finatrack_currency') === 'USD' ? 'USD' : 'Ksh';
+  const odometerConfigForHome = getOdometerConfig(c, effectiveRiderLogs);
+  const smartNotifications = buildSmartNotifications({
+    todayIso: todayIsoStr,
+    currentDay,
+    riderLogs: effectiveRiderLogs,
+    enrichedDebts,
+    recurringBills: reconciledRecurringBills,
+    complianceDeadlines: effectiveCompliance,
+    odometerConfig: odometerConfigForHome,
+    isRiderView: false,
+  });
 
   const html = renderFinanceDashboard({
     accounts: accs,
     transactions: txs,
+    rider_logs: effectiveRiderLogs,
+    notifications: smartNotifications,
     goals: goals || [],
     budgets: categoryBudgets,
     income_targets: incomeTargets,
@@ -867,10 +1034,35 @@ app.get('/rider', async (c) => {
   const userIdentifier = email || getCookie(c, 'finatrack_email') || username || '';
   const isPaywalled = isUserPaywalled(userIdentifier, paystackCfg);
 
+  const todayRiderIso = new Date().toISOString().slice(0, 10);
+  const currentRiderDay = new Date().getDate();
+  const riderDebts = resolveEffectiveSalariedLoans(c, []).map((d: any) => {
+    const total = Number(d.total_amount || 0);
+    const paid = Number(d.paid_amount || 0);
+    const remaining = Math.max(0, total - paid);
+    return {
+      ...d,
+      remaining,
+      is_settled: d.status === 'PAID' || remaining === 0,
+      danger_status: calculateDebtDeadline(d.due_at),
+    };
+  });
+  const riderNotifications = buildSmartNotifications({
+    todayIso: todayRiderIso,
+    currentDay: currentRiderDay,
+    riderLogs: shiftLogs,
+    enrichedDebts: riderDebts,
+    recurringBills: getRecurringBills(c),
+    complianceDeadlines: resolveEffectiveComplianceDeadlines(c, compliance),
+    odometerConfig,
+    isRiderView: true,
+  });
+
   const html = renderRiderDashboard({
     active_bike: primaryActiveBike,
     bikes: activeBikes,
     rider_logs: shiftLogs,
+    notifications: riderNotifications,
     odometer_config: odometerConfig,
     strict_saver_config: strictSaverConfig,
     platform_remittance: platformRemittanceConfig,

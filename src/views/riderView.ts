@@ -3,6 +3,7 @@ export function renderRiderDashboard(data: any): string {
     active_bike = null,
     bikes = [],
     rider_logs = [],
+    notifications = [],
     odometer_config = null,
     strict_saver_config = null,
     platform_remittance = null,
@@ -3100,6 +3101,59 @@ export function renderRiderDashboard(data: any): string {
                     <span class="hidden sm:inline">Sign In</span>
                 </a>
                 `}
+
+                ${(() => {
+                  const urgentNotifs = (notifications || []).filter((n: any) => n.urgency === 'OVERDUE' || n.urgency === 'CRITICAL' || n.urgency === 'WARNING');
+                  const badgeCount = urgentNotifs.length;
+                  return `
+                <div class="relative" id="rider-notif-wrapper">
+                    <button type="button" onclick="toggleRiderNotifDropdown()" class="relative px-2 sm:px-2.5 py-1.5 rounded-xl ${badgeCount > 0 ? 'bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'} text-xs font-extrabold hover:bg-amber-100 dark:hover:bg-amber-900/60 transition flex items-center gap-1 shadow-2xs" title="Rider Notifications: Daily Logger, Upcoming Loans, Service & Permits">
+                        <span>🔔</span>
+                        ${badgeCount > 0 ? `<span class="px-1.5 py-0.2 bg-rose-600 text-white text-[10px] font-black rounded-full leading-tight">${badgeCount}</span>` : ''}
+                    </button>
+                    <div id="rider-notif-dropdown" class="hidden fixed sm:absolute right-2 sm:right-0 top-14 sm:top-11 w-[calc(100vw-1rem)] sm:w-96 max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                        <div class="p-3.5 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between">
+                            <div>
+                                <h3 class="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                                    <span>🔔 Rider & Finance Alerts</span>
+                                    <span class="px-1.5 py-0.5 bg-blue-600 text-white rounded-full text-[10px]">${(notifications || []).length}</span>
+                                </h3>
+                                <p class="text-[10px] text-slate-300 mt-0.5">Daily Logger • Upcoming Loans • Service & Permits</p>
+                            </div>
+                            <button type="button" onclick="toggleRiderNotifDropdown()" class="text-slate-400 hover:text-white text-sm font-bold px-1">✕</button>
+                        </div>
+                        <div class="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+                            ${(notifications || []).map((n: any) => {
+                              const pillCls = n.urgency === 'OVERDUE' || n.urgency === 'CRITICAL'
+                                ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                                : n.urgency === 'WARNING'
+                                ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800';
+                              return `
+                            <div class="p-3 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition flex items-start justify-between gap-2.5">
+                                <div class="flex items-start gap-2.5 min-w-0">
+                                    <span class="text-lg shrink-0 mt-0.5">${n.icon || '🔔'}</span>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <p class="text-xs font-extrabold text-gray-900 dark:text-white truncate">${n.title}</p>
+                                            <span class="text-[9px] font-black px-1.5 py-0.2 rounded border ${pillCls}">${n.urgency}</span>
+                                        </div>
+                                        <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">${n.subtitle}</p>
+                                    </div>
+                                </div>
+                                <a href="${n.action_href || '#'}" onclick="document.getElementById('rider-notif-dropdown')?.classList.add('hidden')" class="shrink-0 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-[10px] transition whitespace-nowrap shadow-2xs">
+                                    ${n.action_label || 'Open →'}
+                                </a>
+                            </div>`;
+                            }).join('')}
+                        </div>
+                        <div class="p-2.5 bg-gray-50 dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-[11px]">
+                            <a href="#shift-log-card" onclick="document.getElementById('rider-notif-dropdown')?.classList.add('hidden')" class="font-bold text-blue-600 dark:text-blue-400 hover:underline">⏱️ Daily Shift Logger</a>
+                            <a href="/#debts-card" class="font-bold text-indigo-600 dark:text-indigo-400 hover:underline">💳 Upcoming Loans →</a>
+                        </div>
+                    </div>
+                </div>`;
+                })()}
 
                 <button type="button" onclick="openRiderPinModal()" class="px-2 sm:px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center gap-1" title="4-Digit Quick PIN (Roadside Gloves Unlock & Screen Lock)">
                     <span>🔢</span>
@@ -6260,6 +6314,20 @@ export function renderRiderDashboard(data: any): string {
         (function() {
             recalcStintsSummary();
         })();
+
+        function toggleRiderNotifDropdown() {
+            var el = document.getElementById('rider-notif-dropdown');
+            if (el) el.classList.toggle('hidden');
+        }
+        window.toggleRiderNotifDropdown = toggleRiderNotifDropdown;
+
+        document.addEventListener('click', function(e) {
+            var wrapper = document.getElementById('rider-notif-wrapper');
+            var dropdown = document.getElementById('rider-notif-dropdown');
+            if (wrapper && dropdown && !dropdown.classList.contains('hidden') && !wrapper.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
     </script>
 </body>
 </html>`;

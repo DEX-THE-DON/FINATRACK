@@ -147,6 +147,113 @@ export function resolveEffectiveRiderLogs(c: any, dbLogs: any[]): any[] {
   return Array.from(merged.values()).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 }
 
+export function reconcileRiderShiftLogsWithTransactions(riderLogs: any[] = [], existingTxs: any[] = []): any[] {
+  const syncedTxs = [...(existingTxs || [])];
+  for (const log of (riderLogs || [])) {
+    if (!log || !log.id) continue;
+    const logIdStr = String(log.id);
+    const logDate = String(log.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const gross = Number(log.total_earned || 0);
+    const fuel = Number(log.fuel_cost || 0);
+    const food = Number(log.food_spent || 0);
+    const airtime = Number(log.airtime_spent || 0);
+    const maint = Number(log.maintenance_cost || 0);
+    const misc = Number(log.misc_expenses || 0);
+
+    // Check if this shift already has transactions in `syncedTxs`
+    const hasLinkedTx = syncedTxs.some((t: any) =>
+      (t.rider_log_id && String(t.rider_log_id) === logIdStr) ||
+      (String(t.date || '').slice(0, 10) === logDate &&
+        ((gross > 0 && t.transaction_type === 'INCOME' && Number(t.amount || 0) === gross && String(t.category || '').includes('Rider')) ||
+         String(t.description || '').includes(logIdStr)))
+    );
+    if (hasLinkedTx) continue;
+
+    const powerType = String(log.power_type || 'PETROL').toUpperCase();
+    const station = String(log.fuel_station || (powerType === 'ELECTRIC' ? 'SPIRO' : 'RUBIS'));
+
+    if (gross > 0) {
+      syncedTxs.unshift({
+        id: `shift-inc-${logIdStr}`,
+        account_id: null,
+        transaction_type: 'INCOME',
+        category: 'Rider & Boda Deliveries',
+        amount: gross,
+        description: `Fleet & Ride-Hail Gross Revenue (${logDate} • ${log.shift_hours || 8}h shift) [${logIdStr}]`,
+        rider_log_id: logIdStr,
+        date: logDate,
+        created_at: log.created_at || new Date().toISOString(),
+      });
+    }
+    if (fuel > 0) {
+      syncedTxs.unshift({
+        id: `shift-fuel-${logIdStr}`,
+        account_id: null,
+        transaction_type: 'EXPENSE',
+        category: powerType === 'ELECTRIC' ? 'EV Battery Swap & Charging' : 'Fuel & Petrol',
+        amount: fuel,
+        description: `Rider Shift: ${powerType === 'ELECTRIC' ? `EV Battery Swap (${station})` : `Fuel & Petrol (${station})`} [${logIdStr}]`,
+        rider_log_id: logIdStr,
+        date: logDate,
+        created_at: log.created_at || new Date().toISOString(),
+      });
+    }
+    if (food > 0) {
+      syncedTxs.unshift({
+        id: `shift-food-${logIdStr}`,
+        account_id: null,
+        transaction_type: 'EXPENSE',
+        category: 'Food & Groceries',
+        amount: food,
+        description: `Rider Shift: Food & Lunch (${logDate}) [${logIdStr}]`,
+        rider_log_id: logIdStr,
+        date: logDate,
+        created_at: log.created_at || new Date().toISOString(),
+      });
+    }
+    if (airtime > 0) {
+      syncedTxs.unshift({
+        id: `shift-air-${logIdStr}`,
+        account_id: null,
+        transaction_type: 'EXPENSE',
+        category: 'Airtime & Data Bundles',
+        amount: airtime,
+        description: `Rider Shift: Airtime & Delivery App Data (${logDate}) [${logIdStr}]`,
+        rider_log_id: logIdStr,
+        date: logDate,
+        created_at: log.created_at || new Date().toISOString(),
+      });
+    }
+    if (maint > 0) {
+      syncedTxs.unshift({
+        id: `shift-maint-${logIdStr}`,
+        account_id: null,
+        transaction_type: 'EXPENSE',
+        category: 'Bike Maintenance & Repairs',
+        amount: maint,
+        description: `Rider Shift: Bike Maintenance & Spares (${logDate}) [${logIdStr}]`,
+        rider_log_id: logIdStr,
+        date: logDate,
+        created_at: log.created_at || new Date().toISOString(),
+      });
+    }
+    if (misc > 0) {
+      syncedTxs.unshift({
+        id: `shift-misc-${logIdStr}`,
+        account_id: null,
+        transaction_type: 'EXPENSE',
+        category: 'Daily Upkeep & Misc',
+        amount: misc,
+        description: `Rider Shift: Parking, Puncture & Daily Upkeep (${logDate}) [${logIdStr}]`,
+        rider_log_id: logIdStr,
+        date: logDate,
+        created_at: log.created_at || new Date().toISOString(),
+      });
+    }
+  }
+  return syncedTxs;
+}
+
 export interface OdometerConfig {
   base_odometer: number;
   last_service_odo: number;
@@ -758,7 +865,22 @@ riderRoutes.post('/rider/logs', async (c) => {
 
   // Automatic Finance Ledger Integration (Sync Income AND Expenses)
   if (primaryLogId) {
-    const targetAccId = earningsAccId || expenseAccId || null;
+    let targetAccId = earningsAccId || expenseAccId || null;
+    if (!targetAccId && body['earnings_account_id'] !== 'NONE') {
+      try {
+        let accQ = supabase.from('accounts').select('*').order('created_at', { ascending: true });
+        if (userId) accQ = accQ.eq('user_id', userId);
+        const { data: allAccs } = await accQ;
+        if (allAccs && allAccs.length > 0) {
+          const primaryAcc = allAccs.find((a: any) => a.account_type === 'MOBILE' || String(a.name || '').toLowerCase().includes('pesa')) || allAccs[0];
+          if (primaryAcc && primaryAcc.id) {
+            targetAccId = String(primaryAcc.id);
+          }
+        }
+      } catch (e) {}
+    }
+
+    const isPrimaryIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(primaryLogId));
     const txInserts: any[] = [];
 
     // 1. Gross Earnings Income Transaction
@@ -771,8 +893,8 @@ riderRoutes.post('/rider/logs', async (c) => {
         transaction_type: 'INCOME',
         category: 'Rider & Boda Deliveries',
         amount: totalEarnedKes,
-        description: `Fleet & Ride-Hail Gross Revenue${channelTag} (${logDate} • ${shiftHours}h shift${parsedStints.length > 1 ? ` • ${parsedStints.length} stints` : ''})`,
-        rider_log_id: primaryLogId,
+        description: `Fleet & Ride-Hail Gross Revenue${channelTag} (${logDate} • ${shiftHours}h shift${parsedStints.length > 1 ? ` • ${parsedStints.length} stints` : ''}) [${primaryLogId}]`,
+        ...(isPrimaryIdUuid ? { rider_log_id: primaryLogId } : {}),
         date: logDate,
       });
     }
@@ -787,8 +909,8 @@ riderRoutes.post('/rider/logs', async (c) => {
         transaction_type: 'EXPENSE',
         category: energyCategory,
         amount: fuelCostKes,
-        description: `Rider Shift: ${energyLabel}`,
-        rider_log_id: primaryLogId,
+        description: `Rider Shift: ${energyLabel} [${primaryLogId}]`,
+        ...(isPrimaryIdUuid ? { rider_log_id: primaryLogId } : {}),
         date: logDate,
       });
     }
@@ -801,8 +923,8 @@ riderRoutes.post('/rider/logs', async (c) => {
         transaction_type: 'EXPENSE',
         category: 'Food & Groceries',
         amount: foodSpentKes,
-        description: `Rider Shift: Food & Lunch (${logDate})`,
-        rider_log_id: primaryLogId,
+        description: `Rider Shift: Food & Lunch (${logDate}) [${primaryLogId}]`,
+        ...(isPrimaryIdUuid ? { rider_log_id: primaryLogId } : {}),
         date: logDate,
       });
     }
@@ -815,8 +937,8 @@ riderRoutes.post('/rider/logs', async (c) => {
         transaction_type: 'EXPENSE',
         category: 'Airtime & Data Bundles',
         amount: airtimeSpentKes,
-        description: `Rider Shift: Airtime & Delivery App Data (${logDate})`,
-        rider_log_id: primaryLogId,
+        description: `Rider Shift: Airtime & Delivery App Data (${logDate}) [${primaryLogId}]`,
+        ...(isPrimaryIdUuid ? { rider_log_id: primaryLogId } : {}),
         date: logDate,
       });
     }
@@ -829,8 +951,8 @@ riderRoutes.post('/rider/logs', async (c) => {
         transaction_type: 'EXPENSE',
         category: 'Bike Maintenance & Repairs',
         amount: maintCostKes,
-        description: `Rider Shift: Bike Maintenance & Spares (${logDate})`,
-        rider_log_id: primaryLogId,
+        description: `Rider Shift: Bike Maintenance & Spares (${logDate}) [${primaryLogId}]`,
+        ...(isPrimaryIdUuid ? { rider_log_id: primaryLogId } : {}),
         date: logDate,
       });
     }
@@ -843,15 +965,19 @@ riderRoutes.post('/rider/logs', async (c) => {
         transaction_type: 'EXPENSE',
         category: 'Daily Upkeep & Misc',
         amount: miscExpensesKes,
-        description: `Rider Shift: Parking, Puncture & Daily Upkeep (${logDate})`,
-        rider_log_id: primaryLogId,
+        description: `Rider Shift: Parking, Puncture & Daily Upkeep (${logDate}) [${primaryLogId}]`,
+        ...(isPrimaryIdUuid ? { rider_log_id: primaryLogId } : {}),
         date: logDate,
       });
     }
 
     if (txInserts.length > 0) {
       try {
-        await supabase.from('transactions').insert(txInserts);
+        const { error: txErr } = await supabase.from('transactions').insert(txInserts);
+        if (txErr) {
+          const fallbackInserts = txInserts.map(({ rider_log_id, ...rest }) => rest);
+          await supabase.from('transactions').insert(fallbackInserts);
+        }
       } catch (txError) {
         console.error('Failed to sync shift with finance transactions:', txError);
       }

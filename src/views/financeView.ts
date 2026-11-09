@@ -4,6 +4,8 @@ export function renderFinanceDashboard(data: any): string {
   const {
     accounts = [],
     transactions = [],
+    rider_logs = [],
+    notifications = [],
     goals = [],
     budgets = [],
     income_targets = {
@@ -2927,6 +2929,69 @@ export function renderFinanceDashboard(data: any): string {
                 </a>
                 `}
 
+                ${(() => {
+                  const urgentNotifs = (notifications || []).filter((n: any) => n.urgency === 'OVERDUE' || n.urgency === 'CRITICAL' || n.urgency === 'WARNING');
+                  const badgeCount = urgentNotifs.length;
+                  return `
+                <div class="relative" id="smart-notif-wrapper">
+                    <button type="button" onclick="toggleSmartNotifDropdown()" class="relative px-2 sm:px-2.5 py-1.5 rounded-xl ${badgeCount > 0 ? 'bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'} text-xs font-extrabold hover:bg-amber-100 dark:hover:bg-amber-900/60 transition flex items-center gap-1 shadow-2xs" title="Smart Notifications: Daily Logger, Upcoming Loans & Bills">
+                        <span>🔔</span>
+                        ${badgeCount > 0 ? `<span class="px-1.5 py-0.2 bg-rose-600 text-white text-[10px] font-black rounded-full leading-tight">${badgeCount}</span>` : ''}
+                    </button>
+                    <div id="smart-notif-dropdown" class="hidden fixed sm:absolute right-2 sm:right-0 top-14 sm:top-11 w-[calc(100vw-1rem)] sm:w-96 max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                        <div class="p-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between">
+                            <div>
+                                <h3 class="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                                    <span>🔔 Smart Notification Center</span>
+                                    <span class="px-1.5 py-0.5 bg-indigo-600 text-white rounded-full text-[10px]">${(notifications || []).length}</span>
+                                </h3>
+                                <p class="text-[10px] text-slate-300 mt-0.5">Daily Logger • Upcoming Loans • Recurring Bills</p>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="enableBrowserPushAlerts()" id="browser-push-btn" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] transition shadow-2xs">
+                                    📲 Push Alerts
+                                </button>
+                                <button type="button" onclick="toggleSmartNotifDropdown()" class="text-slate-400 hover:text-white text-sm font-bold px-1">✕</button>
+                            </div>
+                        </div>
+                        <div class="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+                            ${(notifications || []).length === 0 ? `
+                            <div class="p-6 text-center text-xs text-gray-400">
+                                <p class="text-2xl mb-1">🎉</p>
+                                <p class="font-bold">All caught up! No urgent alerts.</p>
+                            </div>
+                            ` : (notifications || []).map((n: any) => {
+                              const pillCls = n.urgency === 'OVERDUE' || n.urgency === 'CRITICAL'
+                                ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                                : n.urgency === 'WARNING'
+                                ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800';
+                              return `
+                            <div class="p-3 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition flex items-start justify-between gap-2.5">
+                                <div class="flex items-start gap-2.5 min-w-0">
+                                    <span class="text-lg shrink-0 mt-0.5">${n.icon || '🔔'}</span>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <p class="text-xs font-extrabold text-gray-900 dark:text-white truncate">${n.title}</p>
+                                            <span class="text-[9px] font-black px-1.5 py-0.2 rounded border ${pillCls}">${n.urgency}</span>
+                                        </div>
+                                        <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">${n.subtitle}</p>
+                                    </div>
+                                </div>
+                                <a href="${n.action_href || '#'}" onclick="handleNotifActionClick('${n.action_href || ''}')" class="shrink-0 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-[10px] transition whitespace-nowrap shadow-2xs">
+                                    ${n.action_label || 'Open →'}
+                                </a>
+                            </div>`;
+                            }).join('')}
+                        </div>
+                        <div class="p-2.5 bg-gray-50 dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-[11px]">
+                            <a href="#daily-logger-card" onclick="toggleSmartNotifDropdown()" class="font-bold text-emerald-600 dark:text-emerald-400 hover:underline">📝 Open Daily Logger</a>
+                            <a href="#debts-card" onclick="toggleSmartNotifDropdown()" class="font-bold text-indigo-600 dark:text-indigo-400 hover:underline">💳 Upcoming Loans →</a>
+                        </div>
+                    </div>
+                </div>`;
+                })()}
+
                 <button type="button" onclick="openAppPinModal()" class="px-2 sm:px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center gap-1 shadow-2xs" title="4-Digit Quick PIN (Fast App Unlock & Screen Lock)">
                     <span>🔢</span>
                     <span class="hidden md:inline">${has_quick_pin ? 'PIN Lock' : 'Set PIN'}</span>
@@ -3313,32 +3378,53 @@ export function renderFinanceDashboard(data: any): string {
 
             <!-- 🗓️ Unified Upcoming Deadlines & Renewals Timeline -->
             <div id="timeline-card" class="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
-                <div class="flex items-center justify-between border-b dark:border-gray-800 pb-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b dark:border-gray-800 pb-3">
                     <div class="flex items-center space-x-3">
                         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-md shrink-0 text-white">
                             🗓️
                         </div>
                         <div>
-                            <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                <span>Upcoming Deadlines & Renewals</span>
+                            <h2 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                                <span>Upcoming Loans, Bills & Renewals</span>
                                 ${dangerCount > 0 ? `<span class="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] rounded-full animate-pulse border border-rose-300 dark:border-rose-800">🚨 ${dangerCount} Urgent</span>` : ''}
                             </h2>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Unified agenda: loans, bills & vehicle compliance</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Live countdown for upcoming loans, unpaid recurring bills & permits</p>
                         </div>
                     </div>
+                    <a href="#debts-card" onclick="setTimeout(() => document.querySelector('#debts-card input[name=person_name]')?.focus(), 250)" class="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-[11px] font-extrabold transition shrink-0 self-start sm:self-auto">
+                        + Add Upcoming Loan
+                    </a>
+                </div>
+
+                <!-- Filter Tabs for Timeline (All / Upcoming Loans / Bills / Docs) -->
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                    <button type="button" onclick="filterTimelineItems('ALL')" id="tl-tab-ALL" class="tl-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-indigo-600 text-white shadow-2xs transition">
+                        All (${unified_timeline.length})
+                    </button>
+                    <button type="button" onclick="filterTimelineItems('LOAN')" id="tl-tab-LOAN" class="tl-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">
+                        💳 Upcoming Loans (${unified_timeline.filter((i: any) => i.itemType === 'LOAN' || i.type === 'DEBT').length})
+                    </button>
+                    <button type="button" onclick="filterTimelineItems('BILL')" id="tl-tab-BILL" class="tl-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">
+                        ⚡ Unpaid Bills (${unified_timeline.filter((i: any) => i.itemType === 'BILL' || i.type === 'BILL').length})
+                    </button>
+                    <button type="button" onclick="filterTimelineItems('COMPLIANCE')" id="tl-tab-COMPLIANCE" class="tl-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">
+                        📋 Permits (${unified_timeline.filter((i: any) => i.itemType === 'COMPLIANCE' || i.type === 'COMPLIANCE').length})
+                    </button>
                 </div>
 
                 ${unified_timeline.length === 0 ? `
                 <div class="text-center py-8 text-gray-400 text-xs">
                     <p class="text-2xl mb-2">✨</p>
-                    <p class="font-bold">No active deadlines pending.</p>
-                    <p class="mt-1">Add loan deadlines, recurring bills, or vehicle compliance to track them here.</p>
+                    <p class="font-bold">No active loans or unpaid deadlines pending.</p>
+                    <p class="mt-1">Add an upcoming loan in the Loans & Debts section below or a recurring bill to track it here.</p>
                 </div>
                 ` : `
-                <div class="space-y-2.5 max-h-72 overflow-y-auto no-scrollbar">
+                <div class="space-y-2.5 max-h-72 overflow-y-auto no-scrollbar" id="unified-timeline-list">
                     ${unified_timeline.map((item: any) => {
                         const isOverdue = item.isOverdue || item.daysRemaining < 0;
                         const isDanger = item.isDangerZone || item.daysRemaining <= 3;
+                        const itemCategory = item.itemType || (item.type === 'DEBT' ? 'LOAN' : item.type) || 'LOAN';
+                        const rawLoanId = String(item.id || '').replace(/^debt-/, '');
                         const badgeStyle = isOverdue 
                             ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
                             : isDanger 
@@ -3346,15 +3432,15 @@ export function renderFinanceDashboard(data: any): string {
                                 : 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800';
 
                         return `
-                        <div class="p-3 rounded-xl border ${isDanger || isOverdue ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20' : 'border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40'} flex items-center justify-between gap-3 text-xs">
+                        <div data-tl-type="${itemCategory}" class="timeline-item-row p-3 rounded-xl border ${isDanger || isOverdue ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20' : 'border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40'} flex items-center justify-between gap-3 text-xs">
                             <div class="flex items-center space-x-3">
                                 <div class="w-8 h-8 rounded-lg ${isOverdue ? 'bg-rose-600' : isDanger ? 'bg-amber-600' : 'bg-indigo-600'} text-white flex items-center justify-center text-sm shrink-0">
-                                    ${item.icon || (item.itemType === 'LOAN' ? '💳' : item.itemType === 'BILL' ? '⚡' : '📋')}
+                                    ${item.icon || (itemCategory === 'LOAN' ? '💳' : itemCategory === 'BILL' ? '⚡' : '📋')}
                                 </div>
                                 <div>
                                     <div class="flex items-center gap-1.5 flex-wrap">
                                         <p class="font-bold text-gray-900 dark:text-gray-100">${item.title}</p>
-                                        <span class="text-[9px] px-1.5 py-0.5 rounded-md font-bold ${badgeStyle}">${item.typeLabel || (item.itemType === 'LOAN' ? 'Loan' : item.itemType === 'BILL' ? 'Bill' : 'Document')}</span>
+                                        <span class="text-[9px] px-1.5 py-0.5 rounded-md font-bold ${badgeStyle}">${item.typeLabel || (itemCategory === 'LOAN' ? 'Loan' : itemCategory === 'BILL' ? 'Bill' : 'Document')}</span>
                                     </div>
                                     <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                                         📅 Due: <strong>${item.dueDate}</strong> • 
@@ -3366,7 +3452,11 @@ export function renderFinanceDashboard(data: any): string {
                             </div>
                             <div class="text-right shrink-0">
                                 ${(item.amount || item.amountKes) ? `<p class="font-black text-gray-900 dark:text-white convertible-amount" data-kes="${item.amount || item.amountKes}">${formatKes(item.amount || item.amountKes)}</p>` : ''}
-                                <a href="${item.actionLink || '#'}" class="inline-block mt-1 text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold">View →</a>
+                                ${itemCategory === 'LOAN' ? `
+                                <a href="#debts-card" onclick="setTimeout(() => { if (typeof toggleDebtForm === 'function') toggleDebtForm('${rawLoanId}'); }, 250)" class="inline-block mt-1 px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded-md text-[10px] font-bold transition shadow-2xs">💳 Repay →</a>
+                                ` : `
+                                <a href="${item.actionLink || '#'}" class="inline-block mt-1 text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold">Open →</a>
+                                `}
                             </div>
                         </div>`;
                     }).join('')}
@@ -4814,7 +4904,7 @@ export function renderFinanceDashboard(data: any): string {
                                     <div>
                                         <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">${isBorrowed ? 'Payment Source Account' : 'Deposit Destination Account'}</label>
                                         <select name="account_id" class="w-full p-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg text-xs font-medium">
-                                            <option value="">-- No Account Ledger Sync --</option>
+                                            <option value="">-- Cash / General Expense Ledger --</option>
                                              ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (Bal: ${formatKes(a.balance)})</option>`).join('')}
                                         </select>
                                     </div>
@@ -5431,6 +5521,81 @@ export function renderFinanceDashboard(data: any): string {
 
         <!-- ➕ Transactions & Ledger Card -->
         <div id="tx-card" class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-4">
+            ${(() => {
+              const todayShifts = (rider_logs || []).filter((l: any) => String(l.date || '').slice(0, 10) === today);
+              const todayEarned = todayShifts.reduce((s: number, l: any) => s + Number(l.total_earned || 0), 0);
+              const todayExp = todayShifts.reduce((s: number, l: any) => s + Number(l.fuel_cost || 0) + Number(l.food_spent || 0) + Number(l.airtime_spent || 0) + Number(l.maintenance_cost || 0) + Number(l.misc_expenses || 0), 0);
+              const todayNet = todayEarned - todayExp;
+              return `
+            <!-- 📝 Quick Daily Logger (1-Tap Daily Income & Expenses Closeout) -->
+            <div id="daily-logger-card" class="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-slate-900 to-indigo-950/90 border border-emerald-700/50 text-white space-y-3 shadow-md">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-lg shadow-sm shrink-0">📝</span>
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h3 class="text-sm font-black tracking-tight">Quick Daily Logger (Earnings & Expenses Closeout)</h3>
+                                ${todayShifts.length > 0 ? `
+                                <span class="px-2 py-0.5 bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 rounded-full text-[10px] font-extrabold">✅ Logged Today: Net ${formatKes(todayNet)}</span>
+                                ` : `
+                                <span class="px-2 py-0.5 bg-amber-500/20 border border-amber-400/40 text-amber-300 rounded-full text-[10px] font-extrabold animate-pulse">⏳ Pending Today (${today})</span>
+                                `}
+                            </div>
+                            <p class="text-[11px] text-slate-300">Log your daily gross earnings, fuel, food, airtime & misc in one go — auto-syncs with Rider Hub & Monthly Expenses.</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="document.getElementById('quick-daily-logger-form')?.classList.toggle('hidden')" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition shrink-0 self-start sm:self-auto shadow-xs">
+                        ⚡ ${todayShifts.length > 0 ? '+ Log Another Shift / Day' : 'Open Daily Logger'}
+                    </button>
+                </div>
+
+                <form action="/finance/daily-logger" method="POST" id="quick-daily-logger-form" class="${todayShifts.length === 0 ? '' : 'hidden'} pt-2 border-t border-slate-800 space-y-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+                        <div>
+                            <label class="block text-[10px] font-bold text-emerald-300 uppercase mb-1">🟢 Gross Earned</label>
+                            <input type="number" step="any" inputmode="decimal" name="total_earned" placeholder="e.g. 2500" class="w-full p-2 bg-slate-900 border border-emerald-600/60 text-white rounded-xl text-xs font-extrabold" required>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-amber-300 uppercase mb-1">⛽ Fuel / EV Swap</label>
+                            <input type="number" step="any" inputmode="decimal" name="fuel_cost" placeholder="0" class="w-full p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-rose-300 uppercase mb-1">🍲 Food / Lunch</label>
+                            <input type="number" step="any" inputmode="decimal" name="food_spent" placeholder="0" class="w-full p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-sky-300 uppercase mb-1">📱 Airtime / Data</label>
+                            <input type="number" step="any" inputmode="decimal" name="airtime_spent" placeholder="0" class="w-full p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-purple-300 uppercase mb-1">🔧 Maintenance</label>
+                            <input type="number" step="any" inputmode="decimal" name="maintenance_cost" placeholder="0" class="w-full p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-300 uppercase mb-1">📦 Misc Spend</label>
+                            <input type="number" step="any" inputmode="decimal" name="misc_expenses" placeholder="0" class="w-full p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-indigo-300 uppercase mb-1">📅 Date</label>
+                            <input type="date" name="date" value="${today}" class="w-full p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold" required>
+                        </div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
+                        <div class="flex flex-wrap items-center gap-2 flex-1">
+                            <select name="account_id" class="p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-semibold">
+                                <option value="">-- Auto-Select Primary Wallet (M-Pesa) --</option>
+                                ${accounts.map((a: any) => `<option value="${a.id}">${a.name} (${formatKes(a.balance)})</option>`).join('')}
+                            </select>
+                            <input type="text" name="notes" placeholder="Optional note (e.g. Uber/Bolt shift, CBD deliveries)" class="flex-1 min-w-[180px] p-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs">
+                        </div>
+                        <button type="submit" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition shadow-md active:scale-95">
+                            ✅ Save Daily Logger & Sync Expenses
+                        </button>
+                    </div>
+                </form>
+            </div>`;
+            })()}
+
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-xl">
@@ -6275,6 +6440,72 @@ export function renderFinanceDashboard(data: any): string {
             <span class="text-[10px] tracking-tight">Profile</span>
         </button>
     </nav>
+
+    <script>
+        function toggleSmartNotifDropdown() {
+            const el = document.getElementById('smart-notif-dropdown');
+            if (el) el.classList.toggle('hidden');
+        }
+
+        function handleNotifActionClick(href) {
+            const el = document.getElementById('smart-notif-dropdown');
+            if (el) el.classList.add('hidden');
+            if (href === '#daily-logger-card') {
+                const form = document.getElementById('quick-daily-logger-form');
+                if (form) form.classList.remove('hidden');
+            }
+        }
+
+        function filterTimelineItems(filterType) {
+            const rows = document.querySelectorAll('.timeline-item-row');
+            rows.forEach((row) => {
+                const rowType = row.getAttribute('data-tl-type') || '';
+                if (filterType === 'ALL' || rowType === filterType) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+            document.querySelectorAll('.tl-filter-btn').forEach((btn) => {
+                btn.className = 'tl-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition';
+            });
+            const activeBtn = document.getElementById('tl-tab-' + filterType);
+            if (activeBtn) {
+                activeBtn.className = 'tl-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-indigo-600 text-white shadow-2xs transition';
+            }
+        }
+
+        function enableBrowserPushAlerts() {
+            const btn = document.getElementById('browser-push-btn');
+            if (!('Notification' in window)) {
+                alert('Browser push notifications are not supported on this browser, but in-app Smart Notifications are active.');
+                return;
+            }
+            Notification.requestPermission().then((perm) => {
+                if (perm === 'granted') {
+                    try {
+                        localStorage.setItem('finatrack_push_enabled', '1');
+                        new Notification('🔔 Finatrack Smart Alerts Active', {
+                            body: 'We will remind you about your Daily Logger closeout, Upcoming Loans & Recurring Bills!',
+                            icon: '/icon-192.png'
+                        });
+                    } catch (e) {}
+                    if (btn) {
+                        btn.textContent = '✅ Push Active';
+                        btn.className = 'px-2 py-1 bg-emerald-700 text-emerald-100 font-bold rounded-lg text-[10px]';
+                    }
+                }
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            const wrapper = document.getElementById('smart-notif-wrapper');
+            const dropdown = document.getElementById('smart-notif-dropdown');
+            if (wrapper && dropdown && !dropdown.classList.contains('hidden') && !wrapper.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    </script>
 </body>
 </html>`;
 }

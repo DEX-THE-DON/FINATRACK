@@ -814,12 +814,12 @@ export function buildUnifiedTimeline(params: {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
-  // 1. Debts
+  // 1. Debts & Loans
   for (const d of debts) {
-    if (d.status === 'PAID' || Number(d.remaining || 0) === 0) continue;
+    const remAmt = Number(d.remaining ?? (Number(d.total_amount || 0) - Number(d.paid_amount || 0)));
+    if (d.status === 'PAID' || remAmt <= 0) continue;
     const dueStr = d.due_at ? d.due_at.slice(0, 10) : new Date().toISOString().slice(0, 10);
     const danger = calculateDebtDeadline(dueStr);
-    const remAmt = Number(d.remaining ?? (Number(d.total_amount || 0) - Number(d.paid_amount || 0)));
 
     items.push({
       id: `debt-${d.id}`,
@@ -840,11 +840,15 @@ export function buildUnifiedTimeline(params: {
     });
   }
 
-  // 2. Bills
+  // 2. Bills (Only unpaid bills for the current month)
+  const currentMonthPrefix = now.toISOString().slice(0, 7);
   for (const b of bills) {
+    if (b.is_paid_this_month || (b.last_paid_date && String(b.last_paid_date).startsWith(currentMonthPrefix))) {
+      continue;
+    }
     const dueDay = Number(b.due_day || 1);
     const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
-    if (currentMonthDate < now) {
+    if (currentMonthDate < now && !b.id?.toString().startsWith('bill')) {
       currentMonthDate.setMonth(currentMonthDate.getMonth() + 1);
     }
     const dueStr = currentMonthDate.toISOString().slice(0, 10);
@@ -853,7 +857,7 @@ export function buildUnifiedTimeline(params: {
 
     items.push({
       id: `bill-${b.id}`,
-      title: b.title,
+      title: b.title || b.name || 'Monthly Bill',
       itemType: 'BILL',
       typeLabel: 'Recurring Bill',
       amountKes: Number(b.amount || 0),
@@ -863,10 +867,10 @@ export function buildUnifiedTimeline(params: {
       isOverdue: diffDays < 0,
       isDueToday: diffDays === 0,
       isDangerZone: isDanger,
-      statusBadge: diffDays === 0 ? '⚠️ Due Today' : `Due in ${diffDays}d`,
-      icon: '⚡',
-      subtitle: `Recurring Monthly Utility (Day ${dueDay})`,
-      actionLink: '#waterfall-card',
+      statusBadge: diffDays < 0 ? `🚨 Overdue by ${Math.abs(diffDays)}d` : diffDays === 0 ? '⚠️ Due Today' : `Due in ${diffDays}d`,
+      icon: b.icon || '⚡',
+      subtitle: `Recurring Monthly Bill (Due ${dueDay}th)`,
+      actionLink: '#recurring-bills-card',
     });
   }
 
