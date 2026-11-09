@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext, inMemoryStore } from './db/supabase';
-import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
+import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon } from './routes/finance';
 import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
@@ -329,7 +329,6 @@ app.get('/', async (c) => {
   }
 
   const accs = accounts;
-  const txs = transactions;
   const rules = resolveEffectiveAllocationRules(c, allocationRules);
 
   // Aggregations
@@ -340,6 +339,11 @@ app.get('/', async (c) => {
   const currentYear = String(today.getFullYear());
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const currentDay = today.getDate();
+
+  // Reconcile Recurring Bills & Standing Orders with Expenses (Transactions) bidirectionally
+  const { recurringBills: reconciledRecurringBills, syncedTransactions: txs } =
+    reconcileRecurringBillsAndTransactions(c, getRecurringBills(c), bills || [], transactions || [], currentMonth);
+  const totalRecurringBillsKes = reconciledRecurringBills.reduce((s, b) => s + Number(b.amount || 0), 0);
 
   // Weekly calculation (Mon - Sun)
   const dayOfWeek = (today.getDay() + 6) % 7; // 0 for Monday, 6 for Sunday
@@ -371,7 +375,8 @@ app.get('/', async (c) => {
   const catLimitLiving = bgtMap.get('Living Expenses') || 8000;
   const catLimitFood = bgtMap.get('Food & Groceries') || 6000;
   const catLimitFuel = bgtMap.get('Fuel & Petrol') || bgtMap.get('Fuel & Petrol / EV Swaps') || 7000;
-  const catLimitBills = bgtMap.get('Utilities & Bills') || 4000;
+  const savedBillsLimit = bgtMap.get('Utilities & Bills') || 0;
+  const catLimitBills = savedBillsLimit > 0 ? Math.max(savedBillsLimit, totalRecurringBillsKes) : (totalRecurringBillsKes || 4000);
 
   let weeklyIncome = 0;
   let weeklyExpenses = 0;
@@ -424,10 +429,20 @@ app.get('/', async (c) => {
 
   const categoryBudgets = defaultCategories.map(cat => {
     const spent = txs
-      .filter((t) => !isTransferTransaction(t) && t.transaction_type === 'EXPENSE' && (
-        (t.category || '').toLowerCase() === cat.name.toLowerCase() ||
-        (cat.name.includes('Fuel') && ((t.category || '').toLowerCase().includes('fuel') || (t.category || '').toLowerCase().includes('petrol') || (t.category || '').toLowerCase().includes('battery') || (t.category || '').toLowerCase().includes('ev swap')))
-      ) && (t.date || '').startsWith(currentMonth))
+      .filter((t) => {
+        if (isTransferTransaction(t) || t.transaction_type !== 'EXPENSE' || !(t.date || '').startsWith(currentMonth)) {
+          return false;
+        }
+        const tCat = (t.category || '').toLowerCase();
+        if (tCat === cat.name.toLowerCase()) return true;
+        if (cat.name.includes('Fuel') && (tCat.includes('fuel') || tCat.includes('petrol') || tCat.includes('battery') || tCat.includes('ev swap'))) {
+          return true;
+        }
+        if (cat.name === 'Utilities & Bills' && (tCat.startsWith('utility:') || tCat.includes('utilities') || tCat.includes('bill') || reconciledRecurringBills.some((b) => doesTransactionMatchRecurringBill(t, b, currentMonth)))) {
+          return true;
+        }
+        return false;
+      })
       .reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
     return {
@@ -560,9 +575,17 @@ app.get('/', async (c) => {
     costKes: Number(c.renewal_cost || c.cost || 0),
     notes: c.notes,
   }));
+  const timelineBills = reconciledRecurringBills.map((b) => ({
+    id: b.id,
+    name: b.name,
+    title: `${b.icon || '⚡'} ${b.name}`,
+    amount: b.amount,
+    due_day: b.due_day,
+    last_paid_date: b.is_paid_this_month ? (b.last_paid_date || `${currentMonth}-01`) : undefined,
+  }));
   const unifiedTimeline = buildUnifiedTimeline({
     debts: enrichedDebts,
-    bills: bills || [],
+    bills: timelineBills,
     complianceItems,
   });
 
@@ -594,7 +617,7 @@ app.get('/', async (c) => {
     category_breakdown: categoryBreakdown,
     debts: enrichedDebts,
     bills: bills || [],
-    recurring_bills: getRecurringBills(c),
+    recurring_bills: reconciledRecurringBills,
     mmf_accounts: mmfAccounts,
     total_mmf_balance: totalMmfBalance,
     total_mmf_accrued_profit: totalMmfAccruedProfit,

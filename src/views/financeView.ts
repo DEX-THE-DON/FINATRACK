@@ -5280,13 +5280,23 @@ export function renderFinanceDashboard(data: any): string {
                             <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full ${paidCount === recurring_bills.length && recurring_bills.length > 0 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'}">
                                 ${paidCount}/${recurring_bills.length} Paid (${curMonthLabel})
                             </span>
+                            <span class="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                🔗 Synced with Monthly Expenses
+                            </span>
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Tick off Rent, KPLC tokens, WiFi, SHA/NHIF &amp; water as you settle them from your Bills Reserve Bucket.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Tick off Rent, KPLC tokens, WiFi, SHA/NHIF &amp; standing orders — automatically syncs with your Monthly Expenses &amp; Category Budgets.</p>
                     </div>
                 </div>
-                <button type="button" onclick="document.getElementById('add-recurring-bill-drawer').classList.toggle('hidden')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition active:scale-95 shrink-0">
-                    ➕ Add Monthly Bill
-                </button>
+                <div class="flex items-center gap-2 shrink-0">
+                    <form action="/finance/bills/sync-expenses" method="POST" class="inline">
+                        <button type="submit" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-extrabold transition active:scale-95" title="Reconcile all Recurring Bills &amp; Standing Orders with Monthly Expenses">
+                            🔄 Sync Expenses
+                        </button>
+                    </form>
+                    <button type="button" onclick="document.getElementById('add-recurring-bill-drawer').classList.toggle('hidden')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition active:scale-95 shrink-0">
+                        ➕ Add Monthly Bill
+                    </button>
+                </div>
             </div>
 
             <!-- 3-Column KPI Strip -->
@@ -5297,9 +5307,9 @@ export function renderFinanceDashboard(data: any): string {
                     <span class="text-[10px] text-gray-400 block">${recurring_bills.length} fixed monthly obligations</span>
                 </div>
                 <div class="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
-                    <span class="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">✅ Settled This Month</span>
+                    <span class="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">✅ Settled This Month (In Expenses)</span>
                     <span class="text-xl font-black text-emerald-600 dark:text-emerald-400 convertible-amount" data-kes="${paidBillsKes}">${formatKes(paidBillsKes)} (${billsPct}%)</span>
-                    <span class="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 block">${paidCount} bill${paidCount === 1 ? '' : 's'} cleared for ${curMonthLabel}</span>
+                    <span class="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 block">${paidCount} bill${paidCount === 1 ? '' : 's'} cleared &amp; logged in expenses for ${curMonthLabel}</span>
                 </div>
                 <div class="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
                     <span class="text-[10px] font-bold uppercase text-rose-700 dark:text-rose-300 block">⏳ Remaining Unpaid</span>
@@ -5315,15 +5325,24 @@ export function renderFinanceDashboard(data: any): string {
 
             <!-- Collapsible Add New Bill Drawer -->
             <div id="add-recurring-bill-drawer" class="hidden p-4 rounded-xl bg-indigo-50/50 dark:bg-slate-950/80 border border-indigo-200 dark:border-indigo-800 space-y-3">
-                <h3 class="text-xs font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">➕ Add New Fixed Monthly Bill</h3>
-                <form action="/finance/bills/create" method="POST" class="grid grid-cols-1 sm:grid-cols-5 gap-2.5 text-xs">
+                <h3 class="text-xs font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">➕ Add New Fixed Monthly Bill or Standing Order</h3>
+                <form action="/finance/bills/create" method="POST" class="grid grid-cols-1 sm:grid-cols-6 gap-2.5 text-xs">
                     <div>
                         <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Icon</label>
                         <input type="text" name="icon" value="⚡" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-center">
                     </div>
                     <div class="sm:col-span-2">
-                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Bill Name</label>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Bill / Standing Order Name</label>
                         <input type="text" name="name" placeholder="e.g. House Rent, KPLC Token, Zuku WiFi, SHA" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-gray-900 dark:text-white" required>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Expense Category</label>
+                        <select name="category" class="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-semibold text-gray-900 dark:text-white">
+                            <option value="Utilities & Bills">⚡ Utilities &amp; Bills</option>
+                            <option value="Living Expenses">🏠 Living Expenses</option>
+                            <option value="Debt & Loan Repayments">💳 Debt / Standing Order</option>
+                            <option value="Food & Groceries">🛒 Food &amp; Groceries</option>
+                        </select>
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-gray-500 mb-0.5">Monthly Amount (Ksh)</label>
@@ -5392,15 +5411,15 @@ export function renderFinanceDashboard(data: any): string {
                                         <input type="number" step="any" name="paid_amount" value="${b.amount}" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded font-bold text-gray-900 dark:text-white" required>
                                     </div>
                                     <div>
-                                        <label class="block text-[9px] font-bold text-gray-500">Deduct Account (Opt)</label>
+                                        <label class="block text-[9px] font-bold text-gray-500">Pay From Account</label>
                                         <select name="account_id" class="w-full p-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded font-semibold text-gray-900 dark:text-white">
-                                            <option value="">-- Checkbox Only --</option>
-                                            ${accounts.map((a: any) => `<option value="${a.id}">${a.name}</option>`).join('')}
+                                            <option value="">-- Cash / Expense Ledger --</option>
+                                            ${accounts.map((a: any) => `<option value="${a.id}" ${String(b.account_id || '') === String(a.id) ? 'selected' : ''}>${a.name}</option>`).join('')}
                                         </select>
                                     </div>
                                 </div>
                                 <button type="submit" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg transition">
-                                    ✅ Confirm Paid for ${curMonthLabel}
+                                    ✅ Confirm Paid &amp; Log Expense (${curMonthLabel})
                                 </button>
                             </form>
                         </div>

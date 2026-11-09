@@ -421,59 +421,65 @@ financeRoutes.post('/transactions/create', async (c) => {
   const tDate = String(body['t_date'] || new Date().toISOString().slice(0, 10));
   const currentMonth = tDate.slice(0, 7);
 
-  // If a recurring bill is linked or category is a recurring bill, mark it as paid for this month
-  if (linkedBillId) {
+  let matchedBillIdx = -1;
+  let billsList: RecurringBillItem[] = [];
+  if (txType === 'EXPENSE') {
     try {
-      const bills = getRecurringBills(c);
-      const bIdx = bills.findIndex((b) => String(b.id) === String(linkedBillId));
-      if (bIdx >= 0) {
-        const b = bills[bIdx];
-        syncedBillName = b.name;
-        category = b.category || 'Utilities & Bills';
-        bills[bIdx] = {
-          ...b,
-          is_paid_this_month: true,
-          last_paid_month: currentMonth,
-          last_paid_date: tDate,
-          account_id: accountId || b.account_id,
+      billsList = getRecurringBills(c);
+      if (linkedBillId) {
+        matchedBillIdx = billsList.findIndex((b) => String(b.id) === String(linkedBillId));
+      } else if (description || category) {
+        const probeTx = {
+          transaction_type: txType,
+          category,
+          description: description || category,
+          date: tDate,
+          amount: amtKes,
         };
-        saveRecurringBillsCookie(c, bills);
+        matchedBillIdx = billsList.findIndex((b) => doesTransactionMatchRecurringBill(probeTx, b, currentMonth));
       }
-    } catch (e) {}
-  } else if ((category === 'Utilities & Bills' || category === 'Living Expenses') && description) {
-    // If description mentions a recurring bill name, mark it as paid
-    try {
-      const bills = getRecurringBills(c);
-      const descLower = description.toLowerCase();
-      const bIdx = bills.findIndex((b) => descLower.includes(b.name.toLowerCase()) || b.name.toLowerCase().includes(descLower));
-      if (bIdx >= 0 && !bills[bIdx].is_paid_this_month) {
-        const b = bills[bIdx];
+      if (matchedBillIdx >= 0) {
+        const b = billsList[matchedBillIdx];
         syncedBillName = b.name;
-        bills[bIdx] = {
-          ...b,
-          is_paid_this_month: true,
-          last_paid_month: currentMonth,
-          last_paid_date: tDate,
-          account_id: accountId || b.account_id,
-        };
-        saveRecurringBillsCookie(c, bills);
+        if (rawCategory.startsWith('BILL:')) {
+          category = b.category || 'Utilities & Bills';
+        }
       }
     } catch (e) {}
   }
 
-  const { error } = await supabase.from('transactions').insert({
+  const effectiveDescription = description || (syncedBillName ? `${billsList[matchedBillIdx]?.icon || '⚡'} ${syncedBillName} (Monthly Bill — ${currentMonth})` : null);
+
+  const { data: insertedTx, error } = await supabase.from('transactions').insert({
     ...(userId ? { user_id: userId } : {}),
     account_id: accountId || null,
     transaction_type: txType,
     category,
     amount: amtKes,
     date: tDate,
-    description,
-  });
+    description: effectiveDescription,
+  }).select().single();
 
   if (error) {
     console.error('Failed to create transaction:', error);
     return c.redirect(`/?toast=${encodeURIComponent('Failed to save transaction: ' + error.message)}`, 303);
+  }
+
+  if (matchedBillIdx >= 0 && billsList[matchedBillIdx]) {
+    try {
+      const b = billsList[matchedBillIdx];
+      billsList[matchedBillIdx] = {
+        ...b,
+        amount: amtKes > 0 ? amtKes : b.amount,
+        is_paid_this_month: true,
+        last_paid_month: currentMonth,
+        last_paid_date: tDate,
+        account_id: accountId || b.account_id,
+        last_tx_id: insertedTx?.id ? String(insertedTx.id) : b.last_tx_id,
+        unpaid_override_month: undefined,
+      };
+      saveRecurringBillsCookie(c, billsList);
+    } catch (e) {}
   }
 
   // Update account balance
@@ -487,7 +493,7 @@ financeRoutes.post('/transactions/create', async (c) => {
   }
 
   const toastMsg = syncedBillName
-    ? `✅ Transaction recorded & monthly bill "${syncedBillName}" marked as PAID for ${currentMonth}!`
+    ? `✅ Transaction recorded & monthly bill "${syncedBillName}" (Ksh ${amtKes.toLocaleString()}) synced as PAID for ${currentMonth}!`
     : 'Transaction saved successfully';
 
   return c.redirect(`/?toast=${encodeURIComponent(toastMsg)}#recurring-bills-card`, 303);
@@ -496,11 +502,56 @@ financeRoutes.post('/transactions/create', async (c) => {
 financeRoutes.post('/transactions/delete/:id', async (c) => {
   const { supabase } = await getRequestContext(c);
   const id = c.req.param('id');
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  try {
+    const { data: txToDelete } = await supabase.from('transactions').select('*').eq('id', id).single();
+    if (txToDelete) {
+      // Reverse account balance impact if linked to an account
+      if (txToDelete.account_id && !isTransferTransaction(txToDelete)) {
+        const { data: acc } = await supabase.from('accounts').select('*').eq('id', txToDelete.account_id).single();
+        if (acc) {
+          const curBal = toDecimal(acc.balance);
+          const amt = Number(txToDelete.amount || 0);
+          const restoredBal = txToDelete.transaction_type === 'INCOME' ? curBal.minus(amt) : curBal.plus(amt);
+          await supabase.from('accounts').update({ balance: restoredBal.toNumber() }).eq('id', txToDelete.account_id);
+        }
+      }
+
+      // If this expense transaction had settled a recurring bill, reopen that recurring bill
+      if (txToDelete.transaction_type === 'EXPENSE') {
+        const bills = getRecurringBills(c);
+        let updated = false;
+        const txMonth = String(txToDelete.date || currentMonth).slice(0, 7);
+        for (let i = 0; i < bills.length; i++) {
+          const b = bills[i];
+          if (
+            (b.last_tx_id && String(b.last_tx_id) === String(id)) ||
+            doesTransactionMatchRecurringBill(txToDelete, b, txMonth)
+          ) {
+            bills[i] = {
+              ...b,
+              is_paid_this_month: false,
+              last_paid_month: undefined,
+              last_paid_date: undefined,
+              last_tx_id: undefined,
+              unpaid_override_month: txMonth,
+            };
+            updated = true;
+          }
+        }
+        if (updated) {
+          saveRecurringBillsCookie(c, bills);
+        }
+      }
+    }
+  } catch (e) {}
+
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) {
     return c.redirect(`/?toast=${encodeURIComponent('Failed to delete transaction: ' + error.message)}`, 303);
   }
-  return c.redirect('/?toast=Transaction+deleted', 303);
+  return c.redirect('/?toast=Transaction+deleted+(Accounts+%26+Recurring+Bills+re-synced)', 303);
 });
 
 // ------------------------------------------------------------------------------
@@ -1967,6 +2018,9 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
 
   const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
   let currentBalance = acc ? toDecimal(acc.balance) : new Decimal(0);
+  const bills = getRecurringBills(c);
+  let billsUpdated = false;
+  const currentMonth = new Date().toISOString().slice(0, 7);
 
   let importedCount = 0;
   for (const t of parsedList) {
@@ -1978,7 +2032,7 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
     const date = t.date || new Date().toISOString().slice(0, 10);
     const txType = (t.type === 'INCOME') ? 'INCOME' : 'EXPENSE';
     
-    const { error: txError } = await supabase.from('transactions').insert({
+    const { data: insertedTx, error: txError } = await supabase.from('transactions').insert({
       ...(userId ? { user_id: userId } : {}),
       account_id: accountId,
       amount: amountKes,
@@ -1986,16 +2040,42 @@ financeRoutes.post('/finance/mpesa/import', async (c) => {
       category: category,
       description: description,
       date: date,
-    });
+    }).select().single();
 
     if (!txError) {
       if (txType === 'INCOME') {
         currentBalance = currentBalance.plus(amountKes);
       } else {
         currentBalance = currentBalance.minus(amountKes);
+        const probeTx = {
+          id: insertedTx?.id,
+          transaction_type: 'EXPENSE',
+          category,
+          description,
+          date,
+          amount: amountKes,
+        };
+        const bIdx = bills.findIndex((b) => doesTransactionMatchRecurringBill(probeTx, b, currentMonth));
+        if (bIdx >= 0) {
+          bills[bIdx] = {
+            ...bills[bIdx],
+            amount: amountKes,
+            is_paid_this_month: true,
+            last_paid_month: currentMonth,
+            last_paid_date: date,
+            account_id: accountId || bills[bIdx].account_id,
+            last_tx_id: insertedTx?.id ? String(insertedTx.id) : bills[bIdx].last_tx_id,
+            unpaid_override_month: undefined,
+          };
+          billsUpdated = true;
+        }
       }
       importedCount++;
     }
+  }
+
+  if (billsUpdated) {
+    saveRecurringBillsCookie(c, bills);
   }
 
   if (acc) {
@@ -2086,6 +2166,8 @@ export interface RecurringBillItem {
   last_paid_month?: string; // YYYY-MM
   last_paid_date?: string;  // YYYY-MM-DD
   account_id?: string;
+  last_tx_id?: string;
+  unpaid_override_month?: string;
 }
 
 export const DEFAULT_RECURRING_BILLS: RecurringBillItem[] = [
@@ -2095,6 +2177,130 @@ export const DEFAULT_RECURRING_BILLS: RecurringBillItem[] = [
   { id: 'bill-sha', name: 'SHA / NHIF Health Cover', category: 'Utilities & Bills', amount: 500, due_day: 9, icon: '🏥', is_paid_this_month: false },
   { id: 'bill-water', name: 'Water & Garbage Bill', category: 'Utilities & Bills', amount: 600, due_day: 20, icon: '💧', is_paid_this_month: false },
 ];
+
+export function doesTransactionMatchRecurringBill(t: any, b: RecurringBillItem, currentMonth: string): boolean {
+  if (!t || !b) return false;
+  if (isTransferTransaction(t) || t.transaction_type !== 'EXPENSE') return false;
+  const txDate = String(t.date || '');
+  if (currentMonth && txDate && !txDate.startsWith(currentMonth)) return false;
+
+  if (b.last_tx_id && t.id && String(t.id) === String(b.last_tx_id)) {
+    return true;
+  }
+
+  const desc = String(t.description || '').toLowerCase().trim();
+  const cat = String(t.category || '').toLowerCase().trim();
+  const billName = String(b.name || '').toLowerCase().trim();
+  if (!billName) return false;
+
+  if (desc && desc.includes(billName)) return true;
+  if (desc.length >= 4 && billName.length >= 4 && billName.includes(desc)) return true;
+
+  // Smart keyword matching for standard recurring bills & standing orders
+  const combinedTxText = `${desc} ${cat}`;
+  if ((b.id === 'bill-rent' || /\b(rent|landlord)\b/i.test(billName)) && /\b(house\s+rent|monthly\s+rent|rent|landlord)\b/i.test(combinedTxText)) {
+    return true;
+  }
+  if ((b.id === 'bill-kplc' || /\b(kplc|token|prepaid|electricity)\b/i.test(billName)) && /\b(kplc|k\.p\.l\.c|token|tokens|prepaid|kenya\s+power|electricity)\b/i.test(combinedTxText)) {
+    return true;
+  }
+  if ((b.id === 'bill-wifi' || /\b(wifi|wi-fi|internet|zuku|fibre|fiber|data\s+bundle)\b/i.test(billName)) && /\b(wifi|wi-fi|internet|zuku|safaricom\s+home|fibre|fiber|monthly\s+data)\b/i.test(combinedTxText)) {
+    return true;
+  }
+  if ((b.id === 'bill-sha' || /\b(sha|shif|nhif)\b/i.test(billName)) && /\b(sha|shif|nhif|social\s+health)\b/i.test(combinedTxText)) {
+    return true;
+  }
+  if ((b.id === 'bill-water' || /\b(water|garbage)\b/i.test(billName)) && /\b(water|garbage|sewerage|nairobi\s+water)\b/i.test(combinedTxText)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function reconcileRecurringBillsAndTransactions(
+  c: any,
+  rawBills: RecurringBillItem[],
+  dbBills: any[] = [],
+  txs: any[] = [],
+  currentMonth: string
+): { recurringBills: RecurringBillItem[]; syncedTransactions: any[] } {
+  const bills = [...(rawBills || [])];
+  const existingNames = new Set(bills.map((b) => String(b.name || '').toLowerCase().trim()));
+
+  // Merge any DB bills from `bills` table so Standing Orders & DB bills are unified
+  for (const dbBill of (dbBills || [])) {
+    const title = String(dbBill.title || dbBill.name || '').trim();
+    if (!title || existingNames.has(title.toLowerCase())) continue;
+    existingNames.add(title.toLowerCase());
+    const paidThisMonth = Boolean(dbBill.last_paid_date && String(dbBill.last_paid_date).startsWith(currentMonth));
+    bills.push({
+      id: String(dbBill.id || `db-bill-${Date.now()}`),
+      name: title,
+      category: dbBill.category && !String(dbBill.category).toUpperCase().startsWith('UTILITY') ? String(dbBill.category) : 'Utilities & Bills',
+      amount: Number(dbBill.amount || 0),
+      due_day: Math.min(31, Math.max(1, Number(dbBill.due_day || 5))),
+      icon: '⚡',
+      is_paid_this_month: paidThisMonth,
+      last_paid_month: paidThisMonth ? currentMonth : undefined,
+      last_paid_date: paidThisMonth ? String(dbBill.last_paid_date) : undefined,
+      account_id: dbBill.payment_account_id ? String(dbBill.payment_account_id) : undefined,
+    });
+  }
+
+  const syncedTxs = [...(txs || [])];
+  let cookieDirty = false;
+
+  for (let i = 0; i < bills.length; i++) {
+    const b = bills[i];
+    const matchedTxs = syncedTxs.filter((t) => doesTransactionMatchRecurringBill(t, b, currentMonth));
+
+    if (matchedTxs.length > 0) {
+      // Expense transaction(s) exist in the ledger for this recurring bill this month
+      if (b.unpaid_override_month !== currentMonth) {
+        const latestTx = matchedTxs[0];
+        const totalPaidKes = matchedTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+        const nextAmt = totalPaidKes > 0 ? totalPaidKes : b.amount;
+        if (!b.is_paid_this_month || b.amount !== nextAmt || b.last_paid_month !== currentMonth) {
+          bills[i] = {
+            ...b,
+            amount: nextAmt,
+            is_paid_this_month: true,
+            last_paid_month: currentMonth,
+            last_paid_date: latestTx.date || `${currentMonth}-01`,
+            account_id: latestTx.account_id || b.account_id,
+            last_tx_id: latestTx.id ? String(latestTx.id) : b.last_tx_id,
+          };
+          cookieDirty = true;
+        }
+      }
+    } else if (b.is_paid_this_month && b.amount > 0) {
+      // Bill is marked as paid in the checklist, but no corresponding expense transaction is in `txs` yet!
+      // Inject the expense transaction into `syncedTxs` so Monthly Expenses, Category Budgets, and Ledger match 100%.
+      const paidDate = b.last_paid_date && String(b.last_paid_date).startsWith(currentMonth)
+        ? b.last_paid_date
+        : new Date().toISOString().slice(0, 10);
+      syncedTxs.unshift({
+        id: b.last_tx_id || `bill-sync-${b.id}-${currentMonth}`,
+        account_id: b.account_id || null,
+        transaction_type: 'EXPENSE',
+        category: b.category || 'Utilities & Bills',
+        amount: Number(b.amount) || 0,
+        description: `${b.icon || '⚡'} ${b.name} (Monthly Bill — ${currentMonth})`,
+        date: paidDate,
+        created_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  if (cookieDirty) {
+    saveRecurringBillsCookie(c, bills);
+  }
+
+  return {
+    recurringBills: bills,
+    syncedTransactions: syncedTxs,
+  };
+}
 
 export function getRecurringBills(c: any): RecurringBillItem[] {
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -2133,7 +2339,8 @@ financeRoutes.post('/finance/bills/create', async (c) => {
   const amount = Math.max(0, parseFloat(String(body['amount'] || '0')) || 0);
   const due_day = Math.min(31, Math.max(1, parseInt(String(body['due_day'] || '5'), 10) || 5));
   const icon = String(body['icon'] || '⚡').trim() || '⚡';
-  const category = String(body['category'] || 'Utilities & Bills').trim();
+  const category = String(body['category'] || 'Utilities & Bills').trim() || 'Utilities & Bills';
+  const accountId = body['account_id'] ? String(body['account_id']).trim() : undefined;
 
   if (!name || amount <= 0) {
     return c.redirect('/?toast=Please+enter+a+valid+bill+name+and+amount#recurring-bills-card', 303);
@@ -2148,6 +2355,7 @@ financeRoutes.post('/finance/bills/create', async (c) => {
     due_day,
     icon,
     is_paid_this_month: false,
+    ...(accountId ? { account_id: accountId } : {}),
   };
 
   saveRecurringBillsCookie(c, [...bills, newBill]);
@@ -2172,6 +2380,56 @@ financeRoutes.post('/finance/bills/toggle-pay/:id', async (c) => {
   const currentMonth = nowIso.slice(0, 7);
   const markingPaid = !target.is_paid_this_month;
   const effectiveAmt = customAmt > 0 ? customAmt : target.amount;
+  const effectiveAccId = accountId || target.account_id || '';
+
+  let createdTxId: string | undefined = undefined;
+
+  if (markingPaid && effectiveAmt > 0) {
+    // Always record the expense transaction so Recurring Bills and Monthly Expenses stay 100% synced
+    try {
+      if (effectiveAccId) {
+        const { data: acc } = await supabase.from('accounts').select('*').eq('id', effectiveAccId).single();
+        if (acc) {
+          const updatedBal = toDecimal(acc.balance).minus(effectiveAmt).toNumber();
+          await supabase.from('accounts').update({ balance: updatedBal }).eq('id', effectiveAccId);
+        }
+      }
+      const { data: insertedTx } = await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: effectiveAccId || null,
+        transaction_type: 'EXPENSE',
+        category: target.category || 'Utilities & Bills',
+        amount: effectiveAmt,
+        description: `${target.icon || '⚡'} ${target.name} (Monthly Bill — ${currentMonth})`,
+        date: nowIso,
+      }).select().single();
+      if (insertedTx && insertedTx.id) {
+        createdTxId = String(insertedTx.id);
+      }
+    } catch (e) {}
+  } else if (!markingPaid) {
+    // Reopening as unpaid: remove the corresponding expense transaction(s) for this month and restore account balance
+    try {
+      let txQuery = supabase.from('transactions').select('*').eq('transaction_type', 'EXPENSE');
+      if (userId) txQuery = txQuery.eq('user_id', userId);
+      const { data: expTxs } = await txQuery;
+      const matchingTxs = (expTxs || []).filter((t: any) =>
+        (target.last_tx_id && String(t.id) === String(target.last_tx_id)) ||
+        doesTransactionMatchRecurringBill(t, target, currentMonth)
+      );
+
+      for (const mTx of matchingTxs) {
+        if (mTx.account_id) {
+          const { data: acc } = await supabase.from('accounts').select('*').eq('id', mTx.account_id).single();
+          if (acc) {
+            const restoredBal = toDecimal(acc.balance).plus(Number(mTx.amount || 0)).toNumber();
+            await supabase.from('accounts').update({ balance: restoredBal }).eq('id', mTx.account_id);
+          }
+        }
+        await supabase.from('transactions').delete().eq('id', mTx.id);
+      }
+    } catch (e) {}
+  }
 
   bills[idx] = {
     ...target,
@@ -2179,39 +2437,105 @@ financeRoutes.post('/finance/bills/toggle-pay/:id', async (c) => {
     is_paid_this_month: markingPaid,
     last_paid_month: markingPaid ? currentMonth : undefined,
     last_paid_date: markingPaid ? nowIso : undefined,
-    account_id: accountId || target.account_id,
+    account_id: effectiveAccId || undefined,
+    last_tx_id: markingPaid ? createdTxId : undefined,
+    unpaid_override_month: markingPaid ? undefined : currentMonth,
   };
   saveRecurringBillsCookie(c, bills);
 
-  // If marking as paid and an account was selected, deduct balance & log expense transaction
-  if (markingPaid && accountId && effectiveAmt > 0) {
-    try {
-      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
-      if (acc) {
-        const updatedBal = toDecimal(acc.balance).minus(effectiveAmt).toNumber();
-        await supabase.from('accounts').update({ balance: updatedBal }).eq('id', accountId);
-      }
-      await supabase.from('transactions').insert({
-        ...(userId ? { user_id: userId } : {}),
-        account_id: accountId,
-        transaction_type: 'EXPENSE',
-        category: target.category || 'Utilities & Bills',
-        amount: effectiveAmt,
-        description: `Monthly Bill Paid: ${target.name} (${currentMonth})`,
-        date: nowIso,
-      });
-    } catch (e) {}
-  }
-
   const msg = markingPaid
-    ? `✅ Marked "${target.name}" (Ksh ${effectiveAmt.toLocaleString()}) as PAID for ${currentMonth}!`
-    : `↺ Reopened "${target.name}" as unpaid for ${currentMonth}.`;
+    ? `✅ Marked "${target.name}" (Ksh ${effectiveAmt.toLocaleString()}) as PAID & recorded in Monthly Expenses!`
+    : `↺ Reopened "${target.name}" as unpaid & removed from Monthly Expenses.`;
   return c.redirect(`/?toast=${encodeURIComponent(msg)}#recurring-bills-card`, 303);
 });
 
+financeRoutes.post('/finance/bills/sync-expenses', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const nowIso = new Date().toISOString().slice(0, 10);
+  const currentMonth = nowIso.slice(0, 7);
+
+  let txQuery = supabase.from('transactions').select('*').order('date', { ascending: false });
+  if (userId) txQuery = txQuery.eq('user_id', userId);
+  const { data: existingTxs } = await txQuery;
+  const txs = existingTxs || [];
+
+  const bills = getRecurringBills(c);
+  let newlyRecordedInLedger = 0;
+  let newlyMarkedPaidFromLedger = 0;
+
+  for (let i = 0; i < bills.length; i++) {
+    const b = bills[i];
+    const matchedTxs = txs.filter((t: any) => doesTransactionMatchRecurringBill(t, b, currentMonth));
+
+    if (matchedTxs.length > 0) {
+      const latestTx = matchedTxs[0];
+      const totalPaid = matchedTxs.reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
+      if (!b.is_paid_this_month || b.amount !== totalPaid) {
+        newlyMarkedPaidFromLedger++;
+      }
+      bills[i] = {
+        ...b,
+        amount: totalPaid > 0 ? totalPaid : b.amount,
+        is_paid_this_month: true,
+        last_paid_month: currentMonth,
+        last_paid_date: latestTx.date || nowIso,
+        account_id: latestTx.account_id || b.account_id,
+        last_tx_id: latestTx.id ? String(latestTx.id) : b.last_tx_id,
+        unpaid_override_month: undefined,
+      };
+    } else if (b.is_paid_this_month && b.amount > 0) {
+      // Paid in checklist but missing in `transactions` table -> insert it now
+      try {
+        const paidDate = b.last_paid_date && String(b.last_paid_date).startsWith(currentMonth) ? b.last_paid_date : nowIso;
+        const { data: insertedTx } = await supabase.from('transactions').insert({
+          ...(userId ? { user_id: userId } : {}),
+          account_id: b.account_id || null,
+          transaction_type: 'EXPENSE',
+          category: b.category || 'Utilities & Bills',
+          amount: Number(b.amount) || 0,
+          description: `${b.icon || '⚡'} ${b.name} (Monthly Bill — ${currentMonth})`,
+          date: paidDate,
+        }).select().single();
+        if (insertedTx && insertedTx.id) {
+          bills[i] = {
+            ...b,
+            last_tx_id: String(insertedTx.id),
+          };
+        }
+        newlyRecordedInLedger++;
+      } catch (e) {}
+    }
+  }
+
+  saveRecurringBillsCookie(c, bills);
+  const summaryMsg = `🔄 Recurring Bills & Monthly Expenses 100% synced (${newlyMarkedPaidFromLedger} matched from ledger, ${newlyRecordedInLedger} backfilled to expenses)!`;
+  return c.redirect(`/?toast=${encodeURIComponent(summaryMsg)}#recurring-bills-card`, 303);
+});
+
 financeRoutes.post('/finance/bills/delete/:id', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   const billId = c.req.param('id');
-  const bills = getRecurringBills(c).filter((b) => String(b.id) !== String(billId));
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const allBills = getRecurringBills(c);
+  const target = allBills.find((b) => String(b.id) === String(billId));
+
+  if (target && target.is_paid_this_month && target.last_tx_id) {
+    try {
+      const { data: mTx } = await supabase.from('transactions').select('*').eq('id', target.last_tx_id).single();
+      if (mTx) {
+        if (mTx.account_id) {
+          const { data: acc } = await supabase.from('accounts').select('*').eq('id', mTx.account_id).single();
+          if (acc) {
+            const restoredBal = toDecimal(acc.balance).plus(Number(mTx.amount || 0)).toNumber();
+            await supabase.from('accounts').update({ balance: restoredBal }).eq('id', mTx.account_id);
+          }
+        }
+        await supabase.from('transactions').delete().eq('id', mTx.id);
+      }
+    } catch (e) {}
+  }
+
+  const bills = allBills.filter((b) => String(b.id) !== String(billId));
   saveRecurringBillsCookie(c, bills);
   return c.redirect('/?toast=Recurring+bill+removed#recurring-bills-card', 303);
 });
