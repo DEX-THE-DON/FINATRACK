@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
-import { AppEnv, getRequestContext } from '../db/supabase';
+import { AppEnv, getRequestContext, inMemoryStore } from '../db/supabase';
 import {
   toDecimal,
   calculateMonthlyYield,
@@ -2229,42 +2229,89 @@ financeRoutes.post('/rules/preset', async (c) => {
 // ------------------------------------------------------------------------------
 // SYSTEM DATA RESET (CLEAN SLATE)
 // ------------------------------------------------------------------------------
+export const ALL_USER_DATA_COOKIES = [
+  'finatrack_allocation_rules',
+  'finatrack_deleted_goals',
+  'finatrack_goal_horizons',
+  'finatrack_goal_splits',
+  'finatrack_guest_goals',
+  'finatrack_mmf_settings',
+  'finatrack_recurring_bills',
+  'finatrack_batch_pot',
+  'finatrack_compliance_docs',
+  'finatrack_maint_schedules',
+  'finatrack_odometer_config',
+  'finatrack_platform_remittance',
+  'finatrack_rider_logs',
+  'finatrack_roadside_incidents',
+  'finatrack_strict_saver',
+  'finatrack_salaried_config',
+  'finatrack_salaried_loans',
+  'finatrack_trader_config',
+  'finatrack_trader_credits',
+  'finatrack_trader_logs',
+];
+
+export function clearAllUserDataCookies(c: any): void {
+  try {
+    for (const cookieName of ALL_USER_DATA_COOKIES) {
+      setCookie(c, cookieName, '', { path: '/', maxAge: 0 });
+    }
+  } catch (e) {}
+}
+
+export function clearInMemoryStoreData(): void {
+  const tablesToClear = [
+    'accounts',
+    'transactions',
+    'goals',
+    'budgets',
+    'debts',
+    'bills',
+    'bikes',
+    'rider_logs',
+    'maintenance_schedules',
+    'compliance_deadlines',
+    'bike_financings',
+  ];
+  for (const t of tablesToClear) {
+    inMemoryStore[t] = [];
+  }
+}
+
 financeRoutes.post('/system/reset-data', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
-  
-  if (userId) {
-    await supabase.from('transactions').delete().eq('user_id', userId);
-    await supabase.from('rider_logs').delete().eq('user_id', userId);
-    await supabase.from('debts').delete().eq('user_id', userId);
-    await supabase.from('budgets').delete().eq('user_id', userId);
-    await supabase.from('goals').delete().eq('user_id', userId);
-    await supabase.from('bills').delete().eq('user_id', userId);
-    await supabase.from('maintenance_schedules').delete().eq('user_id', userId);
-    await supabase.from('compliance_deadlines').delete().eq('user_id', userId);
-    await supabase.from('bike_financings').delete().eq('user_id', userId);
-    await supabase.from('allocation_rules').delete().eq('user_id', userId);
-    await supabase.from('bikes').delete().eq('user_id', userId);
-    await supabase.from('accounts').delete().eq('user_id', userId);
-  } else {
-    await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('rider_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('debts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('budgets').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('goals').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('bills').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('maintenance_schedules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('compliance_deadlines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('bike_financings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('allocation_rules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('bikes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('accounts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  const body: any = await c.req.parseBody().catch(() => ({}));
+  const returnTo = String(body['return_to'] || c.req.query('return_to') || '/').startsWith('/rider') ? '/rider' : '/';
+
+  const tables = [
+    'transactions',
+    'rider_logs',
+    'debts',
+    'budgets',
+    'goals',
+    'bills',
+    'maintenance_schedules',
+    'compliance_deadlines',
+    'bike_financings',
+    'allocation_rules',
+    'bikes',
+    'accounts',
+  ];
+
+  for (const t of tables) {
+    try {
+      if (userId) {
+        await supabase.from(t).delete().eq('user_id', userId);
+      }
+      await supabase.from(t).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch (e) {}
   }
 
-  try {
-    setCookie(c, 'finatrack_allocation_rules', '', { path: '/', maxAge: 0 });
-  } catch (e) {}
+  clearInMemoryStoreData();
+  clearAllUserDataCookies(c);
 
-  return c.redirect('/?toast=All+data+cleared!+Ready+for+real+data.', 303);
+  return c.redirect(`${returnTo}?toast=All+data+cleared!+Ready+for+a+fresh+start.&reset_ls=1`, 303);
 });
 
 // ------------------------------------------------------------------------------
@@ -2498,13 +2545,7 @@ export interface RecurringBillItem {
   unpaid_override_month?: string;
 }
 
-export const DEFAULT_RECURRING_BILLS: RecurringBillItem[] = [
-  { id: 'bill-rent', name: 'Monthly House Rent', category: 'Utilities & Bills', amount: 8500, due_day: 5, icon: '🏠', is_paid_this_month: false },
-  { id: 'bill-kplc', name: 'KPLC Prepaid Tokens', category: 'Utilities & Bills', amount: 1500, due_day: 10, icon: '⚡', is_paid_this_month: false },
-  { id: 'bill-wifi', name: 'Home WiFi / Monthly Data Bundle', category: 'Utilities & Bills', amount: 2500, due_day: 15, icon: '🌐', is_paid_this_month: false },
-  { id: 'bill-sha', name: 'SHA / NHIF Health Cover', category: 'Utilities & Bills', amount: 500, due_day: 9, icon: '🏥', is_paid_this_month: false },
-  { id: 'bill-water', name: 'Water & Garbage Bill', category: 'Utilities & Bills', amount: 600, due_day: 20, icon: '💧', is_paid_this_month: false },
-];
+export const DEFAULT_RECURRING_BILLS: RecurringBillItem[] = [];
 
 export function doesTransactionMatchRecurringBill(t: any, b: RecurringBillItem, currentMonth: string): boolean {
   if (!t || !b) return false;
@@ -2636,7 +2677,7 @@ export function getRecurringBills(c: any): RecurringBillItem[] {
     const raw = getCookie(c, 'finatrack_recurring_bills') || '';
     if (raw) {
       const parsed = JSON.parse(decodeURIComponent(raw));
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed.map((b: any) => ({
           ...b,
           amount: Number(b.amount) || 0,

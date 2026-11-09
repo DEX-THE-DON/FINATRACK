@@ -225,12 +225,12 @@ export function resolveEffectiveSalariedLoans(c: any, dbDebts: any[] = []): Sala
 
 export function getSalariedConfig(c: any): SalariedConfig {
   const defaults: SalariedConfig = {
-    monthly_net_salary: 65000,
-    monthly_gross_salary: 85000,
+    monthly_net_salary: 0,
+    monthly_gross_salary: 0,
     payday_day: 28,
     side_hustle_estimate: 0,
-    employer_name: 'Main Employer',
-    living_budget_monthly: 18000,
+    employer_name: '',
+    living_budget_monthly: 0,
   };
   try {
     const raw = getCookie(c, 'finatrack_salaried_config') || '';

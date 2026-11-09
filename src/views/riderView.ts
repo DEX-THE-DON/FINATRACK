@@ -541,6 +541,14 @@ export function renderRiderDashboard(data: any): string {
     <script src="https://js.paystack.co/v1/inline.js"></script>
     <script>
         (function() {
+            try {
+                if (localStorage.getItem('finatrack_clean_epoch') !== '20261109_fresh_v1' || window.location.search.indexOf('reset_ls=1') !== -1) {
+                    ['finatrack_current_odo', 'finatrack_last_service_odo', 'finatrack_interval_km', 'finatrack_doc_scans_v1'].forEach(function(k) {
+                        localStorage.removeItem(k);
+                    });
+                    localStorage.setItem('finatrack_clean_epoch', '20261109_fresh_v1');
+                }
+            } catch (e) {}
             var theme = localStorage.getItem('theme');
             if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');

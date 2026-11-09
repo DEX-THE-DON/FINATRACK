@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { getCookie } from 'hono/cookie';
+import { getCookie, setCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext, inMemoryStore } from './db/supabase';
-import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon, getSavedMmfSettings, saveMmfSettingsCookie } from './routes/finance';
+import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon, getSavedMmfSettings, saveMmfSettingsCookie, ALL_USER_DATA_COOKIES, clearAllUserDataCookies } from './routes/finance';
 import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, reconcileRiderShiftLogsWithTransactions, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
@@ -38,6 +38,24 @@ import { Decimal } from 'decimal.js';
 export const app = new Hono<{ Bindings: AppEnv }>();
 
 const USD_TO_KES = 129.0;
+const CLEAN_SLATE_EPOCH = '20261109_fresh_v1';
+
+app.use('*', async (c, next) => {
+  const currentEpoch = getCookie(c, 'finatrack_clean_epoch');
+  if (currentEpoch !== CLEAN_SLATE_EPOCH) {
+    const hasStaleCookies = ALL_USER_DATA_COOKIES.some((name) => Boolean(getCookie(c, name)));
+    clearAllUserDataCookies(c);
+    setCookie(c, 'finatrack_clean_epoch', CLEAN_SLATE_EPOCH, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+    if (hasStaleCookies && c.req.method === 'GET' && ['/', '/rider', '/trader', '/salaried'].includes(c.req.path)) {
+      return c.redirect(`${c.req.path}?toast=${encodeURIComponent('✨ Fresh Start Active: All previous data cleared!')}&reset_ls=1`, 303);
+    }
+  }
+  await next();
+});
 
 export interface SmartNotificationItem {
   id: string;

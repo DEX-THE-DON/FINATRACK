@@ -267,8 +267,8 @@ export function getOdometerConfig(c: any, shiftLogs: any[] = []): OdometerConfig
     (shiftLogs || []).reduce((acc: number, l: any) => acc + (Number(l.kilometers) || 0), 0) * 10
   ) / 10;
 
-  let currentOdo = 10000;
-  let lastServiceOdo = 10000;
+  let currentOdo = 0;
+  let lastServiceOdo = 0;
   let intervalKm = 3000;
 
   try {
