@@ -100,9 +100,20 @@ export function renderTraderDashboard(data: {
         }
     </script>
     <style>
+        html {
+            scroll-behavior: smooth;
+            -webkit-tap-highlight-color: transparent;
+        }
         html, body {
             overflow-x: hidden;
             max-width: 100vw;
+        }
+        button, a, [role="button"], input, select, textarea, summary {
+            touch-action: manipulation;
+        }
+        input, select, textarea {
+            max-width: 100%;
+            min-width: 0;
         }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }

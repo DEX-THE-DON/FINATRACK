@@ -103,7 +103,7 @@ export function buildSmartNotifications(opts: {
       icon: '📝',
       title: 'Daily Logger Pending Today',
       subtitle: `No shift or daily closeout logged yet for ${opts.todayIso}. Log earnings & expenses to keep your ledger synced.`,
-      action_href: opts.isRiderView ? '#log-shift-card' : '#daily-logger-card',
+      action_href: opts.isRiderView ? '#shift-log-card' : '#daily-logger-card',
       action_label: '⚡ Log Today',
     });
   } else {
@@ -115,7 +115,7 @@ export function buildSmartNotifications(opts: {
       title: `Daily Logger Synced (${todayShifts.length} entry)`,
       subtitle: `Today's Gross Ksh ${todayGross.toLocaleString()} • Expenses Ksh ${todayExp.toLocaleString()} • Net Ksh ${todayNet.toLocaleString()}`,
       amount_kes: todayNet,
-      action_href: opts.isRiderView ? '#log-shift-card' : '#daily-logger-card',
+      action_href: opts.isRiderView ? '#shift-log-card' : '#daily-logger-card',
       action_label: '+ Add Entry',
     });
   }

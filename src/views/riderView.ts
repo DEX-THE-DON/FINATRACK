@@ -67,7 +67,7 @@ export function renderRiderDashboard(data: any): string {
   const totalMaintExp = totalShiftMaintExp + totalScheduleMaintExp;
   const shiftsWithKmCount = (rider_logs || []).filter((l: any) => Number(l.kilometers || 0) > 0).length;
 
-  const lastServiceOdo = Number(odometer_config?.last_service_odo ?? 10000);
+  const lastServiceOdo = Number(odometer_config?.last_service_odo ?? 0);
   const currentOdometer = Number(odometer_config?.current_odometer ?? odometer_config?.base_odometer ?? lastServiceOdo);
   const baseOdometer = currentOdometer;
   const serviceIntervalKm = Number(odometer_config?.service_interval_km ?? 3000);
@@ -581,9 +581,31 @@ export function renderRiderDashboard(data: any): string {
         }
     </script>
     <style>
+        html {
+            scroll-behavior: smooth;
+            -webkit-tap-highlight-color: transparent;
+        }
         html, body {
             overflow-x: hidden;
             max-width: 100vw;
+        }
+        button, a, [role="button"], input, select, textarea, summary {
+            touch-action: manipulation;
+        }
+        input, select, textarea {
+            max-width: 100%;
+            min-width: 0;
+        }
+        @media (min-width: 1024px) {
+            main > .rounded-3xl {
+                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+            }
+            main > .rounded-3xl:hover {
+                box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.08), 0 4px 10px -4px rgba(15, 23, 42, 0.04);
+            }
+            html.dark main > .rounded-3xl:hover {
+                box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.45), 0 4px 12px -4px rgba(59, 130, 246, 0.08);
+            }
         }
         .convertible-amount { transition: all 0.2s ease-in-out; }
         html.privacy-blur .convertible-amount,
@@ -4951,7 +4973,7 @@ export function renderRiderDashboard(data: any): string {
             </div>
 
             <!-- 🚗 Odometer, CPK & Service Interval Tracker Box (Synced with Daily Shift Logger) -->
-            <form action="/rider/odometer/update" method="POST" class="p-4 bg-slate-900 text-white rounded-2xl border border-indigo-900/60 space-y-3">
+            <form id="odometer-card" action="/rider/odometer/update" method="POST" class="p-4 bg-slate-900 text-white rounded-2xl border border-indigo-900/60 space-y-3">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div class="flex items-center space-x-2">
                         <span class="text-xl">🚗</span>
@@ -5977,6 +5999,28 @@ export function renderRiderDashboard(data: any): string {
                 </div>
                 `;
             })()}
+        </div>
+
+        <!-- 🗑️ System Data Management & Clean Slate Reset -->
+        <div class="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 shadow-xs border border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+                <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span>⚙️</span>
+                    <span>Fleet Data Management &amp; Clean Slate Reset</span>
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Export your shift records to CSV or wipe all records to start completely afresh.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                <a href="/rider/export/csv" class="flex-1 sm:flex-initial justify-center px-4 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 active:scale-95">
+                    <span>📥 Backup Shifts CSV</span>
+                </a>
+                <form action="/system/reset-data" method="POST" class="flex-1 sm:flex-initial" onsubmit="return confirm('⚠️ WARNING: This will permanently wipe all shifts, transactions, accounts, debts, bills, and odometer records so you can start completely clean. Are you sure?');">
+                    <input type="hidden" name="return_to" value="/rider">
+                    <button type="submit" class="w-full justify-center px-4 py-2.5 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
+                        <span>🗑️ Reset &amp; Clear All Data</span>
+                    </button>
+                </form>
+            </div>
         </div>
 
     </main>

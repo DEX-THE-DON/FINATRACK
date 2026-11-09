@@ -1469,13 +1469,15 @@ riderRoutes.post('/bikes/delete/:id', async (c) => {
 // ------------------------------------------------------------------------------
 riderRoutes.post('/rider/odometer/update', async (c) => {
   const body = await c.req.parseBody();
-  const lastServiceOdo = parseFloat(String(body['last_service_odo'] || '10000')) || 10000;
+  const rawLastService = parseFloat(String(body['last_service_odo'] ?? '0'));
+  const lastServiceOdo = !isNaN(rawLastService) && rawLastService >= 0 ? rawLastService : 0;
   const intervalKm = parseFloat(String(body['service_interval_km'] || '3000')) || 3000;
   const syncMode = String(body['sync_mode'] || '');
 
-  let currentOdo = parseFloat(String(body['current_odometer'] || '0')) || 0;
+  const rawCurrentOdo = parseFloat(String(body['current_odometer'] ?? '0'));
+  let currentOdo = !isNaN(rawCurrentOdo) && rawCurrentOdo >= 0 ? rawCurrentOdo : 0;
 
-  if (syncMode === 'FROM_SERVICE' || currentOdo <= 0) {
+  if (syncMode === 'FROM_SERVICE') {
     currentOdo = lastServiceOdo;
   }
 
@@ -1488,7 +1490,7 @@ riderRoutes.post('/rider/odometer/update', async (c) => {
     service_interval_km: intervalKm,
   });
 
-  return c.redirect(`/rider?toast=${encodeURIComponent(`Odometer synced at ${roundedCurrentOdo.toLocaleString()} km (Next service at ${(lastServiceOdo + intervalKm).toLocaleString()} km)`)}`, 303);
+  return c.redirect(`/rider?toast=${encodeURIComponent(`Odometer synced at ${roundedCurrentOdo.toLocaleString()} km (Next service at ${(lastServiceOdo + intervalKm).toLocaleString()} km)`)}#odometer-card`, 303);
 });
 
 // ------------------------------------------------------------------------------

@@ -250,9 +250,31 @@ export function renderFinanceDashboard(data: any): string {
         }
     </script>
     <style>
+        html {
+            scroll-behavior: smooth;
+            -webkit-tap-highlight-color: transparent;
+        }
         html, body {
             overflow-x: hidden;
             max-width: 100vw;
+        }
+        button, a, [role="button"], input, select, textarea, summary {
+            touch-action: manipulation;
+        }
+        input, select, textarea {
+            max-width: 100%;
+            min-width: 0;
+        }
+        @media (min-width: 1024px) {
+            main > .rounded-3xl {
+                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+            }
+            main > .rounded-3xl:hover {
+                box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.08), 0 4px 10px -4px rgba(15, 23, 42, 0.04);
+            }
+            html.dark main > .rounded-3xl:hover {
+                box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.45), 0 4px 12px -4px rgba(16, 185, 129, 0.08);
+            }
         }
         .convertible-amount { transition: all 0.2s ease-in-out; }
         html.privacy-blur .convertible-amount,
