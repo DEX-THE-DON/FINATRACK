@@ -630,7 +630,7 @@ riderRoutes.post('/rider/logs', async (c) => {
   const body = await c.req.parseBody();
 
   // ----------------------------------------------------------------------------
-  // 💳 PAYSTACK SHIFT GATE (Strictly enforced for dex@gmail.com in test mode)
+  // 💳 PAYSTACK SHIFT GATE (Strictly enforced for dex@gmail.com)
   // ----------------------------------------------------------------------------
   const paystackCfg = getPaystackConfig(c);
   const userIdentifier = email || getCookie(c, 'finatrack_email') || username || '';
@@ -642,7 +642,7 @@ riderRoutes.post('/rider/logs', async (c) => {
 
     if (!paystackRef) {
       return c.redirect(
-        `/rider?toast=${encodeURIComponent(`⚠️ Paystack test gate: dex@gmail.com must complete Ksh ${paystackCfg.shiftFeeKes} payment before recording a shift.`)}&paystack_gate=1`,
+        `/rider?toast=${encodeURIComponent(`⚠️ Paystack Shift Gate: dex@gmail.com must complete Ksh ${paystackCfg.shiftFeeKes} payment before recording a shift.`)}&paystack_gate=1`,
         303
       );
     }

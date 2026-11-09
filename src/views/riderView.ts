@@ -37,7 +37,7 @@ export function renderRiderDashboard(data: any): string {
     email = '',
     is_logged_in = false,
     active_profile = 'RIDER',
-    paystack_public_key = 'pk_test_6611c5778e2e10bde298210d185c9d36dde3cf0d',
+    paystack_public_key = 'pk_live_b022e1dacdacdeebb08984a294e68edf3ed1c4ea',
     paystack_shift_fee_kes = 100,
     is_paystack_paywalled = false,
   } = data;
@@ -4549,11 +4549,11 @@ export function renderRiderDashboard(data: any): string {
                             <span class="text-2xl p-2 bg-indigo-900/80 rounded-xl border border-indigo-400/40 shrink-0">🔒</span>
                             <div>
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <strong class="text-white text-sm">Paystack Shift Gate (Test Mode)</strong>
+                                    <strong class="text-white text-sm">Paystack Shift Gate (Live Mode)</strong>
                                     <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/30 text-indigo-200 border border-indigo-400/40">Strictly for ${email || 'dex@gmail.com'}</span>
                                 </div>
                                 <p class="text-[11px] text-indigo-300 mt-0.5">
-                                    Ksh ${paystack_shift_fee_kes} payment required before saving shift. Test M-Pesa / Card checkout active. Other users continue free.
+                                    Ksh ${paystack_shift_fee_kes} payment required before saving shift. Live M-Pesa / Card checkout active. Other users continue free.
                                 </p>
                             </div>
                         </div>

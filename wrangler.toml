@@ -7,3 +7,6 @@ pages_build_output_dir = "static"
 ENVIRONMENT = "production"
 SUPABASE_URL = "https://ynqinvzopesauljdgjoo.supabase.co"
 SUPABASE_ANON_KEY = "sb_publishable_ROu6-kwidZFNH-d2RermBg_z_zx5gPI"
+PAYSTACK_PUBLIC_KEY = "pk_live_b022e1dacdacdeebb08984a294e68edf3ed1c4ea"
+PAYSTACK_PAYWALL_EMAIL = "dex@gmail.com"
+PAYSTACK_SHIFT_FEE_KES = 100
