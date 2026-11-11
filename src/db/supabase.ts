@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { setCookie } from 'hono/cookie';
 import { Database } from '../types/database';
 
 export interface AppEnv {
@@ -302,6 +303,29 @@ export async function getRequestContext(c: any) {
         // Supabase network failure or offline in sandbox
         supabase = getSupabaseClient(env, authHeader);
       }
+    }
+
+    // Proactively refresh session if access token expired or verification failed
+    const refreshToken = cookies['sb-refresh-token'] || cookies['finatrack_pin_refresh_token'];
+    if (!verified && refreshToken) {
+      try {
+        const rawClient = getSupabaseClient(env);
+        const { data: refData, error: refError } = await rawClient.auth.refreshSession({ refresh_token: refreshToken });
+        if (!refError && refData?.session && refData?.user) {
+          user = refData.user;
+          isLoggedIn = true;
+          email = user.email || '';
+          username = user.user_metadata?.full_name || email.split('@')[0] || 'Member';
+          verified = true;
+          supabase = getSupabaseClient(env, `Bearer ${refData.session.access_token}`);
+          try {
+            setCookie(c, 'sb-access-token', refData.session.access_token, { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: refData.session.expires_in || 3600 });
+            if (refData.session.refresh_token) {
+              setCookie(c, 'sb-refresh-token', refData.session.refresh_token, { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 365 });
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
     }
 
     // Fallback to local / mock store if remote verification failed
