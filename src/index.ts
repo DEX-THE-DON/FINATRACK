@@ -519,9 +519,15 @@ app.get('/', async (c) => {
     reconcileRecurringBillsAndTransactions(c, getRecurringBills(c), bills || [], txsWithRiderShifts, currentMonth);
   const totalRecurringBillsKes = reconciledRecurringBills.reduce((s, b) => s + Number(b.amount || 0), 0);
 
-  // Weekly calculation (Mon - Sun)
-  const dayOfWeek = (today.getDay() + 6) % 7; // 0 for Monday, 6 for Sunday
-  const daysElapsedWeek = dayOfWeek + 1;
+  // Strict saver & work days configuration (Respects user's work schedule: defaults to 6 work days/week: Mon - Sat, Sunday rest)
+  const strictSaverConfig = getStrictSaverConfig(c);
+  const workDaysPerWeek = Math.min(7, Math.max(1, Number(strictSaverConfig?.work_days_per_week || 6)));
+
+  // Weekly calculation (Mon - Sun calendar boundaries, with daily pacing aligned to work days)
+  const dayOfWeek = (today.getDay() + 6) % 7; // 0 for Monday, 5 for Saturday, 6 for Sunday
+  const isRestDay = dayOfWeek >= workDaysPerWeek; // e.g. Sunday in a 6-day work week
+  const elapsedWorkDays = isRestDay ? workDaysPerWeek : Math.min(workDaysPerWeek, dayOfWeek + 1);
+
   const monday = new Date(today);
   monday.setDate(today.getDate() - dayOfWeek);
   const mondayStr = monday.toISOString().slice(0, 10);
@@ -581,15 +587,15 @@ app.get('/', async (c) => {
     }
   }
 
-  // Multi-timeframe Income and Expense Target Objects
+  // Multi-timeframe Income and Expense Target Objects (Paced to user's 6 work days/week or custom schedule)
   const incomeTargets = {
-    weekly: calculateTargetPace(weeklyIncome, targetIncWeekly, 'WEEKLY', true, daysElapsedWeek, 7),
+    weekly: calculateTargetPace(weeklyIncome, targetIncWeekly, 'WEEKLY', true, elapsedWorkDays, workDaysPerWeek, isRestDay),
     monthly: calculateTargetPace(monthlyIncome, targetIncMonthly, 'MONTHLY', true, currentDay, daysInMonth),
     yearly: calculateTargetPace(yearlyIncome, targetIncYearly, 'YEARLY', true, dayOfYear, totalDaysInYear),
   };
 
   const expenseTargets = {
-    weekly: calculateTargetPace(weeklyExpenses, targetExpWeekly, 'WEEKLY', false, daysElapsedWeek, 7),
+    weekly: calculateTargetPace(weeklyExpenses, targetExpWeekly, 'WEEKLY', false, elapsedWorkDays, workDaysPerWeek, isRestDay),
     monthly: calculateTargetPace(monthlyExpenses, targetExpMonthly, 'MONTHLY', false, currentDay, daysInMonth),
     yearly: calculateTargetPace(yearlyExpenses, targetExpYearly, 'YEARLY', false, dayOfYear, totalDaysInYear),
   };
@@ -811,7 +817,7 @@ app.get('/', async (c) => {
   const totalMmfBalance = mmfAccounts.reduce((sum, m) => sum + Number(m.balance || 0), 0);
   const totalMmfAccruedProfit = mmfAccounts.reduce((sum, m) => sum + Number(m.total_accrued_profit || 0), 0);
   const totalMmfPrincipal = mmfAccounts.reduce((sum, m) => sum + Number(m.principal_deposited || 0), 0);
-  const strictSaverConfig = getStrictSaverConfig(c);
+  // strictSaverConfig already initialized above for work schedule and weekly target pacing
 
   // Enriched Debts & Loans with Danger Zone Intelligence (merged from DB + cookie so no loan is ever lost)
   const mergedDebts = resolveEffectiveSalariedLoans(c, debts || []);

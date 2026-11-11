@@ -60,6 +60,19 @@ console.assert(weekIncomeTarget.percentage === 67, `Weekly income target pct sho
 console.assert(Math.round(weekIncomeTarget.dailyRate) === 1250, `Daily run-rate needed should be 1250, got ${weekIncomeTarget.dailyRate}`);
 console.log(`✅ Weekly Income Target (10k/15k on day 4/7): ${weekIncomeTarget.statusLabel}, Needed=${Math.round(weekIncomeTarget.dailyRate)}/day`);
 
+// Test 5b: 6-Day Work Week Pacing (Mon - Sat, 6 work days)
+const weekIncome6Days = calculateTargetPace(10000, 15000, 'WEEKLY', true, 4, 6);
+console.assert(weekIncome6Days.daysRemaining === 3, `6-day week on day 4 should have 3 days remaining, got ${weekIncome6Days.daysRemaining}`);
+console.assert(Math.round(weekIncome6Days.dailyRate) === 1667, `Daily run-rate needed on 6-day week should be 1667, got ${weekIncome6Days.dailyRate}`);
+console.log(`✅ 6-Day Work Week Target (10k/15k on day 4/6): Needed=${Math.round(weekIncome6Days.dailyRate)}/day (${weekIncome6Days.daysRemaining} days left)`);
+
+// Test 5c: 6-Day Work Week on Sunday Rest Day
+const sundayRestTarget = calculateTargetPace(13500, 15000, 'WEEKLY', true, 6, 6, true);
+console.assert(sundayRestTarget.daysRemaining === 0, `Sunday rest day should have 0 days remaining, got ${sundayRestTarget.daysRemaining}`);
+console.assert(sundayRestTarget.dailyRate === 0, `Sunday rest day dailyRate should be 0, got ${sundayRestTarget.dailyRate}`);
+console.assert(sundayRestTarget.statusLabel.includes('Sunday Rest'), `Status label should reflect Sunday Rest, got ${sundayRestTarget.statusLabel}`);
+console.log(`✅ 6-Day Work Week Sunday Rest Day: ${sundayRestTarget.statusLabel}, DaysLeft=${sundayRestTarget.daysRemaining}`);
+
 const monthExpenseTarget = calculateTargetPace(12000, 25000, 'MONTHLY', false, 15, 30);
 console.assert(monthExpenseTarget.percentage === 48, `Monthly expense target pct should be 48%, got ${monthExpenseTarget.percentage}%`);
 console.log(`✅ Monthly Expense Target (12k/25k on day 15/30): ${monthExpenseTarget.statusLabel}, Safe Daily=${monthExpenseTarget.dailyRate.toFixed(2)}/day`);

@@ -835,6 +835,16 @@ financeRoutes.post('/targets/update', async (c) => {
     entriesToUpsert.push({ category: 'Utilities & Bills', limit_amount: parseFloat(String(body['cat_limit_bills'])) || 4000 });
   }
 
+  // Work days schedule synchronization (e.g. 6 work days/week default, Mon - Sat)
+  if (body['work_days_per_week'] !== undefined && body['work_days_per_week'] !== '') {
+    const wDays = Math.min(7, Math.max(1, parseInt(String(body['work_days_per_week']), 10) || 6));
+    const curStrict = getStrictSaverConfig(c);
+    saveStrictSaverConfigCookie(c, {
+      ...curStrict,
+      work_days_per_week: wDays,
+    });
+  }
+
   if (userId) {
     for (const item of entriesToUpsert) {
       await supabase.from('budgets').upsert({

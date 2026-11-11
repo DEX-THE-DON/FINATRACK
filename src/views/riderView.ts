@@ -189,9 +189,10 @@ export function renderRiderDashboard(data: any): string {
   }
 
   const uniqueDaysLoggedThisWeek = dailyNetByDate.size;
-  const remainingWorkDaysThisWeek = Math.max(1, workDaysPerWeek - uniqueDaysLoggedThisWeek);
+  const isSundayRestDay = currentDayOfWeek === 6 && workDaysPerWeek <= 6;
+  const remainingWorkDaysThisWeek = Math.max(0, workDaysPerWeek - uniqueDaysLoggedThisWeek);
   const remainingExtraTargetKes = Math.max(0, weeklyExtraTargetKes - thisWeekExtraSurplusKes);
-  const dynamicDailyExtraPaceKes = remainingExtraTargetKes > 0
+  const dynamicDailyExtraPaceKes = remainingWorkDaysThisWeek > 0 && remainingExtraTargetKes > 0
     ? Math.ceil(remainingExtraTargetKes / remainingWorkDaysThisWeek)
     : dailyBonusTargetKes;
   const weeklyExtraProgressPct = weeklyExtraTargetKes > 0
@@ -236,7 +237,7 @@ export function renderRiderDashboard(data: any): string {
   const bucketCountForFeeCalc = Math.max(3, batchBucketList.length || 3);
   const transfersAvoidedCount = batchPotEntries.length > 1
     ? (batchPotEntries.length * bucketCountForFeeCalc) - bucketCountForFeeCalc
-    : (7 * bucketCountForFeeCalc) - bucketCountForFeeCalc;
+    : (workDaysPerWeek * bucketCountForFeeCalc) - bucketCountForFeeCalc;
   const estMpesaFeesSavedKes = transfersAvoidedCount * 11;
   const platRemit = platform_remittance || {
     uber_owed: 0,
@@ -3633,9 +3634,11 @@ export function renderRiderDashboard(data: any): string {
                             </span>
                         </div>
                         <p class="text-[11px] text-gray-300">
-                            ${remainingExtraTargetKes > 0
-                              ? `⚡ <strong>Push Harder After Ksh ${strictNetFloor.toLocaleString()}:</strong> Your first Ksh ${strictNetFloor.toLocaleString()}/day is locked for <strong>Pay Yourself First</strong>. To hit your <strong class="text-amber-300">+Ksh ${weeklyExtraTargetKes.toLocaleString()} Weekly Extra Hustle Pool</strong> (${workDaysPerWeek} days × +Ksh ${dailyBonusTargetKes.toLocaleString()}/day), aim for <strong class="text-emerald-400">+Ksh ${dynamicDailyExtraPaceKes.toLocaleString()}/day extra</strong> (Net <strong>Ksh ${(strictNetFloor + dynamicDailyExtraPaceKes).toLocaleString()}/day</strong>) over the remaining <strong>${remainingWorkDaysThisWeek} workday${remainingWorkDaysThisWeek === 1 ? '' : 's'}</strong>!`
-                              : `🎉 <strong>Extra Hustle Target Crushed!</strong> Your sacred Ksh ${strictNetFloor.toLocaleString()}/day floor is safe AND you banked <strong class="text-emerald-400">+Ksh ${thisWeekExtraSurplusKes.toLocaleString()}</strong> pure extra cash above your floor this week!`}
+                            ${isSundayRestDay
+                              ? `🛋️ <strong>Sunday Rest & Batch Day:</strong> Your ${workDaysPerWeek}-day work week is complete! Today is for recovery, family, and executing your Sunday consolidated waterfall transfers.`
+                              : remainingExtraTargetKes > 0
+                                ? `⚡ <strong>Push Harder After Ksh ${strictNetFloor.toLocaleString()}:</strong> Your first Ksh ${strictNetFloor.toLocaleString()}/day is locked for <strong>Pay Yourself First</strong>. To hit your <strong class="text-amber-300">+Ksh ${weeklyExtraTargetKes.toLocaleString()} Weekly Extra Hustle Pool</strong> (${workDaysPerWeek} days × +Ksh ${dailyBonusTargetKes.toLocaleString()}/day), aim for <strong class="text-emerald-400">+Ksh ${dynamicDailyExtraPaceKes.toLocaleString()}/day extra</strong> (Net <strong>Ksh ${(strictNetFloor + dynamicDailyExtraPaceKes).toLocaleString()}/day</strong>) over the remaining <strong>${remainingWorkDaysThisWeek} workday${remainingWorkDaysThisWeek === 1 ? '' : 's'}</strong>!`
+                                : `🎉 <strong>Extra Hustle Target Crushed!</strong> Your sacred Ksh ${strictNetFloor.toLocaleString()}/day floor is safe AND you banked <strong class="text-emerald-400">+Ksh ${thisWeekExtraSurplusKes.toLocaleString()}</strong> pure extra cash above your floor this week!`}
                         </p>
                     </div>
                     <div class="text-right shrink-0 bg-slate-900/90 border border-indigo-800/60 px-3.5 py-2 rounded-xl">
@@ -3690,7 +3693,7 @@ export function renderRiderDashboard(data: any): string {
                             </span>
                         </div>
                         <p class="text-xs text-emerald-200/90 mt-0.5">
-                            Queue your Mon–Sat 23:50 net splits in a virtual <strong>Weekly Holding Pot (in your M-Pesa)</strong>, then make just <strong>${bucketCountForFeeCalc} bulk transfers on Sunday night</strong> instead of 21 daily transfers!
+                            Queue your Mon–${workDaysPerWeek === 5 ? 'Fri' : workDaysPerWeek === 6 ? 'Sat' : 'Sun'} net splits in a virtual <strong>Weekly Holding Pot (in your M-Pesa)</strong>, then make just <strong>${bucketCountForFeeCalc} bulk transfers on Sunday night</strong> instead of ${workDaysPerWeek * bucketCountForFeeCalc} daily micro-transfers!
                         </p>
                     </div>
                 </div>
@@ -3770,7 +3773,7 @@ export function renderRiderDashboard(data: any): string {
                         </div>
                         ` : `
                         <div class="space-y-1.5 pt-1 text-xs text-gray-400">
-                            <p>Example 6-Day Consolidated Sunday Transfer (at Ksh ${strictNetFloor.toLocaleString()}/day):</p>
+                            <p>Example ${workDaysPerWeek}-Day Consolidated Sunday Transfer (at Ksh ${strictNetFloor.toLocaleString()}/day):</p>
                             <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
                                 <span>📈 Ziidi MMF (30%)</span>
                                 <strong class="text-emerald-400">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.3).toLocaleString()}</strong>
@@ -3787,7 +3790,7 @@ export function renderRiderDashboard(data: any): string {
                         `}
                     </div>
                     <p class="text-[11px] text-emerald-300/90 pt-2 border-t border-slate-800">
-                        💡 <strong>Result:</strong> Only <strong>${bucketCountForFeeCalc} bulk M-Pesa transfers on Sunday night</strong> instead of ${7 * bucketCountForFeeCalc} micro-transfers during the week!
+                        💡 <strong>Result:</strong> Only <strong>${bucketCountForFeeCalc} bulk M-Pesa transfers on Sunday night</strong> instead of ${workDaysPerWeek * bucketCountForFeeCalc} micro-transfers during the week!
                     </p>
                 </div>
             </div>

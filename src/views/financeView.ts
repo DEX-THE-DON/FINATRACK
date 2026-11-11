@@ -9,12 +9,12 @@ export function renderFinanceDashboard(data: any): string {
     goals = [],
     budgets = [],
     income_targets = {
-      weekly: { actual: 0, target: 15000, percentage: 0, displayPercentage: 0, remaining: 15000, dailyRate: 2142.86, statusLabel: '🎯 On Track', statusBadge: 'emerald', daysRemaining: 7 },
+      weekly: { actual: 0, target: 15000, percentage: 0, displayPercentage: 0, remaining: 15000, dailyRate: 2500, statusLabel: '🎯 On Track', statusBadge: 'emerald', daysRemaining: 6 },
       monthly: { actual: 0, target: 65000, percentage: 0, displayPercentage: 0, remaining: 65000, dailyRate: 2166.67, statusLabel: '🎯 On Track', statusBadge: 'emerald', daysRemaining: 30 },
       yearly: { actual: 0, target: 780000, percentage: 0, displayPercentage: 0, remaining: 780000, dailyRate: 2136.99, statusLabel: '🎯 On Track', statusBadge: 'emerald', daysRemaining: 365 }
     },
     expense_targets = {
-      weekly: { actual: 0, target: 6000, percentage: 0, displayPercentage: 0, remaining: 6000, dailyRate: 857.14, statusLabel: '🟢 Safe Spend Pace', statusBadge: 'emerald', daysRemaining: 7 },
+      weekly: { actual: 0, target: 6000, percentage: 0, displayPercentage: 0, remaining: 6000, dailyRate: 1000, statusLabel: '🟢 Safe Spend Pace', statusBadge: 'emerald', daysRemaining: 6 },
       monthly: { actual: 0, target: 25000, percentage: 0, displayPercentage: 0, remaining: 25000, dailyRate: 833.33, statusLabel: '🟢 Safe Spend Pace', statusBadge: 'emerald', daysRemaining: 30 },
       yearly: { actual: 0, target: 300000, percentage: 0, displayPercentage: 0, remaining: 300000, dailyRate: 821.92, statusLabel: '🟢 Safe Spend Pace', statusBadge: 'emerald', daysRemaining: 365 }
     },
@@ -102,6 +102,7 @@ export function renderFinanceDashboard(data: any): string {
       : 'bg-blue-50 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-800';
 
   const strictNetFloor = Number(strict_saver_config?.net_floor_kes || 1000);
+  const workDaysPerWeek = Math.min(7, Math.max(1, Number(strict_saver_config?.work_days_per_week || 6)));
   const defaultSplitInputAmt = pay_yourself_amount > 0
     ? Number(pay_yourself_amount.toFixed(2))
     : (today_shift_net > 0 ? Number(today_shift_net.toFixed(2)) : (last_shift_net > 0 ? Number(last_shift_net.toFixed(2)) : strictNetFloor));
@@ -3642,8 +3643,8 @@ export function renderFinanceDashboard(data: any): string {
 
                 <form action="/targets/update" method="POST" class="space-y-4">
                     <div>
-                        <p class="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">💵 Target Income Milestones (<span class="curr-symbol-label">Ksh</span>)</p>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <p class="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">💵 Target Income Milestones & Work Schedule (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Weekly Target Income</label>
                                 <input type="number" step="any" inputmode="decimal" name="target_income_weekly" value="${income_targets?.weekly?.target ?? 15000}" placeholder="15000" data-placeholder-base="15000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
@@ -3655,6 +3656,14 @@ export function renderFinanceDashboard(data: any): string {
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Yearly Target Income</label>
                                 <input type="number" step="any" inputmode="decimal" name="target_income_yearly" value="${income_targets?.yearly?.target ?? 780000}" placeholder="780000" data-placeholder-base="780000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-amber-600 dark:text-amber-400 mb-1 font-semibold">📅 Work Days / Week</label>
+                                <select name="work_days_per_week" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400">
+                                    <option value="5" ${workDaysPerWeek === 5 ? 'selected' : ''}>5 Days (Mon – Fri)</option>
+                                    <option value="6" ${workDaysPerWeek === 6 ? 'selected' : ''}>6 Days (Mon – Sat)</option>
+                                    <option value="7" ${workDaysPerWeek === 7 ? 'selected' : ''}>7 Days (Full Week)</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -3712,7 +3721,15 @@ export function renderFinanceDashboard(data: any): string {
                 const inc = income_targets[tf];
                 const exp = expense_targets[tf];
                 const isHidden = tf !== 'monthly';
-                const tfTitle = tf === 'weekly' ? 'This Week (Mon - Sun)' : tf === 'monthly' ? "This Month's Pace" : 'Yearly Goal Pace';
+                const tfTitle = tf === 'weekly'
+                  ? (workDaysPerWeek === 6
+                      ? 'This Week (6 Work Days • Mon – Sat)'
+                      : workDaysPerWeek === 5
+                        ? 'This Week (5 Work Days • Mon – Fri)'
+                        : 'This Week (7 Days • Mon – Sun)')
+                  : tf === 'monthly'
+                    ? "This Month's Pace"
+                    : 'Yearly Goal Pace';
 
                 return `
                 <div id="target-pane-${tf}" class="${isHidden ? 'hidden' : ''} space-y-5">
@@ -3762,10 +3779,15 @@ export function renderFinanceDashboard(data: any): string {
                                     <span>🎉</span>
                                     <span>Goal exceeded by <span class="convertible-amount font-black text-emerald-800 dark:text-emerald-200" data-kes="${inc.actual - inc.target}">${formatKes(inc.actual - inc.target)}</span>! Fantastic momentum!</span>
                                 </div>
+                                ` : inc.isRestDay ? `
+                                <div class="flex justify-between items-center text-xs">
+                                    <span class="text-indigo-800 dark:text-indigo-300 font-semibold">🛋️ Sunday Rest Day:</span>
+                                    <span class="font-extrabold text-gray-900 dark:text-white">${workDaysPerWeek} Work Days Finished • <span class="text-emerald-600 dark:text-emerald-300 font-black">${inc.percentage}% of Target Hit</span></span>
+                                </div>
                                 ` : `
                                 <div class="flex justify-between items-center">
                                     <span class="text-emerald-800 dark:text-emerald-200 font-semibold">⚡ Required Run-Rate:</span>
-                                    <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-300" data-kes="${inc.dailyRate}">${formatKes(inc.dailyRate)}</span> <span class="text-[10px] text-gray-500 dark:text-gray-400">/ day (${inc.daysRemaining} days left)</span></span>
+                                    <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-300" data-kes="${inc.dailyRate}">${formatKes(inc.dailyRate)}</span> <span class="text-[10px] text-gray-500 dark:text-gray-400">/ day (${inc.daysRemaining} ${inc.daysRemaining === 1 ? 'work day' : 'work days'} left)</span></span>
                                 </div>
                                 `}
                             </div>
@@ -3816,10 +3838,15 @@ export function renderFinanceDashboard(data: any): string {
                                     <span>🚨</span>
                                     <span>Over budget limit by <span class="convertible-amount font-black" data-kes="${exp.actual - exp.target}">${formatKes(exp.actual - exp.target)}</span>!</span>
                                 </div>
+                                ` : exp.isRestDay ? `
+                                <div class="flex justify-between items-center text-xs">
+                                    <span class="text-emerald-700 dark:text-emerald-300 font-semibold">🛋️ Sunday Rest Day:</span>
+                                    <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${exp.remaining}">${formatKes(exp.remaining)}</span> budget safely preserved</span>
+                                </div>
                                 ` : `
                                 <div class="flex justify-between items-center">
                                     <span class="text-gray-700 dark:text-gray-300 font-semibold">🛡️ Safe Daily Spend Limit:</span>
-                                    <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${exp.dailyRate}">${formatKes(exp.dailyRate)}</span> <span class="text-[10px] text-gray-500 dark:text-gray-400">/ day max (${exp.daysRemaining} days left)</span></span>
+                                    <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${exp.dailyRate}">${formatKes(exp.dailyRate)}</span> <span class="text-[10px] text-gray-500 dark:text-gray-400">/ day max (${exp.daysRemaining} ${exp.daysRemaining === 1 ? 'day' : 'days'} left)</span></span>
                                 </div>
                                 `}
                             </div>

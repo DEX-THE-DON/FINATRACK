@@ -466,6 +466,8 @@ export interface TargetPace {
   daysRemaining: number;
   statusLabel: string;
   statusBadge: 'rose' | 'amber' | 'emerald' | 'cyan' | 'indigo';
+  workDaysInPeriod?: number;
+  isRestDay?: boolean;
 }
 
 export function calculateTargetPace(
@@ -474,11 +476,12 @@ export function calculateTargetPace(
   period: 'WEEKLY' | 'MONTHLY' | 'YEARLY',
   isIncome: boolean,
   daysElapsed: number,
-  totalDaysInPeriod: number
+  totalDaysInPeriod: number,
+  isRestDay: boolean = false
 ): TargetPace {
   const actual = toDecimal(actualAmount).toNumber();
   const target = toDecimal(targetAmount).toNumber();
-  const daysRemaining = Math.max(1, totalDaysInPeriod - daysElapsed + 1);
+  const daysRemaining = isRestDay ? 0 : Math.max(1, totalDaysInPeriod - daysElapsed + 1);
   const expectedPacePct = totalDaysInPeriod > 0
     ? Math.min(100, Math.round((daysElapsed / totalDaysInPeriod) * 100))
     : 100;
@@ -489,9 +492,11 @@ export function calculateTargetPace(
 
   const displayPercentage = Math.min(100, Math.max(0, percentage));
   const remaining = Math.max(0, target - actual);
-  const dailyRate = daysRemaining > 0 ? remaining / daysRemaining : 0;
+  const dailyRate = isRestDay ? 0 : (daysRemaining > 0 ? remaining / daysRemaining : 0);
 
-  const periodLabel = period === 'WEEKLY' ? 'This Week' : period === 'MONTHLY' ? 'This Month' : 'This Year';
+  const periodLabel = period === 'WEEKLY'
+    ? (totalDaysInPeriod < 7 ? `This Week (${totalDaysInPeriod} Work Days)` : 'This Week')
+    : period === 'MONTHLY' ? 'This Month' : 'This Year';
 
   let statusLabel = '';
   let statusBadge: 'rose' | 'amber' | 'emerald' | 'cyan' | 'indigo' = 'emerald';
@@ -500,6 +505,9 @@ export function calculateTargetPace(
     if (actual >= target && target > 0) {
       statusLabel = '🎉 Target Achieved!';
       statusBadge = 'emerald';
+    } else if (isRestDay) {
+      statusLabel = percentage >= 85 ? `🛋️ Sunday Rest (${percentage}% Hit)` : `🛋️ Sunday Rest (${percentage}% Hit)`;
+      statusBadge = percentage >= 85 ? 'emerald' : 'cyan';
     } else if (percentage >= expectedPacePct + 10) {
       statusLabel = '🚀 Ahead of Target';
       statusBadge = 'cyan';
@@ -515,6 +523,9 @@ export function calculateTargetPace(
     if (actual > target && target > 0) {
       statusLabel = '🚨 Over Budget';
       statusBadge = 'rose';
+    } else if (isRestDay) {
+      statusLabel = '🛋️ Rest Day Budget Safe';
+      statusBadge = 'emerald';
     } else if (percentage > expectedPacePct + 15) {
       statusLabel = '⚡ Burning Fast';
       statusBadge = 'amber';
@@ -540,7 +551,9 @@ export function calculateTargetPace(
     expectedPacePct,
     daysRemaining,
     statusLabel,
-    statusBadge
+    statusBadge,
+    workDaysInPeriod: totalDaysInPeriod,
+    isRestDay
   };
 }
 
