@@ -127,11 +127,12 @@ authRoutes.post('/auth/login', async (c) => {
     if (!mockRes.error && mockRes.data?.session && mockRes.data?.user) {
       sessionData = mockRes.data;
       authError = null;
-    } else if (email === 'dex@gmail.com' || isFetchOrOffline) {
+    } else if (isFetchOrOffline) {
+      const fallbackName = email ? email.split('@')[0] : 'Member';
       const user = {
-        id: 'usr-dex',
-        email: email || 'dex@gmail.com',
-        user_metadata: { full_name: 'Dex', name: 'Dex' },
+        id: `usr-${email ? email.replace(/[^a-zA-Z0-9]/g, '_') : 'guest'}`,
+        email: email,
+        user_metadata: { full_name: fallbackName, name: fallbackName },
       };
       sessionData = {
         user,
@@ -202,8 +203,8 @@ authRoutes.post('/auth/pin/set', async (c) => {
   // Preserve current authenticated session for seamless Quick PIN unlocks
   const currentToken = getCookie(c, 'sb-access-token') || '';
   const currentRefreshToken = getCookie(c, 'sb-refresh-token') || '';
-  const currentUser = getCookie(c, 'finatrack_user') || 'Dex';
-  const currentEmail = getCookie(c, 'finatrack_email') || 'dex@gmail.com';
+  const currentUser = getCookie(c, 'finatrack_user') || 'Member';
+  const currentEmail = getCookie(c, 'finatrack_email') || '';
 
   if (currentToken && !currentToken.startsWith('mock-token-')) {
     setCookie(c, 'finatrack_pin_token', currentToken, {
@@ -273,8 +274,8 @@ authRoutes.post('/auth/pin/verify', async (c) => {
     if (!savedPin || enteredPin === savedPin) {
       const pinRefreshToken = getCookie(c, 'finatrack_pin_refresh_token') || getCookie(c, 'sb-refresh-token') || '';
       let pinnedToken = getCookie(c, 'finatrack_pin_token') || getCookie(c, 'sb-access-token') || '';
-      let pinnedUser = getCookie(c, 'finatrack_pin_user') || getCookie(c, 'finatrack_user') || 'Dex';
-      let pinnedEmail = getCookie(c, 'finatrack_pin_email') || getCookie(c, 'finatrack_email') || 'dex@gmail.com';
+      let pinnedUser = getCookie(c, 'finatrack_pin_user') || getCookie(c, 'finatrack_user') || 'Member';
+      let pinnedEmail = getCookie(c, 'finatrack_pin_email') || getCookie(c, 'finatrack_email') || '';
 
       // If we have a refresh token, proactively refresh the Supabase session to get a fresh live token
       if (pinRefreshToken) {

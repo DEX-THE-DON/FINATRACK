@@ -6562,7 +6562,7 @@ export function renderRiderDashboard(data: any): string {
                 metadata: {
                     custom_fields: [
                         { display_name: "Service", variable_name: "service", value: "Finatrack Shift Unlock" },
-                        { display_name: "Rider", variable_name: "rider", value: "${username || 'Dex'}" }
+                        { display_name: "Rider", variable_name: "rider", value: "${username || 'Rider'}" }
                     ]
                 },
                 onClose: function() {

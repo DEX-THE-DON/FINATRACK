@@ -1371,9 +1371,9 @@ app.onError((err, c) => {
       active_bike: fallbackBikes[0] || null,
       bikes: fallbackBikes,
       accounts: inMemoryStore.accounts || [],
-      username: getCookie(c, 'finatrack_user') || 'Dex',
-      email: getCookie(c, 'finatrack_email') || 'dex@gmail.com',
-      is_logged_in: true,
+      username: getCookie(c, 'finatrack_user') || 'Member',
+      email: getCookie(c, 'finatrack_email') || '',
+      is_logged_in: Boolean(getCookie(c, 'sb-access-token')),
       active_profile: 'RIDER',
     }));
   }

@@ -15,15 +15,7 @@ export interface AppEnv {
 
 // In-memory store for local testing when cloud Supabase credentials are not yet supplied
 export const inMemoryStore: Record<string, any[]> = {
-  users: [
-    {
-      id: 'usr-dex',
-      email: 'dex@gmail.com',
-      password: '', // will accept initial password or matched password
-      user_metadata: { full_name: 'Dex', name: 'Dex' },
-      created_at: new Date().toISOString(),
-    }
-  ],
+  users: [],
   accounts: [],
   transactions: [],
   goals: [],
@@ -93,9 +85,23 @@ export function createMockClient() {
       async getUser(token: string) {
         if (!token) return { data: { user: null }, error: { message: 'Invalid token' } };
         const userId = token.replace(/^mock-token-/, '');
-        const user = (inMemoryStore.users || []).find((u: any) => u.id === userId || token.includes(u.id)) || inMemoryStore.users[0];
+        const user = (inMemoryStore.users || []).find((u: any) => u.id === userId || token.includes(u.id));
         if (user) {
           return { data: { user }, error: null };
+        }
+        if (token.startsWith('mock-token-usr-')) {
+          const emailPart = userId.replace(/^usr-/, '');
+          return {
+            data: {
+              user: {
+                id: userId,
+                email: emailPart.includes('@') ? emailPart : `${emailPart}@finatrack.app`,
+                user_metadata: { full_name: emailPart.split('@')[0] },
+                created_at: new Date().toISOString(),
+              }
+            },
+            error: null,
+          };
         }
         return { data: { user: null }, error: { message: 'User not found' } };
       }
@@ -343,14 +349,14 @@ export async function getRequestContext(c: any) {
 
     // Fallback if session cookies finatrack_user / finatrack_email are present
     if (!verified && (cookies['finatrack_user'] || cookies['finatrack_email'])) {
-      const cookieEmail = cookies['finatrack_email'] ? decodeURIComponent(cookies['finatrack_email']) : 'dex@gmail.com';
-      const cookieUser = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : cookieEmail.split('@')[0];
+      const cookieEmail = cookies['finatrack_email'] ? decodeURIComponent(cookies['finatrack_email']) : '';
+      const cookieUser = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : (cookieEmail ? cookieEmail.split('@')[0] : 'Member');
       user = {
-        id: 'usr-' + (cookieEmail === 'dex@gmail.com' ? 'dex' : 'session'),
+        id: cookieEmail ? `usr-${cookieEmail.replace(/[^a-zA-Z0-9]/g, '_')}` : 'usr-guest',
         email: cookieEmail,
         user_metadata: { full_name: cookieUser, name: cookieUser },
       };
-      isLoggedIn = true;
+      isLoggedIn = Boolean(cookieEmail);
       email = cookieEmail;
       username = cookieUser;
     }
@@ -358,14 +364,14 @@ export async function getRequestContext(c: any) {
 
   // Restore authenticated session from cookies if user was signed in
   if (!isLoggedIn && (cookies['finatrack_user'] || cookies['finatrack_email'])) {
-    const cookieEmail = cookies['finatrack_email'] ? decodeURIComponent(cookies['finatrack_email']) : 'dex@gmail.com';
-    const cookieUser = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : cookieEmail.split('@')[0];
+    const cookieEmail = cookies['finatrack_email'] ? decodeURIComponent(cookies['finatrack_email']) : '';
+    const cookieUser = cookies['finatrack_user'] ? decodeURIComponent(cookies['finatrack_user']) : (cookieEmail ? cookieEmail.split('@')[0] : 'Member');
     user = {
-      id: 'usr-' + (cookieEmail === 'dex@gmail.com' ? 'dex' : 'session'),
+      id: cookieEmail ? `usr-${cookieEmail.replace(/[^a-zA-Z0-9]/g, '_')}` : 'usr-guest',
       email: cookieEmail,
       user_metadata: { full_name: cookieUser, name: cookieUser },
     };
-    isLoggedIn = true;
+    isLoggedIn = Boolean(cookieEmail);
     email = cookieEmail;
     username = cookieUser;
   }
@@ -380,10 +386,6 @@ export async function getRequestContext(c: any) {
     try {
       email = decodeURIComponent(cookies['finatrack_email']);
     } catch (_) {}
-  }
-
-  if (!email && username && username.toLowerCase() === 'dex') {
-    email = 'dex@gmail.com';
   }
 
   const rawId = user?.id ? String(user.id) : null;
