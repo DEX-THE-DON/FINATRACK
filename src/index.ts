@@ -517,8 +517,21 @@ app.get('/', async (c) => {
   // Reconcile Rider Daily Logger shifts AND Recurring Bills & Standing Orders with Expenses (Transactions) bidirectionally
   const effectiveRiderLogs = resolveEffectiveRiderLogs(c, riderLogs);
   const txsWithRiderShifts = reconcileRiderShiftLogsWithTransactions(effectiveRiderLogs || [], transactions || []);
-  const { recurringBills: reconciledRecurringBills, syncedTransactions: txs } =
+  const { recurringBills: reconciledRecurringBills, syncedTransactions: rawSyncedTxs } =
     reconcileRecurringBillsAndTransactions(c, getRecurringBills(c), bills || [], txsWithRiderShifts, currentMonth);
+
+  // Exclude % MMF & Savings interest accruals from the main Transactions ledger so it stays clean and focused on real cashflow
+  const isMmfOrSavingsInterestTx = (t: any): boolean => {
+    if (!t || t.transaction_type !== 'INCOME') return false;
+    const cat = String(t.category || '').toLowerCase();
+    const desc = String(t.description || '').toLowerCase();
+    const idStr = String(t.id || '');
+    if (idStr.startsWith('auto-mmf-') || idStr.startsWith('mmf-int-')) return true;
+    if (cat.includes('interest') || cat.includes('yield') || cat === 'mmf interest') return true;
+    if (desc.includes('auto daily interest') || desc.includes('mmf/bank interest') || desc.includes('mmf/bank profit yield') || desc.includes('% p.a.')) return true;
+    return false;
+  };
+  const txs = (rawSyncedTxs || []).filter((t: any) => !isMmfOrSavingsInterestTx(t));
   const totalRecurringBillsKes = reconciledRecurringBills.reduce((s, b) => s + Number(b.amount || 0), 0);
 
   const todayIsoStr = today.toISOString().slice(0, 10);
@@ -689,17 +702,19 @@ app.get('/', async (c) => {
       ['MMF', 'SAVINGS', 'INVESTMENT'].includes(String(a.account_type || '').toUpperCase());
 
     if (isEligibleYieldAccount) {
-      // Find existing interest transactions for this account
-      const dbAccTxs = txs.filter(
-        (t: any) =>
-          String(t.account_id) === accIdStr &&
-          ((t.category || '').toLowerCase().includes('interest') ||
-            (t.category || '').toLowerCase().includes('yield') ||
-            (t.description || '').toLowerCase().includes('interest') ||
-            (t.description || '').toLowerCase().includes('yield') ||
-            (t.description || '').toLowerCase().includes('profit')) &&
-          t.transaction_type === 'INCOME'
+      // Find any legacy interest transactions for this account and migrate them out of the main transactions table
+      const dbAccTxs = (rawSyncedTxs || []).filter(
+        (t: any) => String(t.account_id) === accIdStr && isMmfOrSavingsInterestTx(t)
       );
+      if (dbAccTxs.length > 0) {
+        for (const legacyTx of dbAccTxs) {
+          if (legacyTx.id && !String(legacyTx.id).startsWith('auto-mmf-')) {
+            try {
+              await supabase.from('transactions').delete().eq('id', legacyTx.id);
+            } catch (e) {}
+          }
+        }
+      }
 
       const cookieLogs = [...(savedSetting.accrued_logs || [])];
       const hasTodayTx =
@@ -707,7 +722,7 @@ app.get('/', async (c) => {
         dbAccTxs.some((t: any) => String(t.date || '').slice(0, 10) === todayIsoForMmf) ||
         cookieLogs.some((l: any) => String(l.date || '').slice(0, 10) === todayIsoForMmf);
 
-      // Automatic Daily Interest Accrual (just like Britam / Ziidi / Banks add daily at midnight)
+      // Automatic Daily Interest Accrual (kept strictly inside MMF Yield logs — not injected into main Transactions table)
       if (autoDailyAccrual && bal > 0 && effectiveRate > 0 && !hasTodayTx) {
         let daysToAccrue = 1;
         if (savedSetting.last_accrued_date) {
@@ -743,15 +758,6 @@ app.get('/', async (c) => {
               description: desc,
             };
             cookieLogs.unshift(logEntry);
-            txs.unshift({
-              id: logEntry.id,
-              account_id: a.id,
-              transaction_type: 'INCOME',
-              category: 'Interest & Yield',
-              amount: dayNet,
-              description: desc,
-              date: dt,
-            });
           }
         }
 

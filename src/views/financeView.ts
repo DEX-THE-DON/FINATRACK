@@ -6073,7 +6073,6 @@ export function renderFinanceDashboard(data: any): string {
                                 <option value="Bike Maintenance &amp; Repairs">🔧 Vehicle / Car Maintenance &amp; Repairs</option>
                                 <option value="Rider &amp; Boda Deliveries">🚗 / 🛵 Ride-Hailing (Uber/Bolt) &amp; Deliveries</option>
                                 <option value="M-Pesa Income">📲 M-Pesa Income</option>
-                                <option value="MMF Interest">📈 MMF Yield / Interest</option>
                                 <option value="Debt &amp; Loan Repayments">💳 Debt &amp; Loan Repayments</option>
                                 <option value="Other">✏️ Other (Custom...)</option>
                             </optgroup>
@@ -6150,7 +6149,6 @@ export function renderFinanceDashboard(data: any): string {
                     { re: /\b(kplc|token|wifi|zuku|airtime|bundle|water|bill|electric)\b/, type: 'EXPENSE', cat: 'Utilities & Bills' },
                     { re: /\b(loan|debt|fuliza|mshwari|tala|branch|hustler|repay|kodi)\b/, type: 'EXPENSE', cat: 'Debt & Loan Repayments' },
                     { re: /\b(uber|bolt|glovo|little|delivery|boda|shift|trip|errand)\b/, type: 'INCOME', cat: 'Rider & Boda Deliveries' },
-                    { re: /\b(interest|yield|dividend|ziidi|britam|mmf)\b/, type: 'INCOME', cat: 'MMF Interest' },
                     { re: /\b(salary|wage|bonus|received|client|tip|income|mpesa)\b/, type: 'INCOME', cat: 'M-Pesa Income' }
                 ];
                 for (var i = 0; i < rules.length; i++) {

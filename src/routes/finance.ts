@@ -445,23 +445,11 @@ financeRoutes.post('/accounts/interest/backfill/:id', async (c) => {
         wht_tax: dayTax,
         description: desc,
       });
-      txRows.push({
-        ...(userId ? { user_id: userId } : {}),
-        account_id: acc.id,
-        transaction_type: 'INCOME',
-        category: 'Interest & Yield',
-        amount: dayNet,
-        description: desc,
-        date: dateStr,
-      });
     }
   }
 
   try {
     await supabase.from('accounts').update({ balance: runningBal, interest_rate_p_a: grossRate }).eq('id', id);
-    if (txRows.length > 0) {
-      await supabase.from('transactions').insert(txRows);
-    }
   } catch (e) {}
 
   mmfSettings[String(id)] = {
@@ -525,15 +513,6 @@ financeRoutes.post('/accounts/interest/log/:id', async (c) => {
       const newBal = toDecimal(currentBal).plus(yieldAmount).toNumber();
       try {
         await supabase.from('accounts').update({ balance: newBal, interest_rate_p_a: effectiveRate }).eq('id', id);
-        await supabase.from('transactions').insert({
-          ...(userId ? { user_id: userId } : {}),
-          account_id: acc.id,
-          transaction_type: 'INCOME',
-          category: 'Interest & Yield',
-          amount: yieldAmount.toNumber(),
-          description: desc,
-          date: txDate,
-        });
       } catch (e) {}
 
       const prevLogs = curSetting.accrued_logs || [];
