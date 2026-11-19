@@ -3825,44 +3825,51 @@ export function renderRiderDashboard(data: any): string {
                 </div>
             </div>
 
-            <!-- Flexible Trigger Alert Banner (Closeout Day OR Threshold Trigger) -->
-            <div class="p-3 rounded-2xl border ${hp.shouldPromptCloseout ? 'bg-amber-500/20 border-amber-400/60 text-amber-200' : 'bg-slate-950/70 border-slate-800 text-slate-300'} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+            <!-- Flexible Trigger Alert Banner + Semantic Color-Code Key -->
+            <div class="p-3 rounded-2xl border ${hp.shouldPromptCloseout ? 'bg-amber-500/20 border-amber-400/70 border-l-4 border-l-amber-400 text-amber-200' : 'bg-slate-950/75 border-slate-800 border-l-4 border-l-cyan-400 text-slate-200'} flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 text-xs">
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-black">${hp.triggerHeadline}</span>
+                    <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-900/90 border border-slate-700 text-cyan-300 shrink-0">
+                        Trigger: ${hpCfg.closeout_day || 'SUNDAY'} or Ksh ${Number(hpCfg.threshold_kes || 5000).toLocaleString()}+
+                    </span>
                 </div>
-                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-900/90 border border-slate-700 text-cyan-300 shrink-0">
-                    Trigger: ${hpCfg.closeout_day || 'SUNDAY'} or Ksh ${Number(hpCfg.threshold_kes || 5000).toLocaleString()}+
-                </span>
+                <div class="flex flex-wrap items-center gap-1.5 text-[10px] font-extrabold">
+                    <span class="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40">🔵 Total Wallet</span>
+                    <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">🟡 Ring-Fenced / Skims</span>
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">🟢 Free Cash / Sent</span>
+                    <span class="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">🩵 Ziidi MMF Yield</span>
+                    <span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">🔴 Debt / Breach</span>
+                </div>
             </div>
 
             <!-- 1. RING-FENCED CASH METER (True Spendable vs. Locked in Holding Pot) & 2. ZERO-FEE INTEREST PARKING HACK -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div class="p-3.5 rounded-2xl bg-slate-950/85 border border-slate-800 space-y-1">
-                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">📱 Total in ${hp.sourceAccountName}</span>
+                <div class="p-3.5 rounded-2xl bg-sky-950/35 border border-sky-500/40 border-l-4 border-l-sky-400 space-y-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-sky-300">🔵 📱 Total in ${hp.sourceAccountName}</span>
                     <p class="text-lg font-black text-white convertible-amount" data-kes="${hp.walletTotalBalanceKes}">Ksh ${Number(hp.walletTotalBalanceKes || 0).toLocaleString()}</p>
-                    <p class="text-[10px] text-slate-400">Live linked source wallet balance</p>
+                    <p class="text-[10px] text-sky-200/80">Live linked source wallet balance</p>
                 </div>
 
-                <div class="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/40 space-y-1">
-                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300">🔒 Locked in Holding Pot (Do Not Touch)</span>
-                    <p class="text-lg font-black text-rose-300 convertible-amount" data-kes="${hp.ringFencedPotKes}">Ksh ${Number(hp.ringFencedPotKes || 0).toLocaleString()}</p>
-                    <p class="text-[10px] text-rose-200/80">${hp.settledPotKes > 0 ? `Ksh ${hp.settledPotKes.toLocaleString()} already sent` : 'Ring-fenced for closeout split'}</p>
+                <div class="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/50 border-l-4 border-l-amber-400 space-y-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-300">🟡 🔒 Ring-Fenced in Pot (Do Not Touch)</span>
+                    <p class="text-lg font-black text-amber-300 convertible-amount" data-kes="${hp.ringFencedPotKes}">Ksh ${Number(hp.ringFencedPotKes || 0).toLocaleString()}</p>
+                    <p class="text-[10px] text-amber-200/85">${hp.settledPotKes > 0 ? `Ksh ${hp.settledPotKes.toLocaleString()} already sent` : 'Protected for closeout waterfall'}</p>
                 </div>
 
-                <div class="p-3.5 rounded-2xl ${hp.isRingFenceBreached ? 'bg-rose-950/70 border-rose-400' : 'bg-emerald-950/50 border-emerald-500/40'} border space-y-1">
+                <div class="p-3.5 rounded-2xl ${hp.isRingFenceBreached ? 'bg-rose-950/65 border-rose-500/70 border-l-4 border-l-rose-500' : 'bg-emerald-950/50 border-emerald-500/50 border-l-4 border-l-emerald-400'} border space-y-1">
                     <span class="text-[10px] font-extrabold uppercase tracking-wider ${hp.isRingFenceBreached ? 'text-rose-200' : 'text-emerald-300'}">
-                        ${hp.isRingFenceBreached ? '🚨 Ring-Fence Shortfall' : '🟢 True Free Cash to Spend'}
+                        ${hp.isRingFenceBreached ? '🔴 🚨 Ring-Fence Shortfall' : '🟢 True Free Cash to Spend'}
                     </span>
                     <p class="text-lg font-black ${hp.isRingFenceBreached ? 'text-rose-400' : 'text-emerald-400'} convertible-amount" data-kes="${hp.isRingFenceBreached ? hp.ringFenceShortfallKes : hp.trueFreeSpendableKes}">
                         ${hp.isRingFenceBreached ? `-Ksh ${Number(hp.ringFenceShortfallKes).toLocaleString()}` : `Ksh ${Number(hp.trueFreeSpendableKes || 0).toLocaleString()}`}
                     </p>
-                    <p class="text-[10px] text-slate-300">
+                    <p class="text-[10px] ${hp.isRingFenceBreached ? 'text-rose-200/90' : 'text-emerald-200/85'}">
                         ${hp.isRingFenceBreached ? 'Wallet dipped below held pot!' : 'Safe to spend without touching pot'}
                     </p>
                 </div>
 
-                <div class="p-3.5 rounded-2xl bg-cyan-950/45 border border-cyan-500/40 space-y-1">
-                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-cyan-300">🇰🇪 Nightly Interest Parking (${hp.parkingApyPct}% p.a.)</span>
+                <div class="p-3.5 rounded-2xl bg-cyan-950/45 border border-cyan-500/50 border-l-4 border-l-cyan-400 space-y-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-cyan-300">🩵 🇰🇪 Nightly Parking (${hp.parkingApyPct}% p.a.)</span>
                     <p class="text-lg font-black text-cyan-300">+Ksh ${Number(hp.weeklyParkedInterestNetKes || 0).toFixed(2)}<span class="text-xs font-bold text-cyan-200">/wk</span></p>
                     <p class="text-[10px] text-cyan-200/90">
                         ${hp.stayParkedInMmfKes > 0
@@ -3991,24 +3998,58 @@ export function renderRiderDashboard(data: any): string {
 
                         ${checklistItems.length > 0 ? `
                         <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
-                            ${checklistItems.map((item: any) => `
-                            <div class="p-3 rounded-xl border ${item.isSettled ? 'bg-emerald-950/30 border-emerald-700/50 opacity-75' : item.stepNumber < 4 ? 'bg-amber-950/25 border-amber-700/50' : 'bg-slate-900/90 border-slate-800'} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                            ${checklistItems.map((item: any) => {
+                              const rowColor = item.isSettled
+                                ? 'bg-emerald-950/35 border-emerald-600/50 border-l-4 border-l-emerald-400 opacity-85'
+                                : item.stepNumber === 1
+                                  ? 'bg-rose-950/35 border-rose-500/50 border-l-4 border-l-rose-500'
+                                  : item.stepNumber === 2
+                                    ? 'bg-amber-950/35 border-amber-500/50 border-l-4 border-l-amber-400'
+                                    : item.stepNumber === 3
+                                      ? 'bg-indigo-950/40 border-indigo-500/50 border-l-4 border-l-indigo-400'
+                                      : item.stayParkedInMmf
+                                        ? 'bg-cyan-950/35 border-cyan-500/50 border-l-4 border-l-cyan-400'
+                                        : 'bg-emerald-950/25 border-emerald-600/40 border-l-4 border-l-emerald-400';
+                              const badgeColor = item.isSettled
+                                ? 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/50'
+                                : item.stepNumber === 1
+                                  ? 'bg-rose-500/25 text-rose-200 border border-rose-400/50'
+                                  : item.stepNumber === 2
+                                    ? 'bg-amber-500/25 text-amber-200 border border-amber-400/50'
+                                    : item.stepNumber === 3
+                                      ? 'bg-indigo-500/25 text-indigo-200 border border-indigo-400/50'
+                                      : item.stayParkedInMmf
+                                        ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/50'
+                                        : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/50';
+                              const amtColor = item.isSettled
+                                ? 'text-emerald-300'
+                                : item.stepNumber === 1
+                                  ? 'text-rose-300'
+                                  : item.stepNumber === 2
+                                    ? 'text-amber-300'
+                                    : item.stepNumber === 3
+                                      ? 'text-indigo-300'
+                                      : item.stayParkedInMmf
+                                        ? 'text-cyan-300'
+                                        : 'text-emerald-400';
+                              return `
+                            <div class="p-3 rounded-xl border ${rowColor} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
                                 <div class="space-y-0.5 pr-2">
                                     <div class="flex items-center gap-1.5 flex-wrap">
-                                        <span class="text-[10px] font-black px-2 py-0.5 rounded ${item.stepNumber < 4 ? 'bg-amber-500/20 text-amber-300' : 'bg-indigo-500/20 text-indigo-300'}">${item.stepBadge}</span>
+                                        <span class="text-[10px] font-black px-2 py-0.5 rounded ${badgeColor}">${item.stepBadge}</span>
                                         <span class="font-black text-white ${item.isSettled ? 'line-through text-emerald-300' : ''}">${item.title}</span>
-                                        ${item.stayParkedInMmf ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">Stay Parked in Ziidi</span>` : ''}
+                                        ${item.stayParkedInMmf ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/25 text-cyan-200 border border-cyan-400/50 font-bold">🩵 Stay Parked in Ziidi</span>` : ''}
                                     </div>
-                                    <p class="text-[11px] text-slate-400">${item.subtitle} • Dest: <strong class="text-slate-200">${item.destinationLabel}</strong></p>
+                                    <p class="text-[11px] text-slate-300">${item.subtitle} • Dest: <strong class="text-white">${item.destinationLabel}</strong></p>
                                 </div>
 
                                 <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                                    <span class="font-black text-sm text-emerald-400 mr-1">Ksh ${Number(item.amount || 0).toLocaleString()}</span>
+                                    <span class="font-black text-sm ${amtColor} mr-1">Ksh ${Number(item.amount || 0).toLocaleString()}</span>
                                     <button type="button" onclick="navigator.clipboard?.writeText('${Math.round(Number(item.amount || 0))}'); this.textContent='Copied!'; var self=this; setTimeout(function(){self.textContent='📋 Copy';}, 1200);" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[10px] font-bold transition">
                                         📋 Copy
                                     </button>
                                     ${item.isSettled ? `
-                                    <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-lg text-[10px] font-black">✓ Sent</span>
+                                    <span class="px-2.5 py-1 bg-emerald-500/25 text-emerald-200 border border-emerald-400/50 rounded-lg text-[10px] font-black">✓ Sent</span>
                                     ` : `
                                     <form action="/rider/batch-pot/disburse-item" method="POST" class="inline">
                                         <input type="hidden" name="item_key" value="${item.key}">
@@ -4026,7 +4067,8 @@ export function renderRiderDashboard(data: any): string {
                                     `}
                                 </div>
                             </div>
-                            `).join('')}
+                            `;
+                            }).join('')}
                         </div>
                         ` : `
                         <div class="space-y-1.5 pt-1 text-xs text-gray-400">

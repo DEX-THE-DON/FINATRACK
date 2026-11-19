@@ -3078,8 +3078,8 @@ export function renderFinanceDashboard(data: any): string {
         </div>
 
         <!-- ⚡ SMART 1-LINE AUTO-ENTRY & AUTOPILOT INTELLIGENCE HUB (Put Less In, Let Finatrack Do The Work!) -->
-        <div id="smart-autopilot-hub" class="bg-gradient-to-br from-slate-900 via-indigo-950/90 to-slate-900 text-white rounded-3xl p-4 sm:p-5 border border-indigo-700/50 shadow-xl space-y-4">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div id="smart-autopilot-hub" class="bg-gradient-to-br from-slate-900 via-indigo-950/95 to-slate-900 text-white rounded-3xl p-4 sm:p-5 border border-indigo-600/50 shadow-xl space-y-4">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2.5">
                 <div class="flex items-center space-x-2.5">
                     <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-lg shadow-md shrink-0">
                         🧠
@@ -3089,8 +3089,16 @@ export function renderFinanceDashboard(data: any): string {
                             <span>Smart 1-Line Auto-Entry &amp; Autopilot</span>
                             <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-extrabold uppercase tracking-wider">Zero-Friction AI</span>
                         </h3>
-                        <p class="text-[11px] text-indigo-200/80">Type shorthand (e.g. <code class="text-cyan-300">uber 2.5k, fuel 500, lunch 150</code>) OR paste any M-Pesa / Bank SMS — Finatrack auto-categorizes, updates wallets &amp; syncs bills!</p>
+                        <p class="text-[11px] text-indigo-200/90">Type shorthand (e.g. <code class="text-emerald-300">uber 2.5k</code>, <code class="text-amber-300">fuel 500</code>, <code class="text-rose-300">lunch 150</code>) OR paste any M-Pesa / Bank SMS — Finatrack auto-categorizes, updates wallets &amp; syncs bills!</p>
                     </div>
+                </div>
+                <!-- Semantic Financial Color-Code Legend -->
+                <div class="flex flex-wrap items-center gap-1.5 text-[10px] font-extrabold">
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">🟢 Income / Free Cash</span>
+                    <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">🟡 Ring-Fenced / Fuel</span>
+                    <span class="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">🔵 MMF / EV Yield</span>
+                    <span class="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">🟣 Goals / Rest Day</span>
+                    <span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">🔴 Expense / Debt Alert</span>
                 </div>
             </div>
 
@@ -3103,26 +3111,26 @@ export function renderFinanceDashboard(data: any): string {
                     name="smart_input"
                     autocomplete="off"
                     placeholder='Try: "fuel 500", "uber 2.5k, lunch 150, airtime 50", "kplc 1000", or paste M-Pesa SMS...'
-                    class="flex-1 px-3.5 py-2.5 bg-slate-950/90 border border-indigo-700/70 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40 rounded-xl text-xs sm:text-sm font-semibold text-white placeholder-slate-400 outline-none"
+                    class="flex-1 px-3.5 py-2.5 bg-slate-950/90 border border-indigo-600/70 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40 rounded-xl text-xs sm:text-sm font-semibold text-white placeholder-slate-400 outline-none"
                     required
                 >
-                <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 text-xs sm:text-sm font-black rounded-xl shadow-md transition active:scale-95 shrink-0 flex items-center justify-center gap-1.5">
+                <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-xs sm:text-sm font-black rounded-xl shadow-md transition active:scale-95 shrink-0 flex items-center justify-center gap-1.5">
                     <span>⚡ Auto-Log</span>
                 </button>
             </form>
 
-            <!-- 1-Tap Quick-Fill Chips -->
+            <!-- Color-Coded 1-Tap Quick-Fill Chips -->
             <div class="flex flex-wrap items-center gap-1.5 text-[10px]">
                 <span class="text-slate-400 font-bold uppercase tracking-wider mr-1">1-Tap:</span>
                 ${[
-                  { label: '+ Uber 2.5k', val: 'uber 2500' },
-                  { label: '+ Bolt 1.8k', val: 'bolt 1800' },
-                  { label: '- Fuel 500', val: 'fuel 500' },
-                  { label: '- EV Swap 300', val: 'ev swap 300' },
-                  { label: '- Lunch 150', val: 'lunch 150' },
-                  { label: '- Airtime 50', val: 'airtime 50' },
+                  { label: '🟢 + Uber 2.5k', val: 'uber 2500', cls: 'bg-emerald-950/70 hover:bg-emerald-900/80 border-emerald-500/50 text-emerald-300' },
+                  { label: '🟢 + Bolt 1.8k', val: 'bolt 1800', cls: 'bg-emerald-950/70 hover:bg-emerald-900/80 border-emerald-500/50 text-emerald-300' },
+                  { label: '🟡 - Fuel 500', val: 'fuel 500', cls: 'bg-amber-950/70 hover:bg-amber-900/80 border-amber-500/50 text-amber-300' },
+                  { label: '🔵 - EV Swap 300', val: 'ev swap 300', cls: 'bg-cyan-950/70 hover:bg-cyan-900/80 border-cyan-500/50 text-cyan-300' },
+                  { label: '🔴 - Lunch 150', val: 'lunch 150', cls: 'bg-rose-950/70 hover:bg-rose-900/80 border-rose-500/50 text-rose-300' },
+                  { label: '🔴 - Airtime 50', val: 'airtime 50', cls: 'bg-rose-950/70 hover:bg-rose-900/80 border-rose-500/50 text-rose-300' },
                 ].map(chip => `
-                <button type="button" onclick="(function(){var el=document.getElementById('smart-command-input');if(el){el.value=el.value?el.value+', ${chip.val}':'${chip.val}';el.focus();}})()" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-indigo-800/80 border border-slate-700 hover:border-indigo-500 text-slate-200 font-bold transition active:scale-95">
+                <button type="button" onclick="(function(){var el=document.getElementById('smart-command-input');if(el){el.value=el.value?el.value+', ${chip.val}':'${chip.val}';el.focus();}})()" class="px-2.5 py-1 rounded-lg border ${chip.cls} font-extrabold transition active:scale-95">
                     ${chip.label}
                 </button>
                 `).join('')}
@@ -3132,27 +3140,32 @@ export function renderFinanceDashboard(data: any): string {
             ${smart_intelligence && Array.isArray(smart_intelligence.insights) && smart_intelligence.insights.length > 0 ? `
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-2 border-t border-indigo-800/50">
                 ${smart_intelligence.insights.map((ins: any) => {
-                  const toneBorder = ins.tone === 'rose' ? 'border-rose-500/50 bg-rose-950/40'
-                    : ins.tone === 'amber' ? 'border-amber-500/50 bg-amber-950/35'
-                    : ins.tone === 'cyan' ? 'border-cyan-500/50 bg-cyan-950/35'
-                    : ins.tone === 'emerald' ? 'border-emerald-500/50 bg-emerald-950/35'
-                    : 'border-indigo-500/50 bg-indigo-950/40';
-                  const badgeTone = ins.tone === 'rose' ? 'bg-rose-500/20 text-rose-300'
-                    : ins.tone === 'amber' ? 'bg-amber-500/20 text-amber-300'
-                    : ins.tone === 'cyan' ? 'bg-cyan-500/20 text-cyan-300'
-                    : ins.tone === 'emerald' ? 'bg-emerald-500/20 text-emerald-300'
-                    : 'bg-indigo-500/20 text-indigo-300';
+                  const toneBorder = ins.tone === 'rose' ? 'border-rose-500/60 bg-rose-950/50 border-l-4 border-l-rose-500'
+                    : ins.tone === 'amber' ? 'border-amber-500/60 bg-amber-950/45 border-l-4 border-l-amber-400'
+                    : ins.tone === 'cyan' ? 'border-cyan-500/60 bg-cyan-950/45 border-l-4 border-l-cyan-400'
+                    : ins.tone === 'emerald' ? 'border-emerald-500/60 bg-emerald-950/45 border-l-4 border-l-emerald-400'
+                    : 'border-indigo-500/60 bg-indigo-950/50 border-l-4 border-l-indigo-400';
+                  const titleTone = ins.tone === 'rose' ? 'text-rose-200'
+                    : ins.tone === 'amber' ? 'text-amber-200'
+                    : ins.tone === 'cyan' ? 'text-cyan-200'
+                    : ins.tone === 'emerald' ? 'text-emerald-200'
+                    : 'text-indigo-200';
+                  const badgeTone = ins.tone === 'rose' ? 'bg-rose-500/25 text-rose-200 border border-rose-400/50'
+                    : ins.tone === 'amber' ? 'bg-amber-500/25 text-amber-200 border border-amber-400/50'
+                    : ins.tone === 'cyan' ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/50'
+                    : ins.tone === 'emerald' ? 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/50'
+                    : 'bg-indigo-500/25 text-indigo-200 border border-indigo-400/50';
                   return `
                   <div class="p-3 rounded-2xl border ${toneBorder} flex flex-col justify-between gap-2">
                       <div class="space-y-1">
                           <div class="flex items-center justify-between gap-2">
-                              <span class="text-xs font-black text-white flex items-center gap-1.5">
+                              <span class="text-xs font-black ${titleTone} flex items-center gap-1.5">
                                   <span>${ins.icon}</span>
                                   <span>${ins.title}</span>
                               </span>
                               <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${badgeTone} shrink-0">${ins.badge}</span>
                           </div>
-                          <p class="text-[11px] text-slate-300 leading-relaxed">${ins.message}</p>
+                          <p class="text-[11px] text-slate-200 leading-relaxed">${ins.message}</p>
                       </div>
                       ${ins.actionLabel && ins.actionHref ? `
                       <div class="flex justify-end">
@@ -5611,10 +5624,10 @@ export function renderFinanceDashboard(data: any): string {
                                         ${acc.account_number ? `<p class="text-[11px] font-mono text-gray-400 truncate"># ${acc.account_number}</p>` : ''}
                                         ${smart_holding_pot && smart_holding_pot.ringFencedPotKes > 0 && String(smart_holding_pot.sourceAccountId) === String(acc.id) ? `
                                         <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-                                            <span class="px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/70 font-black">
-                                                🔒 Locked in Holding Pot: ${formatKes(smart_holding_pot.ringFencedPotKes)}
+                                            <span class="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/75 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80 font-black">
+                                                🟡 🔒 Ring-Fenced in Holding Pot: ${formatKes(smart_holding_pot.ringFencedPotKes)}
                                             </span>
-                                            <span class="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70 font-black">
+                                            <span class="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/75 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/80 font-black">
                                                 🟢 True Free Cash to Spend: ${formatKes(Math.max(0, Number(acc.balance || 0) - smart_holding_pot.ringFencedPotKes))}
                                             </span>
                                         </div>
