@@ -27,6 +27,8 @@ export function renderFinanceDashboard(data: any): string {
     total_mmf_accrued_profit = 0.0,
     total_mmf_principal = 0.0,
     strict_saver_config = null,
+    flex_schedule = null,
+    today_iso = new Date().toISOString().slice(0, 10),
     allocation_rules = [],
     total_balance = 0.0,
     weekly_income = 0.0,
@@ -103,6 +105,8 @@ export function renderFinanceDashboard(data: any): string {
 
   const strictNetFloor = Number(strict_saver_config?.net_floor_kes || 1000);
   const workDaysPerWeek = Math.min(7, Math.max(1, Number(strict_saver_config?.work_days_per_week || 6)));
+  const preferredOffDay = String(strict_saver_config?.preferred_off_day || 'TUESDAY').toUpperCase();
+  const offDayDisplay = preferredOffDay === 'DYNAMIC' ? 'Flexible' : (preferredOffDay.charAt(0) + preferredOffDay.slice(1).toLowerCase());
   const defaultSplitInputAmt = pay_yourself_amount > 0
     ? Number(pay_yourself_amount.toFixed(2))
     : (today_shift_net > 0 ? Number(today_shift_net.toFixed(2)) : (last_shift_net > 0 ? Number(last_shift_net.toFixed(2)) : strictNetFloor));
@@ -3643,8 +3647,8 @@ export function renderFinanceDashboard(data: any): string {
 
                 <form action="/targets/update" method="POST" class="space-y-4">
                     <div>
-                        <p class="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">💵 Target Income Milestones & Work Schedule (<span class="curr-symbol-label">Ksh</span>)</p>
-                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <p class="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">💵 Target Income Milestones & Flexible Work Schedule (<span class="curr-symbol-label">Ksh</span>)</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Weekly Target Income</label>
                                 <input type="number" step="any" inputmode="decimal" name="target_income_weekly" value="${income_targets?.weekly?.target ?? 15000}" placeholder="15000" data-placeholder-base="15000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
@@ -3657,12 +3661,27 @@ export function renderFinanceDashboard(data: any): string {
                                 <label class="block text-[11px] text-gray-600 dark:text-gray-400 mb-1 font-semibold">Yearly Target Income</label>
                                 <input type="number" step="any" inputmode="decimal" name="target_income_yearly" value="${income_targets?.yearly?.target ?? 780000}" placeholder="780000" data-placeholder-base="780000" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 convertible-placeholder" required>
                             </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                             <div>
                                 <label class="block text-[11px] text-amber-600 dark:text-amber-400 mb-1 font-semibold">📅 Work Days / Week</label>
                                 <select name="work_days_per_week" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400">
-                                    <option value="5" ${workDaysPerWeek === 5 ? 'selected' : ''}>5 Days (Mon – Fri)</option>
-                                    <option value="6" ${workDaysPerWeek === 6 ? 'selected' : ''}>6 Days (Mon – Sat)</option>
-                                    <option value="7" ${workDaysPerWeek === 7 ? 'selected' : ''}>7 Days (Full Week)</option>
+                                    <option value="5" ${workDaysPerWeek === 5 ? 'selected' : ''}>5 Work Days / Week</option>
+                                    <option value="6" ${workDaysPerWeek === 6 ? 'selected' : ''}>6 Work Days / Week (1 Flexible Off Day)</option>
+                                    <option value="7" ${workDaysPerWeek === 7 ? 'selected' : ''}>7 Days / Week (Full Week)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-indigo-600 dark:text-indigo-400 mb-1 font-semibold">🛋️ Usual / Preferred Off Day (Changeable Anytime)</label>
+                                <select name="preferred_off_day" class="w-full p-2 bg-gray-50 dark:bg-gray-900 border border-indigo-300 dark:border-indigo-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400">
+                                    <option value="TUESDAY" ${preferredOffDay === 'TUESDAY' ? 'selected' : ''}>Tuesday (Most Common)</option>
+                                    <option value="DYNAMIC" ${preferredOffDay === 'DYNAMIC' ? 'selected' : ''}>Dynamic / Floating (Auto-Learn Pattern)</option>
+                                    <option value="MONDAY" ${preferredOffDay === 'MONDAY' ? 'selected' : ''}>Monday</option>
+                                    <option value="WEDNESDAY" ${preferredOffDay === 'WEDNESDAY' ? 'selected' : ''}>Wednesday</option>
+                                    <option value="THURSDAY" ${preferredOffDay === 'THURSDAY' ? 'selected' : ''}>Thursday</option>
+                                    <option value="FRIDAY" ${preferredOffDay === 'FRIDAY' ? 'selected' : ''}>Friday</option>
+                                    <option value="SATURDAY" ${preferredOffDay === 'SATURDAY' ? 'selected' : ''}>Saturday</option>
+                                    <option value="SUNDAY" ${preferredOffDay === 'SUNDAY' ? 'selected' : ''}>Sunday</option>
                                 </select>
                             </div>
                         </div>
@@ -3722,17 +3741,41 @@ export function renderFinanceDashboard(data: any): string {
                 const exp = expense_targets[tf];
                 const isHidden = tf !== 'monthly';
                 const tfTitle = tf === 'weekly'
-                  ? (workDaysPerWeek === 6
-                      ? 'This Week (6 Work Days • Mon – Sat)'
-                      : workDaysPerWeek === 5
-                        ? 'This Week (5 Work Days • Mon – Fri)'
-                        : 'This Week (7 Days • Mon – Sun)')
+                  ? (workDaysPerWeek < 7
+                      ? `This Week (${workDaysPerWeek} Work Days • ${offDayDisplay} Off)`
+                      : 'This Week (7 Days • Full Week)')
                   : tf === 'monthly'
                     ? "This Month's Pace"
                     : 'Yearly Goal Pace';
 
+                const learnedHint = tf === 'weekly' && flex_schedule && (flex_schedule.learnedOffDay || flex_schedule.learnedPeakDay)
+                  ? `🧠 Learned Pattern: ${flex_schedule.learnedOffDay ? `Usually off <strong>${flex_schedule.learnedOffDay.charAt(0) + flex_schedule.learnedOffDay.slice(1).toLowerCase()}s</strong>` : ''}${flex_schedule.learnedOffDay && flex_schedule.learnedPeakDay ? ' • ' : ''}${flex_schedule.learnedPeakDay ? `Peak earnings <strong>${flex_schedule.learnedPeakDay.charAt(0) + flex_schedule.learnedPeakDay.slice(1).toLowerCase()}s</strong>` : ''}`
+                  : '';
+
                 return `
                 <div id="target-pane-${tf}" class="${isHidden ? 'hidden' : ''} space-y-5">
+                    ${tf === 'weekly' && flex_schedule ? `
+                    <div class="p-3.5 rounded-2xl border ${flex_schedule.isRestDayToday ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-800/80' : 'bg-amber-50/70 dark:bg-slate-900/90 border-amber-200 dark:border-indigo-900/60'} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div class="space-y-0.5 text-xs">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-black ${flex_schedule.isRestDayToday ? 'text-indigo-700 dark:text-indigo-300' : 'text-amber-800 dark:text-amber-300'}">
+                                    ${flex_schedule.isRestDayToday ? `🛋️ ${flex_schedule.restDayLabel} Active` : `⚡ Smart ${workDaysPerWeek}-Day Flexible Schedule`}
+                                </span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white/80 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700">
+                                    ${flex_schedule.daysWorkedThisWeek}/${workDaysPerWeek} Work Days Done
+                                </span>
+                            </div>
+                            <p class="text-[11px] text-gray-700 dark:text-gray-300">${flex_schedule.smartAdvice}</p>
+                            ${learnedHint ? `<p class="text-[10px] text-indigo-600 dark:text-indigo-300 font-medium">${learnedHint}</p>` : ''}
+                        </div>
+                        <form action="/rest-day/toggle" method="POST" class="shrink-0">
+                            <input type="hidden" name="date" value="${today_iso}">
+                            <button type="submit" class="px-3 py-1.5 rounded-xl text-[11px] font-extrabold transition active:scale-95 shadow-xs ${flex_schedule.isRestDayToday ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-white dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700'}">
+                                ${flex_schedule.isRestDayToday ? '🛵 Working Today? Switch to Active' : '🛋️ Take Today as Off Day'}
+                            </button>
+                        </form>
+                    </div>
+                    ` : ''}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- 💵 Target Income Checker Card -->
                         <div class="bg-white dark:bg-gray-950 border border-emerald-200 dark:border-emerald-800/80 p-5 rounded-2xl shadow-xs space-y-4 flex flex-col justify-between">
@@ -3781,8 +3824,8 @@ export function renderFinanceDashboard(data: any): string {
                                 </div>
                                 ` : inc.isRestDay ? `
                                 <div class="flex justify-between items-center text-xs">
-                                    <span class="text-indigo-800 dark:text-indigo-300 font-semibold">🛋️ Sunday Rest Day:</span>
-                                    <span class="font-extrabold text-gray-900 dark:text-white">${workDaysPerWeek} Work Days Finished • <span class="text-emerald-600 dark:text-emerald-300 font-black">${inc.percentage}% of Target Hit</span></span>
+                                    <span class="text-indigo-800 dark:text-indigo-300 font-semibold">🛋️ ${inc.restDayLabel || 'Off / Rest Day'}:</span>
+                                    <span class="font-extrabold text-gray-900 dark:text-white">${flex_schedule ? `${flex_schedule.daysWorkedThisWeek}/${workDaysPerWeek} Work Days Done` : `${workDaysPerWeek} Work Days`} • <span class="text-emerald-600 dark:text-emerald-300 font-black">${inc.percentage}% of Target Hit</span></span>
                                 </div>
                                 ` : `
                                 <div class="flex justify-between items-center">
@@ -3840,7 +3883,7 @@ export function renderFinanceDashboard(data: any): string {
                                 </div>
                                 ` : exp.isRestDay ? `
                                 <div class="flex justify-between items-center text-xs">
-                                    <span class="text-emerald-700 dark:text-emerald-300 font-semibold">🛋️ Sunday Rest Day:</span>
+                                    <span class="text-emerald-700 dark:text-emerald-300 font-semibold">🛋️ ${exp.restDayLabel || 'Off / Rest Day'}:</span>
                                     <span class="font-extrabold text-gray-900 dark:text-white"><span class="convertible-amount text-emerald-600 dark:text-emerald-400" data-kes="${exp.remaining}">${formatKes(exp.remaining)}</span> budget safely preserved</span>
                                 </div>
                                 ` : `

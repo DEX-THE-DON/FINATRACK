@@ -20,7 +20,7 @@ import { parseMultipleMpesaMessages } from '../utils/mpesa';
 import { parseMultipleBankMessages } from '../utils/bankSms';
 import { renderFinancialStatement } from '../views/statementView';
 import { Decimal } from 'decimal.js';
-import { getStrictSaverConfig, saveStrictSaverConfigCookie, getSavedRiderLogs, saveRiderLogsCookie } from './rider';
+import { getStrictSaverConfig, saveStrictSaverConfigCookie, getSavedRiderLogs, saveRiderLogsCookie, toggleRestDay } from './rider';
 import { getSavedSalariedLoans, saveSalariedLoansCookie, SalariedLoanRecord } from './salaried';
 
 export const financeRoutes = new Hono<{ Bindings: AppEnv }>();
@@ -835,13 +835,22 @@ financeRoutes.post('/targets/update', async (c) => {
     entriesToUpsert.push({ category: 'Utilities & Bills', limit_amount: parseFloat(String(body['cat_limit_bills'])) || 4000 });
   }
 
-  // Work days schedule synchronization (e.g. 6 work days/week default, Mon - Sat)
-  if (body['work_days_per_week'] !== undefined && body['work_days_per_week'] !== '') {
-    const wDays = Math.min(7, Math.max(1, parseInt(String(body['work_days_per_week']), 10) || 6));
+  // Work days & flexible off-day schedule synchronization (e.g. 6 work days/week default, Tuesday or any flexible off day)
+  if (
+    (body['work_days_per_week'] !== undefined && body['work_days_per_week'] !== '') ||
+    (body['preferred_off_day'] !== undefined && body['preferred_off_day'] !== '')
+  ) {
     const curStrict = getStrictSaverConfig(c);
+    const wDays = body['work_days_per_week'] !== undefined && body['work_days_per_week'] !== ''
+      ? Math.min(7, Math.max(1, parseInt(String(body['work_days_per_week']), 10) || 6))
+      : curStrict.work_days_per_week;
+    const offDay = body['preferred_off_day'] !== undefined && body['preferred_off_day'] !== ''
+      ? String(body['preferred_off_day']).toUpperCase().trim()
+      : (curStrict.preferred_off_day || 'TUESDAY');
     saveStrictSaverConfigCookie(c, {
       ...curStrict,
       work_days_per_week: wDays,
+      preferred_off_day: offDay,
     });
   }
 
@@ -856,6 +865,16 @@ financeRoutes.post('/targets/update', async (c) => {
   }
 
   return c.redirect('/?toast=Targets+and+budget+limits+updated+successfully', 303);
+});
+
+financeRoutes.post('/rest-day/toggle', async (c) => {
+  const body = await c.req.parseBody();
+  const dateStr = String(body['date'] || new Date().toISOString().slice(0, 10));
+  const isRest = toggleRestDay(c, dateStr);
+  const msg = isRest
+    ? `🛋️ Marked ${dateStr} as an Off / Rest Day! Weekly targets & pacing adapted.`
+    : `🛵 Cleared off day for ${dateStr}! Active work day restored.`;
+  return c.redirect(`/?toast=${encodeURIComponent(msg)}#target-checkers-card`, 303);
 });
 
 

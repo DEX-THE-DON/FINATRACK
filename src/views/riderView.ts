@@ -6,6 +6,7 @@ export function renderRiderDashboard(data: any): string {
     notifications = [],
     odometer_config = null,
     strict_saver_config = null,
+    flex_schedule = null,
     platform_remittance = null,
     weekly_batch_pot = [],
     has_quick_pin = false,
@@ -189,7 +190,9 @@ export function renderRiderDashboard(data: any): string {
   }
 
   const uniqueDaysLoggedThisWeek = dailyNetByDate.size;
-  const isSundayRestDay = currentDayOfWeek === 6 && workDaysPerWeek <= 6;
+  const preferredOffDay = String(strict_saver_config?.preferred_off_day || 'TUESDAY').toUpperCase();
+  const isRestDayToday = flex_schedule ? Boolean(flex_schedule.isRestDayToday) : (currentDayOfWeek === 6 && workDaysPerWeek <= 6);
+  const restDayLabel = flex_schedule?.restDayLabel || 'Flexible Off Day';
   const remainingWorkDaysThisWeek = Math.max(0, workDaysPerWeek - uniqueDaysLoggedThisWeek);
   const remainingExtraTargetKes = Math.max(0, weeklyExtraTargetKes - thisWeekExtraSurplusKes);
   const dynamicDailyExtraPaceKes = remainingWorkDaysThisWeek > 0 && remainingExtraTargetKes > 0
@@ -3492,6 +3495,19 @@ export function renderRiderDashboard(data: any): string {
                         </select>
                     </div>
                     <div>
+                        <label class="block text-[11px] font-bold text-indigo-300 mb-1">🛋️ Usual Off Day (Flexible)</label>
+                        <select name="preferred_off_day" class="w-full p-2 bg-slate-900 border border-indigo-700 rounded-xl font-bold text-indigo-300 text-xs">
+                            <option value="TUESDAY" ${preferredOffDay === 'TUESDAY' ? 'selected' : ''}>Tuesday (Most Common)</option>
+                            <option value="DYNAMIC" ${preferredOffDay === 'DYNAMIC' ? 'selected' : ''}>Dynamic (Auto-Learn)</option>
+                            <option value="MONDAY" ${preferredOffDay === 'MONDAY' ? 'selected' : ''}>Monday</option>
+                            <option value="WEDNESDAY" ${preferredOffDay === 'WEDNESDAY' ? 'selected' : ''}>Wednesday</option>
+                            <option value="THURSDAY" ${preferredOffDay === 'THURSDAY' ? 'selected' : ''}>Thursday</option>
+                            <option value="FRIDAY" ${preferredOffDay === 'FRIDAY' ? 'selected' : ''}>Friday</option>
+                            <option value="SATURDAY" ${preferredOffDay === 'SATURDAY' ? 'selected' : ''}>Saturday</option>
+                            <option value="SUNDAY" ${preferredOffDay === 'SUNDAY' ? 'selected' : ''}>Sunday</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-[11px] font-bold text-emerald-300 mb-1">🔥 9. Daily Extra Hustle Goal (Above ${strictNetFloor})</label>
                         <input type="number" step="50" min="50" name="daily_bonus_target_kes" value="${dailyBonusTargetKes}" class="w-full p-2 bg-slate-900 border border-emerald-700 rounded-xl font-black text-emerald-400 text-sm" placeholder="300">
                     </div>
@@ -3622,6 +3638,32 @@ export function renderRiderDashboard(data: any): string {
 
             <!-- 🔥 4. Weekly Extra Hustle & Streak Challenge (Strictly EXTRA Cash Above Ksh 1,000 Pay Yourself First Floor!) -->
             <div class="p-4 bg-slate-950/90 border border-indigo-500/40 rounded-2xl space-y-3">
+                <!-- Smart Flexible Schedule & Off-Day Toggle Bar -->
+                <div class="p-3 rounded-xl border ${isRestDayToday ? 'bg-indigo-950/70 border-indigo-600/60' : 'bg-slate-900/80 border-slate-800'} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5">
+                    <div class="space-y-0.5 text-[11px]">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-black ${isRestDayToday ? 'text-indigo-200' : 'text-amber-300'}">
+                                ${isRestDayToday ? `🛋️ ${restDayLabel} Active` : `📅 Smart ${workDaysPerWeek}-Day Flexible Schedule`}
+                            </span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-gray-200 border border-slate-700">
+                                ${uniqueDaysLoggedThisWeek}/${workDaysPerWeek} Work Days Done
+                            </span>
+                            ${flex_schedule?.learnedPeakDay ? `
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                🧠 Peak: ${flex_schedule.learnedPeakDay.charAt(0) + flex_schedule.learnedPeakDay.slice(1).toLowerCase()}s
+                            </span>
+                            ` : ''}
+                        </div>
+                        <p class="text-[11px] text-gray-300">${flex_schedule?.smartAdvice || `Usual off day: ${preferredOffDay === 'DYNAMIC' ? 'Flexible' : preferredOffDay.charAt(0) + preferredOffDay.slice(1).toLowerCase()} (changeable anytime).`}</p>
+                    </div>
+                    <form action="/rider/rest-day/toggle" method="POST" class="shrink-0">
+                        <input type="hidden" name="date" value="${today}">
+                        <button type="submit" class="px-3 py-1.5 rounded-xl text-[11px] font-extrabold transition active:scale-95 shadow-xs ${isRestDayToday ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-slate-800 hover:bg-indigo-900/70 text-indigo-300 border border-indigo-700/70'}">
+                            ${isRestDayToday ? '🛵 Working Today? Switch to Active' : '🛋️ Take Today as Off Day'}
+                        </button>
+                    </form>
+                </div>
+
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div class="space-y-1">
                         <div class="flex items-center gap-2 flex-wrap">
@@ -3634,8 +3676,8 @@ export function renderRiderDashboard(data: any): string {
                             </span>
                         </div>
                         <p class="text-[11px] text-gray-300">
-                            ${isSundayRestDay
-                              ? `🛋️ <strong>Sunday Rest & Batch Day:</strong> Your ${workDaysPerWeek}-day work week is complete! Today is for recovery, family, and executing your Sunday consolidated waterfall transfers.`
+                            ${isRestDayToday
+                              ? `🛋️ <strong>${restDayLabel}:</strong> Resting & recharging today! Your ${workDaysPerWeek}-day weekly target automatically paces across your active working days.`
                               : remainingExtraTargetKes > 0
                                 ? `⚡ <strong>Push Harder After Ksh ${strictNetFloor.toLocaleString()}:</strong> Your first Ksh ${strictNetFloor.toLocaleString()}/day is locked for <strong>Pay Yourself First</strong>. To hit your <strong class="text-amber-300">+Ksh ${weeklyExtraTargetKes.toLocaleString()} Weekly Extra Hustle Pool</strong> (${workDaysPerWeek} days × +Ksh ${dailyBonusTargetKes.toLocaleString()}/day), aim for <strong class="text-emerald-400">+Ksh ${dynamicDailyExtraPaceKes.toLocaleString()}/day extra</strong> (Net <strong>Ksh ${(strictNetFloor + dynamicDailyExtraPaceKes).toLocaleString()}/day</strong>) over the remaining <strong>${remainingWorkDaysThisWeek} workday${remainingWorkDaysThisWeek === 1 ? '' : 's'}</strong>!`
                                 : `🎉 <strong>Extra Hustle Target Crushed!</strong> Your sacred Ksh ${strictNetFloor.toLocaleString()}/day floor is safe AND you banked <strong class="text-emerald-400">+Ksh ${thisWeekExtraSurplusKes.toLocaleString()}</strong> pure extra cash above your floor this week!`}

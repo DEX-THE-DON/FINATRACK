@@ -468,6 +468,7 @@ export interface TargetPace {
   statusBadge: 'rose' | 'amber' | 'emerald' | 'cyan' | 'indigo';
   workDaysInPeriod?: number;
   isRestDay?: boolean;
+  restDayLabel?: string;
 }
 
 export function calculateTargetPace(
@@ -477,7 +478,8 @@ export function calculateTargetPace(
   isIncome: boolean,
   daysElapsed: number,
   totalDaysInPeriod: number,
-  isRestDay: boolean = false
+  isRestDay: boolean = false,
+  restDayLabel: string = 'Rest Day'
 ): TargetPace {
   const actual = toDecimal(actualAmount).toNumber();
   const target = toDecimal(targetAmount).toNumber();
@@ -506,7 +508,7 @@ export function calculateTargetPace(
       statusLabel = '🎉 Target Achieved!';
       statusBadge = 'emerald';
     } else if (isRestDay) {
-      statusLabel = percentage >= 85 ? `🛋️ Sunday Rest (${percentage}% Hit)` : `🛋️ Sunday Rest (${percentage}% Hit)`;
+      statusLabel = `🛋️ ${restDayLabel} (${percentage}% Hit)`;
       statusBadge = percentage >= 85 ? 'emerald' : 'cyan';
     } else if (percentage >= expectedPacePct + 10) {
       statusLabel = '🚀 Ahead of Target';
@@ -524,7 +526,7 @@ export function calculateTargetPace(
       statusLabel = '🚨 Over Budget';
       statusBadge = 'rose';
     } else if (isRestDay) {
-      statusLabel = '🛋️ Rest Day Budget Safe';
+      statusLabel = `🛋️ ${restDayLabel} (Budget Safe)`;
       statusBadge = 'emerald';
     } else if (percentage > expectedPacePct + 15) {
       statusLabel = '⚡ Burning Fast';
@@ -553,7 +555,183 @@ export function calculateTargetPace(
     statusLabel,
     statusBadge,
     workDaysInPeriod: totalDaysInPeriod,
-    isRestDay
+    isRestDay,
+    restDayLabel
+  };
+}
+
+export interface FlexibleWorkWeekStatus {
+  todayWeekdayName: string;
+  workDaysPerWeek: number;
+  daysWorkedThisWeek: number;
+  workDaysRemaining: number;
+  calendarDaysRemaining: number;
+  offDaysAllowanceRemaining: number;
+  hasLoggedWorkToday: boolean;
+  isRestDayToday: boolean;
+  restDayReason: 'EXPLICIT' | 'PREFERRED' | 'WEEK_COMPLETED' | 'AUTO_LEARNED' | 'NONE';
+  restDayLabel: string;
+  elapsedWorkDaysForPace: number;
+  learnedOffDay: string | null;
+  learnedPeakDay: string | null;
+  smartAdvice: string;
+}
+
+const WEEKDAY_NAMES = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+
+function formatWeekdayTitle(day: string): string {
+  const clean = String(day || '').trim().toUpperCase();
+  if (!clean || clean === 'DYNAMIC') return 'Flexible';
+  return clean.charAt(0) + clean.slice(1).toLowerCase();
+}
+
+/**
+ * Smart Flexible Work-Week & Off-Day Intelligence for Self-Employed Gig Workers.
+ * Learns historical off-day / peak-day patterns, respects user's preferred or explicit off-days,
+ * and dynamically redistributes remaining work days across the active week.
+ */
+export function analyzeFlexibleWorkWeek(params: {
+  todayIso: string;
+  workDaysPerWeek: number;
+  preferredOffDay: string;
+  explicitRestDays: string[];
+  workedDatesThisWeek: string[];
+  historicalRecords?: Array<{ date?: string; amount?: number; total_earned?: number }>;
+}): FlexibleWorkWeekStatus {
+  const workDaysPerWeek = Math.min(7, Math.max(1, Math.round(params.workDaysPerWeek || 6)));
+  const preferredOffDay = String(params.preferredOffDay || 'TUESDAY').toUpperCase().trim();
+  const explicitRestDays = Array.isArray(params.explicitRestDays) ? params.explicitRestDays : [];
+  const workedSet = new Set((params.workedDatesThisWeek || []).filter(Boolean));
+
+  const todayDate = new Date(`${params.todayIso}T12:00:00Z`);
+  const dayOfWeek = isNaN(todayDate.getTime()) ? 0 : (todayDate.getUTCDay() + 6) % 7; // 0 = Mon, 6 = Sun
+  const todayWeekdayName = WEEKDAY_NAMES[dayOfWeek];
+
+  const mondayDate = new Date(todayDate);
+  mondayDate.setUTCDate(todayDate.getUTCDate() - dayOfWeek);
+  const mondayIso = isNaN(mondayDate.getTime()) ? params.todayIso : mondayDate.toISOString().slice(0, 10);
+  const sundayDate = new Date(mondayDate);
+  sundayDate.setUTCDate(mondayDate.getUTCDate() + 6);
+  const sundayIso = isNaN(sundayDate.getTime()) ? params.todayIso : sundayDate.toISOString().slice(0, 10);
+
+  // Historical Pattern Learning: detect which weekday the user most often takes off & peaks on
+  let learnedOffDay: string | null = null;
+  let learnedPeakDay: string | null = null;
+  const records = params.historicalRecords || [];
+  if (records.length > 0) {
+    const dayCounts = new Array(7).fill(0);
+    const daySums = new Array(7).fill(0);
+    const seenDatesByWeekday: Array<Set<string>> = Array.from({ length: 7 }, () => new Set<string>());
+
+    for (const r of records) {
+      const dStr = String(r.date || '').slice(0, 10);
+      const amt = Number(r.total_earned ?? r.amount ?? 0);
+      if (!dStr || amt <= 0) continue;
+      const dt = new Date(`${dStr}T12:00:00Z`);
+      if (isNaN(dt.getTime())) continue;
+      const wd = (dt.getUTCDay() + 6) % 7;
+      if (!seenDatesByWeekday[wd].has(dStr)) {
+        seenDatesByWeekday[wd].add(dStr);
+        dayCounts[wd] += 1;
+      }
+      daySums[wd] += amt;
+    }
+
+    const totalUniqueDays = seenDatesByWeekday.reduce((s, set) => s + set.size, 0);
+    if (totalUniqueDays >= 8) {
+      let minCount = Infinity;
+      let minIdx = -1;
+      let maxAvg = -1;
+      let maxIdx = -1;
+      for (let i = 0; i < 7; i++) {
+        if (dayCounts[i] < minCount) {
+          minCount = dayCounts[i];
+          minIdx = i;
+        }
+        const avg = dayCounts[i] > 0 ? daySums[i] / dayCounts[i] : 0;
+        if (avg > maxAvg) {
+          maxAvg = avg;
+          maxIdx = i;
+        }
+      }
+      if (minIdx >= 0 && workDaysPerWeek < 7) learnedOffDay = WEEKDAY_NAMES[minIdx];
+      if (maxIdx >= 0 && maxAvg > 0) learnedPeakDay = WEEKDAY_NAMES[maxIdx];
+    }
+  }
+
+  const explicitRestThisWeek = explicitRestDays.filter(d => d >= mondayIso && d <= sundayIso);
+  const daysWorkedThisWeek = workedSet.size;
+  const hasLoggedWorkToday = workedSet.has(params.todayIso);
+  const calendarDaysRemaining = Math.max(1, 7 - dayOfWeek); // includes today
+  const workDaysRemaining = Math.max(0, workDaysPerWeek - daysWorkedThisWeek);
+  const offDaysAllowanceRemaining = Math.max(0, calendarDaysRemaining - workDaysRemaining);
+
+  let isRestDayToday = false;
+  let restDayReason: FlexibleWorkWeekStatus['restDayReason'] = 'NONE';
+  let restDayLabel = 'Active Shift';
+
+  if (!hasLoggedWorkToday) {
+    if (explicitRestDays.includes(params.todayIso)) {
+      isRestDayToday = true;
+      restDayReason = 'EXPLICIT';
+      restDayLabel = `${formatWeekdayTitle(todayWeekdayName)} Off Day`;
+    } else if (daysWorkedThisWeek >= workDaysPerWeek) {
+      isRestDayToday = true;
+      restDayReason = 'WEEK_COMPLETED';
+      restDayLabel = 'Week Completed Rest Day';
+    } else if (preferredOffDay === todayWeekdayName && explicitRestThisWeek.length === 0) {
+      isRestDayToday = true;
+      restDayReason = 'PREFERRED';
+      restDayLabel = `${formatWeekdayTitle(todayWeekdayName)} Off Day`;
+    } else if (preferredOffDay === 'DYNAMIC' && learnedOffDay === todayWeekdayName && explicitRestThisWeek.length === 0 && offDaysAllowanceRemaining > 0) {
+      isRestDayToday = true;
+      restDayReason = 'AUTO_LEARNED';
+      restDayLabel = `${formatWeekdayTitle(todayWeekdayName)} Auto-Off`;
+    }
+  }
+
+  // Compute elapsed work days for calculateTargetPace so dailyRate = remainingTarget / effectiveDaysRemaining
+  const effectiveDaysRemaining = isRestDayToday
+    ? 0
+    : Math.min(calendarDaysRemaining, Math.max(1, workDaysRemaining));
+  const elapsedWorkDaysForPace = isRestDayToday
+    ? Math.min(workDaysPerWeek, daysWorkedThisWeek)
+    : Math.max(1, workDaysPerWeek - effectiveDaysRemaining + 1);
+
+  let smartAdvice = '';
+  if (isRestDayToday) {
+    if (restDayReason === 'WEEK_COMPLETED') {
+      smartAdvice = `All ${workDaysPerWeek} work days completed this week! Enjoy your earned rest day.`;
+    } else if (restDayReason === 'AUTO_LEARNED') {
+      smartAdvice = `Smart Pattern: You usually take ${formatWeekdayTitle(todayWeekdayName)}s off. ${workDaysRemaining} work day${workDaysRemaining === 1 ? '' : 's'} remain across ${Math.max(0, calendarDaysRemaining - 1)} open days.`;
+    } else {
+      smartAdvice = `Off duty today (${restDayLabel}). ${workDaysRemaining} work day${workDaysRemaining === 1 ? '' : 's'} left across ${Math.max(0, calendarDaysRemaining - 1)} remaining days this week.`;
+    }
+  } else if (hasLoggedWorkToday && preferredOffDay === todayWeekdayName) {
+    smartAdvice = `You worked on your usual ${formatWeekdayTitle(todayWeekdayName)} off day! You still have ${offDaysAllowanceRemaining} flexible off day${offDaysAllowanceRemaining === 1 ? '' : 's'} available later this week.`;
+  } else if (workDaysRemaining === 0) {
+    smartAdvice = `Weekly ${workDaysPerWeek}-day work target hit! Any extra shift today is pure bonus surplus.`;
+  } else if (offDaysAllowanceRemaining > 0) {
+    smartAdvice = `${workDaysRemaining} work day${workDaysRemaining === 1 ? '' : 's'} left (${offDaysAllowanceRemaining} flexible off day${offDaysAllowanceRemaining === 1 ? '' : 's'} still available this week).`;
+  } else {
+    smartAdvice = `All ${calendarDaysRemaining} remaining day${calendarDaysRemaining === 1 ? '' : 's'} this week are needed to hit your ${workDaysPerWeek}-day goal.`;
+  }
+
+  return {
+    todayWeekdayName,
+    workDaysPerWeek,
+    daysWorkedThisWeek,
+    workDaysRemaining,
+    calendarDaysRemaining,
+    offDaysAllowanceRemaining,
+    hasLoggedWorkToday,
+    isRestDayToday,
+    restDayReason,
+    restDayLabel,
+    elapsedWorkDaysForPace,
+    learnedOffDay,
+    learnedPeakDay,
+    smartAdvice,
   };
 }
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext, inMemoryStore } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon, getSavedMmfSettings, saveMmfSettingsCookie, ALL_USER_DATA_COOKIES, clearAllUserDataCookies } from './routes/finance';
-import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, reconcileRiderShiftLogsWithTransactions, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot } from './routes/rider';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, reconcileRiderShiftLogsWithTransactions, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot, getWeeklyRestDays } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
 import { exportRoutes } from './routes/export';
@@ -23,6 +23,7 @@ import {
   inferKenyanInstitutionRate,
   calculateBudgetPace,
   calculateTargetPace,
+  analyzeFlexibleWorkWeek,
   calculateDebtDeadline,
   calculateShiftHours,
   formatTimeDisplay,
@@ -519,15 +520,16 @@ app.get('/', async (c) => {
     reconcileRecurringBillsAndTransactions(c, getRecurringBills(c), bills || [], txsWithRiderShifts, currentMonth);
   const totalRecurringBillsKes = reconciledRecurringBills.reduce((s, b) => s + Number(b.amount || 0), 0);
 
-  // Strict saver & work days configuration (Respects user's work schedule: defaults to 6 work days/week: Mon - Sat, Sunday rest)
+  const todayIsoStr = today.toISOString().slice(0, 10);
+
+  // Strict saver & flexible work days configuration (Defaults to 6 work days/week with flexible off-day, e.g. Tuesday)
   const strictSaverConfig = getStrictSaverConfig(c);
   const workDaysPerWeek = Math.min(7, Math.max(1, Number(strictSaverConfig?.work_days_per_week || 6)));
+  const preferredOffDay = String(strictSaverConfig?.preferred_off_day || 'TUESDAY').toUpperCase();
+  const weeklyRestDays = getWeeklyRestDays(c);
 
-  // Weekly calculation (Mon - Sun calendar boundaries, with daily pacing aligned to work days)
-  const dayOfWeek = (today.getDay() + 6) % 7; // 0 for Monday, 5 for Saturday, 6 for Sunday
-  const isRestDay = dayOfWeek >= workDaysPerWeek; // e.g. Sunday in a 6-day work week
-  const elapsedWorkDays = isRestDay ? workDaysPerWeek : Math.min(workDaysPerWeek, dayOfWeek + 1);
-
+  // Weekly calculation (Mon - Sun calendar boundaries, with daily pacing aligned to flexible work days)
+  const dayOfWeek = (today.getDay() + 6) % 7; // 0 for Monday, 1 for Tuesday, ..., 6 for Sunday
   const monday = new Date(today);
   monday.setDate(today.getDate() - dayOfWeek);
   const mondayStr = monday.toISOString().slice(0, 10);
@@ -564,6 +566,8 @@ app.get('/', async (c) => {
   let monthlyExpenses = 0;
   let yearlyIncome = 0;
   let yearlyExpenses = 0;
+  const uniqueWorkDatesThisWeek = new Set<string>();
+  const historicalIncomeRecords: Array<{ date?: string; amount?: number }> = [];
 
   for (const t of txs) {
     if (isTransferTransaction(t)) continue;
@@ -573,8 +577,14 @@ app.get('/', async (c) => {
     const isInc = t.transaction_type === 'INCOME';
     const isExp = t.transaction_type === 'EXPENSE';
 
+    if (isInc && amt > 0 && tDate) {
+      historicalIncomeRecords.push({ date: tDate, amount: amt });
+    }
     if (tDate >= mondayStr && tDate <= sundayStr) {
-      if (isInc) weeklyIncome += amt;
+      if (isInc) {
+        weeklyIncome += amt;
+        if (amt > 0) uniqueWorkDatesThisWeek.add(tDate);
+      }
       if (isExp) weeklyExpenses += amt;
     }
     if (tDate.startsWith(currentMonth)) {
@@ -587,15 +597,32 @@ app.get('/', async (c) => {
     }
   }
 
-  // Multi-timeframe Income and Expense Target Objects (Paced to user's 6 work days/week or custom schedule)
+  for (const l of (effectiveRiderLogs || [])) {
+    const lDate = String(l.date || '');
+    const earned = Number(l.total_earned || 0);
+    if (lDate >= mondayStr && lDate <= sundayStr && earned > 0) {
+      uniqueWorkDatesThisWeek.add(lDate);
+    }
+  }
+
+  const flexSchedule = analyzeFlexibleWorkWeek({
+    todayIso: todayIsoStr,
+    workDaysPerWeek,
+    preferredOffDay,
+    explicitRestDays: weeklyRestDays,
+    workedDatesThisWeek: Array.from(uniqueWorkDatesThisWeek),
+    historicalRecords: (effectiveRiderLogs && effectiveRiderLogs.length > 0) ? effectiveRiderLogs : historicalIncomeRecords,
+  });
+
+  // Multi-timeframe Income and Expense Target Objects (Smart flexible gig pacing)
   const incomeTargets = {
-    weekly: calculateTargetPace(weeklyIncome, targetIncWeekly, 'WEEKLY', true, elapsedWorkDays, workDaysPerWeek, isRestDay),
+    weekly: calculateTargetPace(weeklyIncome, targetIncWeekly, 'WEEKLY', true, flexSchedule.elapsedWorkDaysForPace, workDaysPerWeek, flexSchedule.isRestDayToday, flexSchedule.restDayLabel),
     monthly: calculateTargetPace(monthlyIncome, targetIncMonthly, 'MONTHLY', true, currentDay, daysInMonth),
     yearly: calculateTargetPace(yearlyIncome, targetIncYearly, 'YEARLY', true, dayOfYear, totalDaysInYear),
   };
 
   const expenseTargets = {
-    weekly: calculateTargetPace(weeklyExpenses, targetExpWeekly, 'WEEKLY', false, elapsedWorkDays, workDaysPerWeek, isRestDay),
+    weekly: calculateTargetPace(weeklyExpenses, targetExpWeekly, 'WEEKLY', false, flexSchedule.elapsedWorkDaysForPace, workDaysPerWeek, flexSchedule.isRestDayToday, flexSchedule.restDayLabel),
     monthly: calculateTargetPace(monthlyExpenses, targetExpMonthly, 'MONTHLY', false, currentDay, daysInMonth),
     yearly: calculateTargetPace(yearlyExpenses, targetExpYearly, 'YEARLY', false, dayOfYear, totalDaysInYear),
   };
@@ -859,7 +886,6 @@ app.get('/', async (c) => {
 
   // EV vs Petrol ROI Intelligence & Shift Net Take-Home for Pay Yourself First
   const evRoiStats = calculateEvRoiSavings(effectiveRiderLogs || []);
-  const todayIsoStr = today.toISOString().slice(0, 10);
   const todayShiftNet = (effectiveRiderLogs || [])
     .filter((l: any) => l.date === todayIsoStr)
     .reduce((acc: number, l: any) => {
@@ -943,6 +969,9 @@ app.get('/', async (c) => {
     total_mmf_accrued_profit: totalMmfAccruedProfit,
     total_mmf_principal: totalMmfPrincipal,
     strict_saver_config: strictSaverConfig,
+    flex_schedule: flexSchedule,
+    weekly_rest_days: weeklyRestDays,
+    today_iso: todayIsoStr,
     allocation_rules: rules,
     total_balance: totalBalance,
     weekly_income: weeklyIncome,
@@ -1211,6 +1240,26 @@ app.get('/rider', async (c) => {
     isRiderView: true,
   });
 
+  const riderRestDays = getWeeklyRestDays(c);
+  const riderTodayDate = new Date(`${todayRiderIso}T12:00:00Z`);
+  const riderDow = (riderTodayDate.getUTCDay() + 6) % 7;
+  const riderMonDate = new Date(riderTodayDate);
+  riderMonDate.setUTCDate(riderTodayDate.getUTCDate() - riderDow);
+  const riderMonIso = riderMonDate.toISOString().slice(0, 10);
+  const riderWorkedDates = Array.from(new Set(
+    (shiftLogs || [])
+      .filter((l: any) => String(l.date || '') >= riderMonIso && Number(l.total_earned || 0) > 0)
+      .map((l: any) => String(l.date || '').slice(0, 10))
+  ));
+  const riderFlexSchedule = analyzeFlexibleWorkWeek({
+    todayIso: todayRiderIso,
+    workDaysPerWeek: Number(strictSaverConfig?.work_days_per_week || 6),
+    preferredOffDay: String(strictSaverConfig?.preferred_off_day || 'TUESDAY').toUpperCase(),
+    explicitRestDays: riderRestDays,
+    workedDatesThisWeek: riderWorkedDates,
+    historicalRecords: shiftLogs || [],
+  });
+
   const html = renderRiderDashboard({
     active_bike: primaryActiveBike,
     bikes: activeBikes,
@@ -1218,6 +1267,8 @@ app.get('/rider', async (c) => {
     notifications: riderNotifications,
     odometer_config: odometerConfig,
     strict_saver_config: strictSaverConfig,
+    flex_schedule: riderFlexSchedule,
+    weekly_rest_days: riderRestDays,
     platform_remittance: platformRemittanceConfig,
     weekly_batch_pot: getWeeklyBatchPot(c),
     has_quick_pin: Boolean(getCookie(c, 'finatrack_quick_pin')),

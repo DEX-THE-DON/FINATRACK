@@ -331,6 +331,7 @@ export interface StrictSaverConfig {
   savings_account_name: string;
   starting_savings_balance: number;
   work_days_per_week: number;
+  preferred_off_day: string;
   daily_bonus_target_kes: number;
   bonus_mission: string;
   required_gross_kes: number;
@@ -350,6 +351,7 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
   let savingsAccountName = 'Strict Savings Account';
   let startingSavingsBalance = 0;
   let workDaysPerWeek = 6;
+  let preferredOffDay = 'TUESDAY';
   let dailyBonusTarget = 300;
   let bonusMission = '80_20_REWARD';
 
@@ -392,6 +394,9 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
       if (typeof parsed.work_days_per_week === 'number' && parsed.work_days_per_week >= 1 && parsed.work_days_per_week <= 7) {
         workDaysPerWeek = Math.round(parsed.work_days_per_week);
       }
+      if (typeof parsed.preferred_off_day === 'string' && parsed.preferred_off_day.trim()) {
+        preferredOffDay = parsed.preferred_off_day.trim().toUpperCase();
+      }
       if (typeof parsed.daily_bonus_target_kes === 'number' && parsed.daily_bonus_target_kes >= 50) {
         dailyBonusTarget = Math.round(parsed.daily_bonus_target_kes);
       }
@@ -415,6 +420,7 @@ export function getStrictSaverConfig(c: any, activeBike?: any): StrictSaverConfi
     savings_account_name: savingsAccountName,
     starting_savings_balance: startingSavingsBalance,
     work_days_per_week: workDaysPerWeek,
+    preferred_off_day: preferredOffDay,
     daily_bonus_target_kes: dailyBonusTarget,
     bonus_mission: bonusMission,
     required_gross_kes: netFloor + fuelAllowance + personalCap + dailyKodi,
@@ -432,6 +438,39 @@ export function saveStrictSaverConfigCookie(
       sameSite: 'Lax',
     });
   } catch (e) {}
+}
+
+// ------------------------------------------------------------------------------
+// 🛋️ WEEKLY FLEXIBLE REST / OFF DAYS STORAGE
+// ------------------------------------------------------------------------------
+export function getWeeklyRestDays(c: any): string[] {
+  try {
+    const raw = getCookie(c, 'finatrack_rest_days');
+    if (!raw) return [];
+    const parsed = JSON.parse(decodeURIComponent(raw));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveWeeklyRestDaysCookie(c: any, restDays: string[]): void {
+  try {
+    setCookie(c, 'finatrack_rest_days', encodeURIComponent(JSON.stringify(restDays)), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 14,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+}
+
+export function toggleRestDay(c: any, dateIsoStr: string): boolean {
+  const existing = getWeeklyRestDays(c);
+  const updated = existing.includes(dateIsoStr)
+    ? existing.filter(d => d !== dateIsoStr)
+    : [...existing, dateIsoStr];
+  saveWeeklyRestDaysCookie(c, updated);
+  return updated.includes(dateIsoStr);
 }
 
 // ------------------------------------------------------------------------------
@@ -1181,6 +1220,9 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
   const workDaysPerWeek = body['work_days_per_week'] !== undefined
     ? Math.min(7, Math.max(1, parseInt(String(body['work_days_per_week'] || '6'), 10) || 6))
     : existing.work_days_per_week;
+  const preferredOffDay = body['preferred_off_day'] !== undefined
+    ? String(body['preferred_off_day'] || 'TUESDAY').toUpperCase().trim()
+    : (existing.preferred_off_day || 'TUESDAY');
   const dailyBonusTargetKes = body['daily_bonus_target_kes'] !== undefined
     ? Math.max(50, parseFloat(String(body['daily_bonus_target_kes'] || '300')) || 300)
     : existing.daily_bonus_target_kes;
@@ -1212,6 +1254,7 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
     savings_account_name: savingsAccountName || 'Strict Savings Account',
     starting_savings_balance: resolvedStartingBalance,
     work_days_per_week: workDaysPerWeek,
+    preferred_off_day: preferredOffDay,
     daily_bonus_target_kes: dailyBonusTargetKes,
     bonus_mission: bonusMission,
   });
@@ -1230,6 +1273,17 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
     `/rider?toast=${encodeURIComponent(`Strict Saver Contract locked! 👑 Sacred Daily Floor: Ksh ${netFloorKes.toLocaleString()} • 🔥 Extra Hustle Challenge: +Ksh ${dailyBonusTargetKes.toLocaleString()}/day (Ksh ${weeklyExtraPool.toLocaleString()} Weekly Extra Pool) • Required Gross: Ksh ${reqGross.toLocaleString()}`)}#shift-briefing-card`,
     303
   );
+});
+
+// Toggle any day as a flexible Rest / Off Day
+riderRoutes.post('/rest-day/toggle', async (c) => {
+  const body = await c.req.parseBody();
+  const dateStr = String(body['date'] || new Date().toISOString().slice(0, 10));
+  const isRest = toggleRestDay(c, dateStr);
+  const msg = isRest
+    ? `🛋️ Marked ${dateStr} as an Off / Rest Day! Weekly targets & pacing adapted.`
+    : `🛵 Cleared off day for ${dateStr}! Active shift mode restored.`;
+  return c.redirect(`/rider?toast=${encodeURIComponent(msg)}#shift-briefing-card`, 303);
 });
 
 // ------------------------------------------------------------------------------

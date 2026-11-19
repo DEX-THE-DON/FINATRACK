@@ -67,11 +67,35 @@ console.assert(Math.round(weekIncome6Days.dailyRate) === 1667, `Daily run-rate n
 console.log(`✅ 6-Day Work Week Target (10k/15k on day 4/6): Needed=${Math.round(weekIncome6Days.dailyRate)}/day (${weekIncome6Days.daysRemaining} days left)`);
 
 // Test 5c: 6-Day Work Week on Sunday Rest Day
-const sundayRestTarget = calculateTargetPace(13500, 15000, 'WEEKLY', true, 6, 6, true);
+const sundayRestTarget = calculateTargetPace(13500, 15000, 'WEEKLY', true, 6, 6, true, 'Sunday Off Day');
 console.assert(sundayRestTarget.daysRemaining === 0, `Sunday rest day should have 0 days remaining, got ${sundayRestTarget.daysRemaining}`);
 console.assert(sundayRestTarget.dailyRate === 0, `Sunday rest day dailyRate should be 0, got ${sundayRestTarget.dailyRate}`);
-console.assert(sundayRestTarget.statusLabel.includes('Sunday Rest'), `Status label should reflect Sunday Rest, got ${sundayRestTarget.statusLabel}`);
+console.assert(sundayRestTarget.statusLabel.includes('Sunday Off Day'), `Status label should reflect Sunday Off Day, got ${sundayRestTarget.statusLabel}`);
 console.log(`✅ 6-Day Work Week Sunday Rest Day: ${sundayRestTarget.statusLabel}, DaysLeft=${sundayRestTarget.daysRemaining}`);
+
+// Test 5d: Smart Flexible Off-Day Intelligence (Tuesday Off by default, or any day dynamically)
+import { analyzeFlexibleWorkWeek } from './math';
+const tuesdayOff = analyzeFlexibleWorkWeek({
+  todayIso: '2026-11-10', // Tuesday
+  workDaysPerWeek: 6,
+  preferredOffDay: 'TUESDAY',
+  explicitRestDays: [],
+  workedDatesThisWeek: ['2026-11-09'], // Worked Monday
+});
+console.assert(tuesdayOff.isRestDayToday === true, 'Tuesday should auto-detect as preferred off day when no work logged');
+console.assert(tuesdayOff.workDaysRemaining === 5, `Should need 5 more work days, got ${tuesdayOff.workDaysRemaining}`);
+console.assert(tuesdayOff.offDaysAllowanceRemaining === 1, `Should have 1 off-day allowance remaining, got ${tuesdayOff.offDaysAllowanceRemaining}`);
+
+const workedTuesdaySwappedToThursday = analyzeFlexibleWorkWeek({
+  todayIso: '2026-11-12', // Thursday
+  workDaysPerWeek: 6,
+  preferredOffDay: 'TUESDAY',
+  explicitRestDays: ['2026-11-12'], // Chose Thursday off instead!
+  workedDatesThisWeek: ['2026-11-09', '2026-11-10', '2026-11-11'], // Worked Mon, Tue, Wed
+});
+console.assert(workedTuesdaySwappedToThursday.isRestDayToday === true, 'Thursday should be marked as flexible off day');
+console.assert(workedTuesdaySwappedToThursday.workDaysRemaining === 3, `Should need 3 more work days (Fri-Sun), got ${workedTuesdaySwappedToThursday.workDaysRemaining}`);
+console.log(`✅ Flexible Gig Schedule: Tuesday Off=${tuesdayOff.restDayLabel}, Swapped to Thursday=${workedTuesdaySwappedToThursday.restDayLabel}`);
 
 const monthExpenseTarget = calculateTargetPace(12000, 25000, 'MONTHLY', false, 15, 30);
 console.assert(monthExpenseTarget.percentage === 48, `Monthly expense target pct should be 48%, got ${monthExpenseTarget.percentage}%`);
