@@ -2370,6 +2370,8 @@ export const ALL_USER_DATA_COOKIES = [
   'finatrack_mmf_settings',
   'finatrack_recurring_bills',
   'finatrack_batch_pot',
+  'finatrack_holding_pot_cfg',
+  'finatrack_rest_days',
   'finatrack_compliance_docs',
   'finatrack_maint_schedules',
   'finatrack_odometer_config',

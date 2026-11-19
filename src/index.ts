@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { AppEnv, getRequestContext, inMemoryStore } from './db/supabase';
 import { financeRoutes, resolveEffectiveAllocationRules, getSavedAllocationRules, getRecurringBills, reconcileRecurringBillsAndTransactions, doesTransactionMatchRecurringBill, getSavedGoalHorizons, resolveGoalHorizon, getSavedMmfSettings, saveMmfSettingsCookie, ALL_USER_DATA_COOKIES, clearAllUserDataCookies } from './routes/finance';
-import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, reconcileRiderShiftLogsWithTransactions, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot, getWeeklyRestDays } from './routes/rider';
+import { riderRoutes, classifyShiftWindow, resolveEffectiveComplianceDeadlines, resolveEffectiveMaintenanceSchedules, resolveEffectiveRiderLogs, reconcileRiderShiftLogsWithTransactions, getOdometerConfig, getStrictSaverConfig, getPlatformRemittanceConfig, getRoadsideIncidents, getWeeklyBatchPot, getWeeklyRestDays, resolveEffectiveBatchPot } from './routes/rider';
 import { traderRoutes, getSavedTraderLogs, getSavedTraderCredits, getTraderConfig } from './routes/trader';
 import { salariedRoutes, getSalariedConfig, resolveEffectiveSalariedLoans } from './routes/salaried';
 import { exportRoutes } from './routes/export';
@@ -14,7 +14,7 @@ import { renderSalariedDashboard } from './views/salariedView';
 import { renderAuthView } from './views/authView';
 import { getActiveProfile, setActiveProfile, PROFILES, ProfileMode } from './utils/profile';
 import { getPaystackConfig, isUserPaywalled } from './utils/paystack';
-import { computeSystemIntelligence, inferSmartShiftDefaults } from './utils/smartEngine';
+import { computeSystemIntelligence, inferSmartShiftDefaults, computeSmartHoldingPot } from './utils/smartEngine';
 import {
   toDecimal,
   calculateMonthlyYield,
@@ -964,12 +964,29 @@ app.get('/', async (c) => {
     todayIso: todayIsoStr,
   });
 
+  const { entries: homeBatchPotEntries, config: homeHoldingPotCfg } = await resolveEffectiveBatchPot(c, supabase, userId);
+  const homePlatRemit = getPlatformRemittanceConfig(c);
+  const homeWeeklyKm = (effectiveRiderLogs || [])
+    .filter((l: any) => String(l.date || '') >= mondayStr)
+    .reduce((s: number, l: any) => s + Number(l.kilometers ?? l.km_driven ?? 0), 0);
+  const homeSmartHoldingPot = computeSmartHoldingPot({
+    batchPotEntries: homeBatchPotEntries,
+    config: homeHoldingPotCfg,
+    accounts: accs,
+    allocationRules: rules,
+    platformOwedKes: homePlatRemit.total_owed,
+    weeklyKmDriven: homeWeeklyKm,
+    upcoming7DayBillsKes: systemIntelligence.upcoming7DayObligationsKes,
+    todayIso: todayIsoStr,
+  });
+
   const html = renderFinanceDashboard({
     accounts: accs,
     transactions: txs,
     rider_logs: effectiveRiderLogs,
     notifications: smartNotifications,
     smart_intelligence: systemIntelligence,
+    smart_holding_pot: homeSmartHoldingPot,
     goals: goals || [],
     budgets: categoryBudgets,
     income_targets: incomeTargets,
@@ -1276,6 +1293,27 @@ app.get('/rider', async (c) => {
   });
 
   const smartShiftDefaults = inferSmartShiftDefaults(shiftLogs || [], strictSaverConfig, primaryActiveBike);
+  const { entries: syncedBatchPot, config: syncedHoldingCfg } = await resolveEffectiveBatchPot(c, supabase, userId);
+  const riderEffectiveRules = resolveEffectiveAllocationRules(c, allocationRules);
+  const riderWeeklyKm = (shiftLogs || [])
+    .filter((l: any) => String(l.date || '') >= riderMonIso)
+    .reduce((s: number, l: any) => s + Number(l.kilometers ?? l.km_driven ?? 0), 0);
+  const riderRecBills = getRecurringBills(c);
+  const riderCurMonth = todayRiderIso.slice(0, 7);
+  const riderUpcoming7DayBills = riderRecBills
+    .filter((b: any) => !b.is_paid_this_month && b.last_paid_month !== riderCurMonth && (Number(b.due_day || 1) - currentRiderDay) >= -2 && (Number(b.due_day || 1) - currentRiderDay) <= 7)
+    .reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
+
+  const riderSmartHoldingPot = computeSmartHoldingPot({
+    batchPotEntries: syncedBatchPot,
+    config: syncedHoldingCfg,
+    accounts: accounts || [],
+    allocationRules: riderEffectiveRules,
+    platformOwedKes: platformRemittanceConfig.total_owed,
+    weeklyKmDriven: riderWeeklyKm,
+    upcoming7DayBillsKes: riderUpcoming7DayBills,
+    todayIso: todayRiderIso,
+  });
 
   const html = renderRiderDashboard({
     active_bike: primaryActiveBike,
@@ -1288,7 +1326,8 @@ app.get('/rider', async (c) => {
     smart_shift_defaults: smartShiftDefaults,
     weekly_rest_days: riderRestDays,
     platform_remittance: platformRemittanceConfig,
-    weekly_batch_pot: getWeeklyBatchPot(c),
+    weekly_batch_pot: syncedBatchPot,
+    smart_holding_pot: riderSmartHoldingPot,
     has_quick_pin: Boolean(getCookie(c, 'finatrack_quick_pin')),
     time_intelligence: timeIntelligence,
     maintenance_schedules: resolveEffectiveMaintenanceSchedules(c, maintenance),

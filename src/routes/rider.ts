@@ -10,6 +10,7 @@ import {
 } from '../utils/math';
 import { Decimal } from 'decimal.js';
 import { getPaystackConfig, isUserPaywalled, verifyPaystackPayment } from '../utils/paystack';
+import { HoldingPotConfig, normalizeHoldingPotConfig, computeSmartHoldingPot } from '../utils/smartEngine';
 
 export const riderRoutes = new Hono<{ Bindings: AppEnv }>();
 
@@ -553,6 +554,8 @@ export interface WeeklyBatchPotEntry {
   date: string;
   day_label: string;
   net_amount: number;
+  shifts_count?: number;
+  km_driven?: number;
   splits: BatchPotSplitBucket[];
 }
 
@@ -578,14 +581,115 @@ export function saveWeeklyBatchPotCookie(c: any, entries: WeeklyBatchPotEntry[])
   } catch (e) {}
 }
 
+export function getHoldingPotConfig(c: any): HoldingPotConfig {
+  try {
+    const raw = getCookie(c, 'finatrack_holding_pot_cfg') || '';
+    if (raw) {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      return normalizeHoldingPotConfig(parsed);
+    }
+  } catch (e) {}
+  return normalizeHoldingPotConfig(null);
+}
+
+export function saveHoldingPotConfigCookie(c: any, cfg: Partial<HoldingPotConfig>): HoldingPotConfig {
+  const normalized = normalizeHoldingPotConfig(cfg);
+  try {
+    setCookie(c, 'finatrack_holding_pot_cfg', encodeURIComponent(JSON.stringify(normalized)), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'Lax',
+    });
+  } catch (e) {}
+  return normalized;
+}
+
+const HOLDING_POT_DB_PREFIX = 'SYS_HOLDING_POT::';
+
+/**
+ * Persists Holding Pot entries + config to Supabase (via reserved budgets row)
+ * so Phone and PC stay 100% synchronized.
+ */
+export async function syncBatchPotStateToDb(
+  supabase: any,
+  userId: string | null,
+  entries: WeeklyBatchPotEntry[],
+  cfg: HoldingPotConfig
+): Promise<void> {
+  if (!supabase || !userId) return;
+  try {
+    const payload = JSON.stringify({ entries: (entries || []).slice(0, 14), config: cfg, updated_at: Date.now() });
+    const categoryKey = `${HOLDING_POT_DB_PREFIX}${payload}`;
+    const totalHeld = (entries || []).reduce((s, e) => s + Number(e.net_amount || 0), 0);
+
+    const { data: existingRows } = await supabase
+      .from('budgets')
+      .select('id, category')
+      .eq('user_id', userId);
+
+    const oldPotRows = (existingRows || []).filter((r: any) => String(r.category || '').startsWith(HOLDING_POT_DB_PREFIX));
+    for (const r of oldPotRows) {
+      await supabase.from('budgets').delete().eq('id', r.id);
+    }
+
+    await supabase.from('budgets').insert({
+      user_id: userId,
+      category: categoryKey,
+      limit_amount: Math.round(totalHeld * 100) / 100,
+    });
+  } catch (e) {}
+}
+
+/**
+ * Resolves Holding Pot state across Supabase DB and Cookie so Phone and PC stay synced.
+ */
+export async function resolveEffectiveBatchPot(
+  c: any,
+  supabase?: any,
+  userId?: string | null
+): Promise<{ entries: WeeklyBatchPotEntry[]; config: HoldingPotConfig }> {
+  let cookieEntries = getWeeklyBatchPot(c);
+  let cookieCfg = getHoldingPotConfig(c);
+
+  if (supabase && userId) {
+    try {
+      const { data: rows } = await supabase.from('budgets').select('category, limit_amount').eq('user_id', userId);
+      const potRow = (rows || []).find((r: any) => String(r.category || '').startsWith(HOLDING_POT_DB_PREFIX));
+      if (potRow) {
+        const jsonPart = String(potRow.category).slice(HOLDING_POT_DB_PREFIX.length);
+        const parsed = JSON.parse(jsonPart);
+        if (Array.isArray(parsed.entries)) {
+          // If cookie is empty or DB has entries, sync from DB to cookie
+          if (cookieEntries.length === 0 && parsed.entries.length > 0) {
+            cookieEntries = parsed.entries;
+            saveWeeklyBatchPotCookie(c, cookieEntries);
+          }
+        }
+        if (parsed.config) {
+          cookieCfg = normalizeHoldingPotConfig({ ...parsed.config, ...cookieCfg });
+          saveHoldingPotConfigCookie(c, cookieCfg);
+        }
+      } else if (cookieEntries.length > 0) {
+        await syncBatchPotStateToDb(supabase, userId, cookieEntries, cookieCfg);
+      }
+    } catch (e) {}
+  }
+
+  return { entries: cookieEntries, config: cookieCfg };
+}
+
 export async function queueNetAmountToBatchPot(
   c: any,
   supabase: any,
   userId: string | null,
   dateStr: string,
-  netAmount: number
+  netAmount: number,
+  options?: { accumulate?: boolean; kmDriven?: number }
 ): Promise<WeeklyBatchPotEntry | null> {
   if (netAmount <= 0) return null;
+  const accumulate = options?.accumulate !== false; // Default true: sum multiple shifts on the same day!
+  const kmDriven = Math.max(0, Number(options?.kmDriven || 0));
+
   let rules: any[] = [];
   try {
     let q = supabase.from('split_rules').select('*').order('percentage', { ascending: false });
@@ -603,7 +707,25 @@ export async function queueNetAmountToBatchPot(
     ];
   }
 
-  const allocated = allocateWaterfallSplit(netAmount, rules);
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dt = new Date(dateStr + 'T12:00:00Z');
+  const dayLabel = isNaN(dt.getTime()) ? 'Shift' : dayNames[dt.getUTCDay()];
+
+  const currentPot = getWeeklyBatchPot(c);
+  const existingIdx = currentPot.findIndex((e) => e.date === dateStr);
+  const prevEntry = existingIdx >= 0 ? currentPot[existingIdx] : null;
+
+  const combinedNetAmount = prevEntry && accumulate
+    ? Math.round((Number(prevEntry.net_amount || 0) + netAmount) * 100) / 100
+    : Math.round(netAmount * 100) / 100;
+  const combinedShiftsCount = prevEntry && accumulate
+    ? Math.max(1, Number(prevEntry.shifts_count || 1)) + 1
+    : 1;
+  const combinedKm = prevEntry && accumulate
+    ? Math.round((Number(prevEntry.km_driven || 0) + kmDriven) * 10) / 10
+    : Math.round(kmDriven * 10) / 10;
+
+  const allocated = allocateWaterfallSplit(combinedNetAmount, rules);
   const splits: BatchPotSplitBucket[] = allocated.map((s) => ({
     bucket_name: s.bucket_name,
     target_type: s.target_type,
@@ -612,17 +734,13 @@ export async function queueNetAmountToBatchPot(
     amount: parseFloat(s.allocated_amount) || 0,
   }));
 
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const dt = new Date(dateStr + 'T12:00:00Z');
-  const dayLabel = isNaN(dt.getTime()) ? 'Shift' : dayNames[dt.getUTCDay()];
-
-  const currentPot = getWeeklyBatchPot(c);
-  const existingIdx = currentPot.findIndex((e) => e.date === dateStr);
   const entry: WeeklyBatchPotEntry = {
-    id: existingIdx >= 0 ? currentPot[existingIdx].id : `batch-${Date.now()}`,
+    id: prevEntry ? prevEntry.id : `batch-${Date.now()}`,
     date: dateStr,
     day_label: dayLabel,
-    net_amount: Math.round(netAmount * 100) / 100,
+    net_amount: combinedNetAmount,
+    shifts_count: combinedShiftsCount,
+    km_driven: combinedKm,
     splits,
   };
 
@@ -633,6 +751,9 @@ export async function queueNetAmountToBatchPot(
   }
   currentPot.sort((a, b) => String(a.date).localeCompare(String(b.date)));
   saveWeeklyBatchPotCookie(c, currentPot);
+
+  const cfg = getHoldingPotConfig(c);
+  await syncBatchPotStateToDb(supabase, userId, currentPot, cfg);
   return entry;
 }
 
@@ -1057,9 +1178,13 @@ riderRoutes.post('/rider/logs', async (c) => {
   const queueToSundayBatch = body['queue_to_sunday_batch'] === '1' || body['queue_to_sunday_batch'] === 'true';
   let batchToastSuffix = '';
   if (queueToSundayBatch && safeShiftNetAfterUber > 0) {
-    const queuedEntry = await queueNetAmountToBatchPot(c, supabase, userId, logDate, safeShiftNetAfterUber);
+    const queuedEntry = await queueNetAmountToBatchPot(c, supabase, userId, logDate, safeShiftNetAfterUber, {
+      accumulate: true,
+      kmDriven: km,
+    });
     if (queuedEntry) {
-      batchToastSuffix = ` • 📦 Queued Ksh ${safeShiftNetAfterUber.toLocaleString()} to Sunday Batch Pot (0 M-Pesa fees today!)`;
+      const shiftTag = (queuedEntry.shifts_count || 1) > 1 ? ` (Shift #${queuedEntry.shifts_count} accumulated today: Ksh ${queuedEntry.net_amount.toLocaleString()})` : '';
+      batchToastSuffix = ` • 📦 Queued Ksh ${safeShiftNetAfterUber.toLocaleString()}${shiftTag} to Holding Pot (Synced to Cloud!)`;
     }
   }
 
@@ -1287,24 +1412,206 @@ riderRoutes.post('/rider/rest-day/toggle', async (c) => {
 });
 
 // ------------------------------------------------------------------------------
-// 📦 SUNDAY BATCH WATERFALL POT ROUTES (QUEUE / DISBURSE / CLEAR)
+// 📦 SMART HOLDING POT ROUTES (QUEUE / CONFIG / INTERACTIVE CHECKLIST / DISBURSE / CLEAR)
 // ------------------------------------------------------------------------------
 riderRoutes.post('/rider/batch-pot/queue', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
   const netAmount = Math.max(0, parseFloat(String(body['net_amount'] || '0')) || 0);
+  const kmDriven = Math.max(0, parseFloat(String(body['km_driven'] || '0')) || 0);
+  const accumulate = String(body['queue_mode'] || 'ACCUMULATE').toUpperCase() !== 'REPLACE';
   const dateStr = String(body['date'] || new Date().toISOString().slice(0, 10));
 
   if (netAmount <= 0) {
-    return c.redirect('/rider?toast=' + encodeURIComponent('Enter a positive net surplus to queue into your Sunday Batch Pot.') + '#sunday-batch-card', 303);
+    return c.redirect('/rider?toast=' + encodeURIComponent('Enter a positive net surplus to queue into your Weekly Holding Pot.') + '#sunday-batch-card', 303);
   }
 
-  const entry = await queueNetAmountToBatchPot(c, supabase, userId, dateStr, netAmount);
+  const entry = await queueNetAmountToBatchPot(c, supabase, userId, dateStr, netAmount, { accumulate, kmDriven });
   const currentPot = getWeeklyBatchPot(c);
   const totalQueued = currentPot.reduce((sum, e) => sum + Number(e.net_amount || 0), 0);
+  const shiftInfo = (entry?.shifts_count || 1) > 1
+    ? ` (Shift #${entry?.shifts_count} summed for ${entry?.day_label}: Ksh ${entry?.net_amount.toLocaleString()})`
+    : ` (${entry?.day_label || dateStr})`;
 
   return c.redirect(
-    `/rider?toast=${encodeURIComponent(`📦 Queued Ksh ${netAmount.toLocaleString()} (${entry?.day_label || dateStr}) to Weekly Holding Pot! Total accumulated for Sunday: Ksh ${totalQueued.toLocaleString()} (0 M-Pesa charges today)`)}#sunday-batch-card`,
+    `/rider?toast=${encodeURIComponent(`📦 Queued +Ksh ${netAmount.toLocaleString()}${shiftInfo}! Total Ring-Fenced in Holding Pot: Ksh ${totalQueued.toLocaleString()} (Synced to Cloud DB)`)}#sunday-batch-card`,
+    303
+  );
+});
+
+riderRoutes.post('/rider/batch-pot/config', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const existing = getHoldingPotConfig(c);
+
+  const stratRaw = String(body['parking_strategy'] || existing.parking_strategy).toUpperCase();
+  const parkingStrategy = (stratRaw === 'MSHWARI' || stratRaw === 'MPESA_WALLET' ? stratRaw : 'ZIIDI_MMF') as HoldingPotConfig['parking_strategy'];
+  const defaultApy = parkingStrategy === 'ZIIDI_MMF' ? 13.5 : parkingStrategy === 'MSHWARI' ? 7.5 : 0;
+  const apy = body['parking_apy_pct'] !== undefined && body['parking_apy_pct'] !== ''
+    ? Math.max(0, parseFloat(String(body['parking_apy_pct'])) || defaultApy)
+    : defaultApy;
+
+  const updated = saveHoldingPotConfigCookie(c, {
+    ...existing,
+    source_account_id: body['source_account_id'] !== undefined ? String(body['source_account_id']).trim() : existing.source_account_id,
+    parking_strategy: parkingStrategy,
+    parking_apy_pct: apy,
+    closeout_day: body['closeout_day'] ? String(body['closeout_day']).toUpperCase().trim() : existing.closeout_day,
+    threshold_kes: body['threshold_kes'] ? Math.max(500, parseInt(String(body['threshold_kes']), 10) || 5000) : existing.threshold_kes,
+    auto_skim_commission: body['auto_skim_commission'] === '1' || body['auto_skim_commission'] === 'on',
+    auto_skim_service: body['auto_skim_service'] === '1' || body['auto_skim_service'] === 'on',
+    service_rate_per_km: body['service_rate_per_km'] !== undefined ? Math.max(0, parseFloat(String(body['service_rate_per_km'])) || 2.5) : existing.service_rate_per_km,
+    auto_skim_bills: body['auto_skim_bills'] === '1' || body['auto_skim_bills'] === 'on',
+  });
+
+  const currentPot = getWeeklyBatchPot(c);
+  await syncBatchPotStateToDb(supabase, userId, currentPot, updated);
+
+  return c.redirect(
+    `/rider?toast=${encodeURIComponent(`⚙️ Smart Holding Pot Settings saved! Closeout: ${updated.closeout_day} or Ksh ${updated.threshold_kes.toLocaleString()}+ • Parking: ${updated.parking_strategy} (${updated.parking_apy_pct}% p.a.)`)}#sunday-batch-card`,
+    303
+  );
+});
+
+async function executeSingleChecklistTransfer(params: {
+  c: any;
+  supabase: any;
+  userId: string | null;
+  sourceAccountId: string | null;
+  targetId: string | null;
+  targetType: string;
+  title: string;
+  amount: number;
+  stayParked: boolean;
+  todayDate: string;
+}): Promise<void> {
+  const { c, supabase, userId, sourceAccountId, targetId, targetType, title, amount, stayParked, todayDate } = params;
+  if (amount <= 0) return;
+
+  try {
+    // 1. Subtract from Source Holding Account (unless it stays parked inside the exact same account)
+    if (sourceAccountId && (!stayParked || (targetId && targetId !== sourceAccountId))) {
+      const { data: srcAcc } = await supabase.from('accounts').select('*').eq('id', sourceAccountId).single();
+      if (srcAcc) {
+        const nextBal = Math.max(0, toDecimal(srcAcc.balance || 0).minus(amount).toNumber());
+        await supabase.from('accounts').update({ balance: nextBal }).eq('id', sourceAccountId);
+      }
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: sourceAccountId,
+        transaction_type: 'EXPENSE',
+        category: 'Internal Transfer: Batch Waterfall',
+        amount,
+        date: todayDate,
+        description: `Transfer to ${title} (Holding Pot Closeout)`,
+      });
+    }
+
+    // 2. Credit Destination Account, Goal, or settle Platform Commission
+    if (targetType === 'COMMISSION') {
+      const plat = getPlatformRemittanceConfig(c);
+      let rem = amount;
+      const uberCut = Math.min(plat.uber_owed, rem);
+      rem -= uberCut;
+      const boltCut = Math.min(plat.bolt_owed, rem);
+      rem -= boltCut;
+      const otherCut = Math.min(plat.other_owed, rem);
+      const nextUber = Math.max(0, Math.round((plat.uber_owed - uberCut) * 100) / 100);
+      const nextBolt = Math.max(0, Math.round((plat.bolt_owed - boltCut) * 100) / 100);
+      const nextOther = Math.max(0, Math.round((plat.other_owed - otherCut) * 100) / 100);
+      savePlatformRemittanceConfigCookie(c, {
+        ...plat,
+        uber_owed: nextUber,
+        bolt_owed: nextBolt,
+        other_owed: nextOther,
+        total_owed: nextUber + nextBolt + nextOther,
+        last_remitted_date: todayDate,
+        last_remitted_amount: amount,
+        last_remitted_platform: 'Batch Closeout Auto-Skim',
+      });
+    } else if (targetId) {
+      if (targetType === 'GOAL') {
+        const { data: g } = await supabase.from('goals').select('*').eq('id', targetId).single();
+        if (g) {
+          const newCur = toDecimal(g.current_amount || 0).plus(amount).toNumber();
+          await supabase.from('goals').update({ current_amount: newCur }).eq('id', targetId);
+        }
+      } else if (!stayParked || targetId !== sourceAccountId) {
+        const { data: dstAcc } = await supabase.from('accounts').select('*').eq('id', targetId).single();
+        if (dstAcc) {
+          const newBal = toDecimal(dstAcc.balance || 0).plus(amount).toNumber();
+          await supabase.from('accounts').update({ balance: newBal }).eq('id', targetId);
+        }
+      }
+
+      await supabase.from('transactions').insert({
+        ...(userId ? { user_id: userId } : {}),
+        account_id: targetId,
+        transaction_type: 'INCOME',
+        category: 'Internal Transfer: Batch Waterfall',
+        amount,
+        date: todayDate,
+        description: `Transfer from Holding Pot: ${title}`,
+      });
+    }
+  } catch (e) {}
+}
+
+// Interactive Closeout Checklist: Mark 1 Single Bucket Sent & Settle via True Internal Transfer
+riderRoutes.post('/rider/batch-pot/disburse-item', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const itemKey = String(body['item_key'] || '').trim();
+  const title = String(body['title'] || 'Holding Pot Bucket').trim();
+  const targetType = String(body['target_type'] || 'ACCOUNT').toUpperCase().trim();
+  const targetId = body['target_id'] ? String(body['target_id']).trim() : null;
+  const sourceAccountId = body['source_account_id'] ? String(body['source_account_id']).trim() : null;
+  const amount = Math.max(0, parseFloat(String(body['amount'] || '0')) || 0);
+  const stayParked = body['stay_parked'] === '1' || body['stay_parked'] === 'true';
+  const totalChecklistCount = Math.max(1, parseInt(String(body['total_items'] || '1'), 10) || 1);
+  const todayDate = new Date().toISOString().slice(0, 10);
+
+  if (!itemKey || amount <= 0) {
+    return c.redirect('/rider?toast=' + encodeURIComponent('Invalid checklist item.') + '#sunday-batch-card', 303);
+  }
+
+  const cfg = getHoldingPotConfig(c);
+  if (cfg.settled_bucket_keys.includes(itemKey)) {
+    return c.redirect('/rider?toast=' + encodeURIComponent(`"${title}" is already marked as sent.`) + '#sunday-batch-card', 303);
+  }
+
+  await executeSingleChecklistTransfer({
+    c,
+    supabase,
+    userId,
+    sourceAccountId: sourceAccountId || cfg.source_account_id || null,
+    targetId,
+    targetType,
+    title,
+    amount,
+    stayParked,
+    todayDate,
+  });
+
+  const nextSettled = [...cfg.settled_bucket_keys, itemKey];
+  const currentPot = getWeeklyBatchPot(c);
+
+  if (nextSettled.length >= totalChecklistCount) {
+    // All checklist items have been sent! Reset Holding Pot for the new week
+    saveWeeklyBatchPotCookie(c, []);
+    const resetCfg = saveHoldingPotConfigCookie(c, { ...cfg, settled_bucket_keys: [] });
+    await syncBatchPotStateToDb(supabase, userId, [], resetCfg);
+    return c.redirect(
+      `/rider?toast=${encodeURIComponent(`🎉 Final Checklist Item "${title}" (Ksh ${amount.toLocaleString()}) Sent! All buckets settled via Internal Transfers & Holding Pot reset for the new cycle.`)}#sunday-batch-card`,
+      303
+    );
+  }
+
+  const updatedCfg = saveHoldingPotConfigCookie(c, { ...cfg, settled_bucket_keys: nextSettled });
+  await syncBatchPotStateToDb(supabase, userId, currentPot, updatedCfg);
+
+  return c.redirect(
+    `/rider?toast=${encodeURIComponent(`✅ Marked "${title}" (Ksh ${amount.toLocaleString()}) Sent! (${nextSettled.length}/${totalChecklistCount} done — ${totalChecklistCount - nextSettled.length} remaining in Holding Pot)`)}#sunday-batch-card`,
     303
   );
 });
@@ -1312,81 +1619,69 @@ riderRoutes.post('/rider/batch-pot/queue', async (c) => {
 riderRoutes.post('/rider/batch-pot/disburse', async (c) => {
   const { supabase, userId } = await getRequestContext(c);
   const body = await c.req.parseBody();
-  const sourceAccountId = body['source_account_id'] ? String(body['source_account_id']).trim() : null;
-  const currentPot = getWeeklyBatchPot(c);
+  const explicitSourceId = body['source_account_id'] ? String(body['source_account_id']).trim() : '';
+  const { entries: currentPot, config: potCfg } = await resolveEffectiveBatchPot(c, supabase, userId);
 
   if (currentPot.length === 0) {
     return c.redirect('/rider?toast=' + encodeURIComponent('Your Weekly Holding Pot is currently empty.') + '#sunday-batch-card', 303);
   }
 
-  // Consolidate splits by bucket_name
-  const bucketTotals = new Map<string, { bucket_name: string; target_type: string; target_id?: string | null; amount: number }>();
-  let totalBatchKes = 0;
-
-  for (const dayEntry of currentPot) {
-    totalBatchKes += Number(dayEntry.net_amount || 0);
-    for (const sp of (dayEntry.splits || [])) {
-      const key = sp.bucket_name;
-      const prev = bucketTotals.get(key);
-      if (prev) {
-        prev.amount = Math.round((prev.amount + Number(sp.amount || 0)) * 100) / 100;
-      } else {
-        bucketTotals.set(key, {
-          bucket_name: sp.bucket_name,
-          target_type: sp.target_type,
-          target_id: sp.target_id,
-          amount: Math.round(Number(sp.amount || 0) * 100) / 100,
-        });
-      }
-    }
+  let accQuery = supabase.from('accounts').select('*');
+  let rulesQuery = supabase.from('split_rules').select('*').order('percentage', { ascending: false });
+  if (userId) {
+    accQuery = accQuery.eq('user_id', userId);
+    rulesQuery = rulesQuery.eq('user_id', userId);
   }
-
+  const [{ data: accs }, { data: rules }] = await Promise.all([accQuery, rulesQuery]);
+  const platRemit = getPlatformRemittanceConfig(c);
   const todayDate = new Date().toISOString().slice(0, 10);
-  const consolidatedList = Array.from(bucketTotals.values()).filter((b) => b.amount > 0);
 
-  // Execute only 1 bulk transfer per bucket instead of daily micro-transfers
-  for (const bucket of consolidatedList) {
-    try {
-      if (bucket.target_id) {
-        if (bucket.target_type === 'GOAL') {
-          const { data: g } = await supabase.from('goals').select('*').eq('id', bucket.target_id).single();
-          if (g) {
-            const newCur = toDecimal(g.current_amount || 0).plus(bucket.amount).toNumber();
-            await supabase.from('goals').update({ current_amount: newCur }).eq('id', bucket.target_id);
-          }
-        } else {
-          const { data: acc } = await supabase.from('accounts').select('*').eq('id', bucket.target_id).single();
-          if (acc) {
-            const newBal = toDecimal(acc.balance || 0).plus(bucket.amount).toNumber();
-            await supabase.from('accounts').update({ balance: newBal }).eq('id', bucket.target_id);
-          }
-        }
-      }
+  const report = computeSmartHoldingPot({
+    batchPotEntries: currentPot,
+    config: explicitSourceId ? { ...potCfg, source_account_id: explicitSourceId } : potCfg,
+    accounts: accs || [],
+    allocationRules: rules || [],
+    platformOwedKes: platRemit.total_owed,
+    todayIso: todayDate,
+  });
 
-      await supabase.from('transactions').insert({
-        ...(userId ? { user_id: userId } : {}),
-        account_id: bucket.target_id || sourceAccountId || null,
-        transaction_type: 'INCOME',
-        category: 'Sunday Batch Waterfall Split',
-        amount: bucket.amount,
-        date: todayDate,
-        description: `📦 Sunday Batch Waterfall (${currentPot.length} days consolidated): ${bucket.bucket_name}`,
-      });
-    } catch (e) {}
+  const pendingItems = report.checklistItems.filter(i => !i.isSettled && i.amount > 0);
+  let totalSettledNow = 0;
+
+  for (const item of pendingItems) {
+    totalSettledNow = Math.round((totalSettledNow + item.amount) * 100) / 100;
+    await executeSingleChecklistTransfer({
+      c,
+      supabase,
+      userId,
+      sourceAccountId: report.sourceAccountId,
+      targetId: item.targetId,
+      targetType: item.targetType,
+      title: item.title,
+      amount: item.amount,
+      stayParked: item.stayParkedInMmf,
+      todayDate,
+    });
   }
 
-  const transfersSaved = Math.max(0, (currentPot.length * consolidatedList.length) - consolidatedList.length);
+  const transfersSaved = Math.max(0, (currentPot.length * Math.max(1, pendingItems.length)) - pendingItems.length);
   saveWeeklyBatchPotCookie(c, []);
+  const resetCfg = saveHoldingPotConfigCookie(c, { ...potCfg, settled_bucket_keys: [] });
+  await syncBatchPotStateToDb(supabase, userId, [], resetCfg);
 
   return c.redirect(
-    `/rider?toast=${encodeURIComponent(`🚀 Sunday Batch Disbursed! Ksh ${totalBatchKes.toLocaleString()} sent in ${consolidatedList.length} bulk transfers (Saved ${transfersSaved} M-Pesa transfers & tariff fees!). Weekly pot reset for Monday.`)}#sunday-batch-card`,
+    `/rider?toast=${encodeURIComponent(`🚀 Holding Pot Closeout Complete! Ksh ${totalSettledNow.toLocaleString()} settled across ${pendingItems.length} priority & profit buckets via clean Internal Transfers (Saved ${transfersSaved} M-Pesa fee transfers!).`)}#sunday-batch-card`,
     303
   );
 });
 
 riderRoutes.post('/rider/batch-pot/clear', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
   saveWeeklyBatchPotCookie(c, []);
-  return c.redirect('/rider?toast=' + encodeURIComponent('Weekly Batch Holding Pot cleared.') + '#sunday-batch-card', 303);
+  const cfg = getHoldingPotConfig(c);
+  const resetCfg = saveHoldingPotConfigCookie(c, { ...cfg, settled_bucket_keys: [] });
+  await syncBatchPotStateToDb(supabase, userId, [], resetCfg);
+  return c.redirect('/rider?toast=' + encodeURIComponent('Weekly Batch Holding Pot cleared across device & cloud.') + '#sunday-batch-card', 303);
 });
 
 riderRoutes.post('/rider/platform-remittance/remit', async (c) => {

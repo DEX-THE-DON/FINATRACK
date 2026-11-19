@@ -1,6 +1,6 @@
 import { parseMultipleMpesaMessages } from './mpesa';
 import { parseMultipleBankMessages } from './bankSms';
-import { calculateBankMmfYieldBreakdown, inferKenyanInstitutionRate, isTransferTransaction } from './math';
+import { allocateWaterfallSplit, calculateBankMmfYieldBreakdown, inferKenyanInstitutionRate, isTransferTransaction } from './math';
 
 export interface ParsedSmartEntry {
   transaction_type: 'INCOME' | 'EXPENSE';
@@ -575,3 +575,383 @@ export function computeSystemIntelligence(params: {
     insights: insights.slice(0, 4),
   };
 }
+
+// ------------------------------------------------------------------------------
+// 📦 SMART HOLDING POT ENGINE (7-POINT KENYAN WATERFALL & RING-FENCE UPGRADE)
+// ------------------------------------------------------------------------------
+export interface HoldingPotConfig {
+  source_account_id: string;
+  parking_strategy: 'ZIIDI_MMF' | 'MSHWARI' | 'MPESA_WALLET';
+  parking_apy_pct: number;
+  closeout_day: string; // 'SUNDAY' | 'TUESDAY' | etc.
+  threshold_kes: number; // default 5000
+  auto_skim_commission: boolean;
+  auto_skim_service: boolean;
+  service_rate_per_km: number; // default 2.5 KES/km
+  auto_skim_bills: boolean;
+  settled_bucket_keys: string[];
+}
+
+export interface CloseoutChecklistItem {
+  key: string;
+  stepNumber: 1 | 2 | 3 | 4;
+  stepBadge: string;
+  title: string;
+  subtitle: string;
+  destinationLabel: string;
+  targetType: 'COMMISSION' | 'SERVICE_RESERVE' | 'BILLS_RESERVE' | 'ACCOUNT' | 'GOAL' | 'MMF' | 'SAVINGS' | 'WALLET';
+  targetId: string | null;
+  percentage?: number;
+  amount: number;
+  isSettled: boolean;
+  stayParkedInMmf: boolean;
+}
+
+export interface SmartHoldingPotReport {
+  config: HoldingPotConfig;
+  // 1. Ring-Fenced Cash
+  sourceAccountId: string | null;
+  sourceAccountName: string;
+  walletTotalBalanceKes: number;
+  grossPotTotalKes: number;
+  settledPotKes: number;
+  ringFencedPotKes: number; // Active unsettled holding pot locked in wallet
+  trueFreeSpendableKes: number;
+  isRingFenceBreached: boolean;
+  ringFenceShortfallKes: number;
+  // 2. Zero-Fee Interest Parking (Ziidi / M-Shwari Hack)
+  parkingLabel: string;
+  parkingApyPct: number;
+  dailyParkedInterestNetKes: number;
+  weeklyParkedInterestNetKes: number;
+  annualParkedInterestNetKes: number;
+  stayParkedInMmfKes: number;
+  withdrawOnCloseoutKes: number;
+  // 3. Priority-First Auto-Skims Before % Splits
+  weeklyKmDriven: number;
+  skimCommissionKes: number;
+  skimServiceReserveKes: number;
+  skimBillsReserveKes: number;
+  totalPrioritySkimsKes: number;
+  cleanProfitForSplitsKes: number;
+  // 4. Interactive Closeout Checklist
+  checklistItems: CloseoutChecklistItem[];
+  pendingItemsCount: number;
+  settledItemsCount: number;
+  // 5. Flexible Trigger (Closeout Day OR Threshold Trigger)
+  isCloseoutDayToday: boolean;
+  isThresholdReached: boolean;
+  shouldPromptCloseout: boolean;
+  triggerHeadline: string;
+  triggerReason: 'THRESHOLD_AND_DAY' | 'THRESHOLD' | 'CLOSEOUT_DAY' | 'ACCUMULATING';
+  // 6. Multi-Shift Accumulation Stats
+  daysQueuedCount: number;
+  totalShiftsAccumulated: number;
+}
+
+export const DEFAULT_HOLDING_POT_CONFIG: HoldingPotConfig = {
+  source_account_id: '',
+  parking_strategy: 'ZIIDI_MMF',
+  parking_apy_pct: 13.5,
+  closeout_day: 'SUNDAY',
+  threshold_kes: 5000,
+  auto_skim_commission: true,
+  auto_skim_service: true,
+  service_rate_per_km: 2.5,
+  auto_skim_bills: true,
+  settled_bucket_keys: [],
+};
+
+export function normalizeHoldingPotConfig(raw?: Partial<HoldingPotConfig> | null): HoldingPotConfig {
+  const strat = raw?.parking_strategy === 'MSHWARI' || raw?.parking_strategy === 'MPESA_WALLET' ? raw.parking_strategy : 'ZIIDI_MMF';
+  const defaultApy = strat === 'ZIIDI_MMF' ? 13.5 : strat === 'MSHWARI' ? 7.5 : 0;
+  return {
+    source_account_id: typeof raw?.source_account_id === 'string' ? raw.source_account_id : '',
+    parking_strategy: strat,
+    parking_apy_pct: typeof raw?.parking_apy_pct === 'number' && raw.parking_apy_pct >= 0 ? raw.parking_apy_pct : defaultApy,
+    closeout_day: typeof raw?.closeout_day === 'string' && raw.closeout_day.trim() ? raw.closeout_day.trim().toUpperCase() : 'SUNDAY',
+    threshold_kes: typeof raw?.threshold_kes === 'number' && raw.threshold_kes >= 500 ? Math.round(raw.threshold_kes) : 5000,
+    auto_skim_commission: raw?.auto_skim_commission !== false,
+    auto_skim_service: raw?.auto_skim_service !== false,
+    service_rate_per_km: typeof raw?.service_rate_per_km === 'number' && raw.service_rate_per_km >= 0 ? raw.service_rate_per_km : 2.5,
+    auto_skim_bills: raw?.auto_skim_bills !== false,
+    settled_bucket_keys: Array.isArray(raw?.settled_bucket_keys) ? raw!.settled_bucket_keys.map(String) : [],
+  };
+}
+
+export function computeSmartHoldingPot(params: {
+  batchPotEntries: any[];
+  config?: Partial<HoldingPotConfig> | null;
+  accounts?: any[];
+  allocationRules?: any[];
+  platformOwedKes?: number;
+  weeklyKmDriven?: number;
+  upcoming7DayBillsKes?: number;
+  todayIso?: string;
+}): SmartHoldingPotReport {
+  const cfg = normalizeHoldingPotConfig(params.config);
+  const entries = Array.isArray(params.batchPotEntries) ? params.batchPotEntries : [];
+  const accounts = Array.isArray(params.accounts) ? params.accounts : [];
+  const todayIso = params.todayIso || new Date().toISOString().slice(0, 10);
+
+  // 1. Identify Source Holding Account (explicit or auto-detect M-Pesa / primary wallet)
+  let sourceAcc = cfg.source_account_id
+    ? accounts.find(a => String(a.id) === String(cfg.source_account_id))
+    : null;
+  if (!sourceAcc && accounts.length > 0) {
+    sourceAcc =
+      accounts.find(a => /m-?pesa/i.test(String(a.name || '')) && !/lock|mmf|ziidi/i.test(String(a.name || ''))) ||
+      accounts.find(a => String(a.account_type || '').toUpperCase() === 'MOBILE_MONEY') ||
+      accounts[0];
+  }
+  const sourceAccountId = sourceAcc ? String(sourceAcc.id) : (cfg.source_account_id || null);
+  const sourceAccountName = sourceAcc ? String(sourceAcc.name) : 'M-Pesa Wallet';
+  const walletTotalBalanceKes = sourceAcc ? Math.max(0, Number(sourceAcc.balance || 0)) : 0;
+
+  // Gross pot total & multi-shift accumulation stats
+  const grossPotTotalKes = Math.round(entries.reduce((s, e) => s + Math.max(0, Number(e.net_amount || 0)), 0) * 100) / 100;
+  const daysQueuedCount = entries.length;
+  const totalShiftsAccumulated = entries.reduce((s, e) => s + Math.max(1, Number(e.shifts_count || 1)), 0);
+  const potKm = entries.reduce((s, e) => s + Math.max(0, Number(e.km_driven || 0)), 0);
+  const weeklyKmDriven = Math.max(Number(params.weeklyKmDriven || 0), potKm);
+
+  // 2. Priority-First Auto-Skim Before Percentage Splits
+  let remainingToAllocate = grossPotTotalKes;
+
+  const rawCommissionOwed = Math.max(0, Number(params.platformOwedKes || 0));
+  const skimCommissionKes = cfg.auto_skim_commission && rawCommissionOwed > 0
+    ? Math.round(Math.min(remainingToAllocate, rawCommissionOwed) * 100) / 100
+    : 0;
+  remainingToAllocate = Math.max(0, Math.round((remainingToAllocate - skimCommissionKes) * 100) / 100);
+
+  const rawServiceReserve = Math.round(weeklyKmDriven * cfg.service_rate_per_km);
+  const skimServiceReserveKes = cfg.auto_skim_service && rawServiceReserve > 0
+    ? Math.round(Math.min(remainingToAllocate, rawServiceReserve) * 100) / 100
+    : 0;
+  remainingToAllocate = Math.max(0, Math.round((remainingToAllocate - skimServiceReserveKes) * 100) / 100);
+
+  const rawBillsReserve = Math.max(0, Math.round(Number(params.upcoming7DayBillsKes || 0)));
+  const skimBillsReserveKes = cfg.auto_skim_bills && rawBillsReserve > 0
+    ? Math.round(Math.min(remainingToAllocate, rawBillsReserve) * 100) / 100
+    : 0;
+  remainingToAllocate = Math.max(0, Math.round((remainingToAllocate - skimBillsReserveKes) * 100) / 100);
+
+  const totalPrioritySkimsKes = Math.round((skimCommissionKes + skimServiceReserveKes + skimBillsReserveKes) * 100) / 100;
+  const cleanProfitForSplitsKes = remainingToAllocate;
+
+  // 3. Build Percentage Splits on Clean Profit
+  let rules = Array.isArray(params.allocationRules) && params.allocationRules.length > 0
+    ? params.allocationRules
+    : [];
+  if (rules.length === 0) {
+    rules = [
+      { id: 'def-mmf', bucket_name: 'Ziidi MMF (Passive Yield)', target_type: 'MMF', percentage: 30 },
+      { id: 'def-lock', bucket_name: 'Lock Savings Vault', target_type: 'SAVINGS', percentage: 30 },
+      { id: 'def-goals', bucket_name: 'Goals / Sacco Checkoff', target_type: 'GOAL', percentage: 20 },
+      { id: 'def-bills', bucket_name: 'Off-Day & Living Reward', target_type: 'WALLET', percentage: 20 },
+    ];
+  }
+
+  // try to auto-match destination accounts if rule has no target_id
+  const resolveTargetAccount = (bucketName: string, targetType: string, explicitId?: string | null) => {
+    if (explicitId) {
+      const found = accounts.find(a => String(a.id) === String(explicitId));
+      return { id: String(explicitId), label: found ? `${found.name}${found.account_number ? ` (${found.account_number})` : ''}` : bucketName };
+    }
+    const lower = bucketName.toLowerCase();
+    const match =
+      accounts.find(a => lower.includes(String(a.name || '').toLowerCase())) ||
+      (targetType === 'MMF' || /ziidi|britam|mmf/i.test(lower)
+        ? accounts.find(a => /ziidi|britam|mmf|cic|sanlam/i.test(String(a.name || '')) || String(a.account_type || '').toUpperCase() === 'MMF')
+        : null) ||
+      (targetType === 'SAVINGS' || /lock|sacco|save/i.test(lower)
+        ? accounts.find(a => /lock|sacco|saving|m-?shwari/i.test(String(a.name || '')) || String(a.account_type || '').toUpperCase() === 'SAVINGS')
+        : null);
+    return match
+      ? { id: String(match.id), label: `${match.name}${match.account_number ? ` (${match.account_number})` : ''}` }
+      : { id: null, label: bucketName };
+  };
+
+  const settledSet = new Set(cfg.settled_bucket_keys);
+  const checklistItems: CloseoutChecklistItem[] = [];
+
+  if (skimCommissionKes > 0) {
+    const key = 'SKIM_COMMISSION';
+    checklistItems.push({
+      key,
+      stepNumber: 1,
+      stepBadge: 'Step 1 • Priority Skim',
+      title: '🚗 Uber / Bolt Platform Commission',
+      subtitle: 'Prevents driver app lockout before splitting profit',
+      destinationLabel: 'Uber / Bolt App Remittance',
+      targetType: 'COMMISSION',
+      targetId: null,
+      amount: skimCommissionKes,
+      isSettled: settledSet.has(key),
+      stayParkedInMmf: false,
+    });
+  }
+
+  if (skimServiceReserveKes > 0) {
+    const key = 'SKIM_SERVICE';
+    const maintAcc = resolveTargetAccount('Lock Savings', 'SAVINGS', null);
+    checklistItems.push({
+      key,
+      stepNumber: 2,
+      stepBadge: 'Step 2 • Priority Skim',
+      title: `🔧 Bike Service & Tyre Reserve (${weeklyKmDriven} km × Ksh ${cfg.service_rate_per_km}/km)`,
+      subtitle: 'Auto-ring-fenced wear & tear fund from km driven this week',
+      destinationLabel: maintAcc.label,
+      targetType: 'SERVICE_RESERVE',
+      targetId: maintAcc.id,
+      amount: skimServiceReserveKes,
+      isSettled: settledSet.has(key),
+      stayParkedInMmf: false,
+    });
+  }
+
+  if (skimBillsReserveKes > 0) {
+    const key = 'SKIM_BILLS';
+    const billsAcc = resolveTargetAccount('Bills Reserve', 'SAVINGS', null);
+    checklistItems.push({
+      key,
+      stepNumber: 3,
+      stepBadge: 'Step 3 • Priority Skim',
+      title: '⚡ 7-Day Upcoming Bills Reserve',
+      subtitle: 'Covers recurring bills falling due in the next 7 days',
+      destinationLabel: billsAcc.label,
+      targetType: 'BILLS_RESERVE',
+      targetId: billsAcc.id,
+      amount: skimBillsReserveKes,
+      isSettled: settledSet.has(key),
+      stayParkedInMmf: false,
+    });
+  }
+
+  const allocatedSplits = cleanProfitForSplitsKes > 0 ? allocateWaterfallSplit(cleanProfitForSplitsKes, rules) : [];
+  let stayParkedInMmfKes = 0;
+
+  for (const sp of allocatedSplits) {
+    const amt = Math.round((parseFloat(sp.allocated_amount) || 0) * 100) / 100;
+    if (amt <= 0) continue;
+    const bName = String(sp.bucket_name || 'Savings Bucket');
+    const tType = String(sp.target_type || 'ACCOUNT').toUpperCase() as CloseoutChecklistItem['targetType'];
+    const key = `BUCKET_${bName}`;
+    const resolved = resolveTargetAccount(bName, tType, sp.target_id);
+    const isMmfBucket =
+      tType === 'MMF' ||
+      /ziidi|mmf|britam|sanlam|cic/i.test(bName) ||
+      /ziidi|mmf|britam|sanlam|cic/i.test(resolved.label);
+    const staysParked = cfg.parking_strategy === 'ZIIDI_MMF' && isMmfBucket;
+    if (staysParked) {
+      stayParkedInMmfKes = Math.round((stayParkedInMmfKes + amt) * 100) / 100;
+    }
+
+    checklistItems.push({
+      key,
+      stepNumber: 4,
+      stepBadge: `Step 4 • ${Number(sp.percentage || 0)}% Clean Profit`,
+      title: bName,
+      subtitle: staysParked
+        ? '✨ Already parked in Ziidi MMF — leave in place to keep compounding!'
+        : `Transfer from ${sourceAccountName} → ${resolved.label}`,
+      destinationLabel: resolved.label,
+      targetType: tType,
+      targetId: resolved.id,
+      percentage: Number(sp.percentage || 0),
+      amount: amt,
+      isSettled: settledSet.has(key),
+      stayParkedInMmf: staysParked,
+    });
+  }
+
+  const settledPotKes = Math.round(
+    checklistItems.filter(i => i.isSettled).reduce((s, i) => s + i.amount, 0) * 100
+  ) / 100;
+  const ringFencedPotKes = Math.max(0, Math.round((grossPotTotalKes - settledPotKes) * 100) / 100);
+  const trueFreeSpendableKes = Math.max(0, Math.round((walletTotalBalanceKes - ringFencedPotKes) * 100) / 100);
+  const isRingFenceBreached = walletTotalBalanceKes > 0 && walletTotalBalanceKes < ringFencedPotKes;
+  const ringFenceShortfallKes = isRingFenceBreached
+    ? Math.round((ringFencedPotKes - walletTotalBalanceKes) * 100) / 100
+    : 0;
+
+  // 4. Zero-Fee Interest Parking Calculation (Ziidi 13.5% / M-Shwari 7.5% vs 0% M-Pesa)
+  const parkingLabel =
+    cfg.parking_strategy === 'ZIIDI_MMF'
+      ? 'Safaricom Ziidi MMF (Zero-Fee Nightly Parking)'
+      : cfg.parking_strategy === 'MSHWARI'
+        ? 'M-Shwari Lock/Save (Zero-Fee Nightly Parking)'
+        : 'Standard M-Pesa Wallet (0% Idle)';
+  const effectiveParkBasis = Math.max(ringFencedPotKes, grossPotTotalKes, 6000);
+  const yieldBreakdown = calculateBankMmfYieldBreakdown(effectiveParkBasis, cfg.parking_apy_pct, true, 30);
+  const dailyParkedInterestNetKes = yieldBreakdown.dailyNet;
+  const weeklyParkedInterestNetKes = yieldBreakdown.weeklyNetCompounded;
+  const annualParkedInterestNetKes = yieldBreakdown.annualNetCompounded;
+  const withdrawOnCloseoutKes = Math.max(0, Math.round((grossPotTotalKes - stayParkedInMmfKes) * 100) / 100);
+
+  // 5. Flexible Closeout Trigger (Closeout Day OR Threshold Trigger)
+  const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+  const dt = new Date(`${todayIso}T12:00:00Z`);
+  const dow = isNaN(dt.getTime()) ? 6 : (dt.getUTCDay() + 6) % 7;
+  const todayWeekday = weekdays[dow];
+
+  const isCloseoutDayToday = todayWeekday === cfg.closeout_day;
+  const isThresholdReached = ringFencedPotKes >= cfg.threshold_kes && cfg.threshold_kes > 0;
+  const shouldPromptCloseout = ringFencedPotKes > 0 && (isCloseoutDayToday || isThresholdReached);
+
+  let triggerReason: SmartHoldingPotReport['triggerReason'] = 'ACCUMULATING';
+  let triggerHeadline = `📦 Accumulating (${Math.min(100, Math.round((ringFencedPotKes / Math.max(1, cfg.threshold_kes)) * 100))}% of Ksh ${cfg.threshold_kes.toLocaleString()} threshold)`;
+
+  if (ringFencedPotKes > 0) {
+    if (isThresholdReached && isCloseoutDayToday) {
+      triggerReason = 'THRESHOLD_AND_DAY';
+      triggerHeadline = `🚀 Closeout Day (${cfg.closeout_day}) + Ksh ${cfg.threshold_kes.toLocaleString()} Threshold Hit! Execute checklist below.`;
+    } else if (isThresholdReached) {
+      triggerReason = 'THRESHOLD';
+      triggerHeadline = `🎯 Threshold Trigger Hit! Holding Pot reached Ksh ${ringFencedPotKes.toLocaleString()} (Target: Ksh ${cfg.threshold_kes.toLocaleString()}) — Ready for early closeout!`;
+    } else if (isCloseoutDayToday) {
+      triggerReason = 'CLOSEOUT_DAY';
+      triggerHeadline = `🗓️ Today is Closeout Day (${cfg.closeout_day})! Disburse your Ksh ${ringFencedPotKes.toLocaleString()} pot step-by-step below.`;
+    }
+  }
+
+  const pendingItemsCount = checklistItems.filter(i => !i.isSettled).length;
+  const settledItemsCount = checklistItems.filter(i => i.isSettled).length;
+
+  return {
+    config: cfg,
+    sourceAccountId,
+    sourceAccountName,
+    walletTotalBalanceKes,
+    grossPotTotalKes,
+    settledPotKes,
+    ringFencedPotKes,
+    trueFreeSpendableKes,
+    isRingFenceBreached,
+    ringFenceShortfallKes,
+    parkingLabel,
+    parkingApyPct: cfg.parking_apy_pct,
+    dailyParkedInterestNetKes,
+    weeklyParkedInterestNetKes,
+    annualParkedInterestNetKes,
+    stayParkedInMmfKes,
+    withdrawOnCloseoutKes,
+    weeklyKmDriven,
+    skimCommissionKes,
+    skimServiceReserveKes,
+    skimBillsReserveKes,
+    totalPrioritySkimsKes,
+    cleanProfitForSplitsKes,
+    checklistItems,
+    pendingItemsCount,
+    settledItemsCount,
+    isCloseoutDayToday,
+    isThresholdReached,
+    shouldPromptCloseout,
+    triggerHeadline,
+    triggerReason,
+    daysQueuedCount,
+    totalShiftsAccumulated,
+  };
+}
+

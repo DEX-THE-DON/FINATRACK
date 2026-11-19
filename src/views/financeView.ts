@@ -7,6 +7,7 @@ export function renderFinanceDashboard(data: any): string {
     rider_logs = [],
     notifications = [],
     smart_intelligence = null,
+    smart_holding_pot = null,
     goals = [],
     budgets = [],
     income_targets = {
@@ -5608,6 +5609,16 @@ export function renderFinanceDashboard(data: any): string {
                                             ${acc.interest_rate_p_a > 0 ? `<span class="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded shrink-0">📈 ${acc.interest_rate_p_a}%</span>` : ''}
                                         </div>
                                         ${acc.account_number ? `<p class="text-[11px] font-mono text-gray-400 truncate"># ${acc.account_number}</p>` : ''}
+                                        ${smart_holding_pot && smart_holding_pot.ringFencedPotKes > 0 && String(smart_holding_pot.sourceAccountId) === String(acc.id) ? `
+                                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                                            <span class="px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/70 font-black">
+                                                🔒 Locked in Holding Pot: ${formatKes(smart_holding_pot.ringFencedPotKes)}
+                                            </span>
+                                            <span class="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70 font-black">
+                                                🟢 True Free Cash to Spend: ${formatKes(Math.max(0, Number(acc.balance || 0) - smart_holding_pot.ringFencedPotKes))}
+                                            </span>
+                                        </div>
+                                        ` : ''}
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3 shrink-0">

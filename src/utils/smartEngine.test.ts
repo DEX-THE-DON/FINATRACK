@@ -1,4 +1,4 @@
-import { parseSmartCommand, inferSmartShiftDefaults, computeSystemIntelligence } from './smartEngine';
+import { parseSmartCommand, inferSmartShiftDefaults, computeSystemIntelligence, computeSmartHoldingPot } from './smartEngine';
 
 console.log('🧪 RUNNING SMART INTELLIGENCE ENGINE TESTS...');
 
@@ -65,5 +65,46 @@ console.assert(report.missedMonthlyInterestKes > 0, `Expected missed interest > 
 console.assert(report.projectedMonthEndNet === 30000, `Expected projected net 30000, got ${report.projectedMonthEndNet}`);
 console.assert(report.insights.length >= 3, `Expected >= 3 insights, got ${report.insights.length}`);
 console.log(`✅ 6. System Autopilot Report: ProjectedNet=+Ksh ${report.projectedMonthEndNet}, IdleCash=Ksh ${report.idleCashKes}, MissedYield=+Ksh ${report.missedMonthlyInterestKes}/mo, Insights=${report.insights.length}`);
+
+// 7. Smart Holding Pot (Ring-Fenced Cash + Priority Auto-Skims + Ziidi Parking + Checklist + Threshold Trigger)
+const holdingAccounts = [
+  { id: 'acc-mpesa', name: 'M-Pesa Wallet', account_type: 'MOBILE_MONEY', balance: 9200, interest_rate_p_a: 0 },
+  { id: 'acc-ziidi', name: 'Ziidi MMF', account_type: 'MMF', balance: 40000, interest_rate_p_a: 13.5 },
+  { id: 'acc-lock', name: 'Lock Savings', account_type: 'SAVINGS', balance: 15000, interest_rate_p_a: 10 },
+];
+const potEntries = [
+  { id: 'b1', date: '2026-11-16', day_label: 'Mon', net_amount: 2500, shifts_count: 2, km_driven: 100, splits: [] },
+  { id: 'b2', date: '2026-11-18', day_label: 'Wed', net_amount: 2500, shifts_count: 1, km_driven: 100, splits: [] },
+  { id: 'b3', date: '2026-11-19', day_label: 'Thu', net_amount: 2500, shifts_count: 1, km_driven: 100, splits: [] },
+];
+const potReport = computeSmartHoldingPot({
+  batchPotEntries: potEntries,
+  config: {
+    source_account_id: 'acc-mpesa',
+    parking_strategy: 'ZIIDI_MMF',
+    closeout_day: 'SUNDAY',
+    threshold_kes: 5000,
+    auto_skim_commission: true,
+    auto_skim_service: true,
+    service_rate_per_km: 2.5,
+    auto_skim_bills: true,
+    settled_bucket_keys: [],
+  },
+  accounts: holdingAccounts,
+  platformOwedKes: 1000, // Step 1 skim: 1,000
+  weeklyKmDriven: 300,   // Step 2 skim: 300 * 2.5 = 750
+  upcoming7DayBillsKes: 750, // Step 3 skim: 750 -> Total skims = 2,500 -> Clean Profit = 5,000
+  todayIso: '2026-11-19', // Thursday, but Pot is 7,500 >= 5,000 threshold!
+});
+
+console.assert(potReport.walletTotalBalanceKes === 9200, `Expected wallet 9200, got ${potReport.walletTotalBalanceKes}`);
+console.assert(potReport.ringFencedPotKes === 7500, `Expected ring-fenced 7500, got ${potReport.ringFencedPotKes}`);
+console.assert(potReport.trueFreeSpendableKes === 1700, `Expected true free spendable 1700, got ${potReport.trueFreeSpendableKes}`);
+console.assert(potReport.totalPrioritySkimsKes === 2500, `Expected priority skims 2500, got ${potReport.totalPrioritySkimsKes}`);
+console.assert(potReport.cleanProfitForSplitsKes === 5000, `Expected clean profit 5000, got ${potReport.cleanProfitForSplitsKes}`);
+console.assert(potReport.isThresholdReached === true && potReport.shouldPromptCloseout === true, 'Threshold trigger should fire at 7,500 >= 5,000');
+console.assert(potReport.totalShiftsAccumulated === 4, `Expected 4 accumulated shifts across 3 days, got ${potReport.totalShiftsAccumulated}`);
+console.assert(potReport.stayParkedInMmfKes === 1500, `Expected 30% of 5000 (1500) to stay parked in Ziidi MMF, got ${potReport.stayParkedInMmfKes}`);
+console.log(`✅ 7. Smart Holding Pot: Wallet=Ksh ${potReport.walletTotalBalanceKes}, Locked=Ksh ${potReport.ringFencedPotKes}, FreeCash=Ksh ${potReport.trueFreeSpendableKes}, Skims=Ksh ${potReport.totalPrioritySkimsKes}, CleanProfit=Ksh ${potReport.cleanProfitForSplitsKes}, Trigger=${potReport.triggerReason}`);
 
 console.log('🎉 ALL SMART INTELLIGENCE ENGINE TESTS PASSED 100%!');

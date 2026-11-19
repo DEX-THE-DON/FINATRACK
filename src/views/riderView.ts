@@ -10,6 +10,7 @@ export function renderRiderDashboard(data: any): string {
     smart_shift_defaults = null,
     platform_remittance = null,
     weekly_batch_pot = [],
+    smart_holding_pot = null,
     has_quick_pin = false,
     time_intelligence = {},
     maintenance_schedules = [],
@@ -3721,41 +3722,101 @@ export function renderRiderDashboard(data: any): string {
             </div>
         </div>
 
-        <!-- 📦 Daily Logging with Sunday Batch Waterfall Split (Avoid Daily M-Pesa Charges) -->
-        <div id="sunday-batch-card" class="bg-gradient-to-br from-slate-900 via-emerald-950/80 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-emerald-700/50 space-y-4">
+        <!-- 📦 7-POINT SMART HOLDING POT & INTERACTIVE CLOSEOUT ENGINE -->
+        ${(() => {
+          const hp = smart_holding_pot || {
+            config: {
+              source_account_id: '',
+              parking_strategy: 'ZIIDI_MMF',
+              parking_apy_pct: 13.5,
+              closeout_day: 'SUNDAY',
+              threshold_kes: 5000,
+              auto_skim_commission: true,
+              auto_skim_service: true,
+              service_rate_per_km: 2.5,
+              auto_skim_bills: true,
+              settled_bucket_keys: [],
+            },
+            sourceAccountId: null,
+            sourceAccountName: 'M-Pesa Wallet',
+            walletTotalBalanceKes: 0,
+            grossPotTotalKes: batchPotTotalKes,
+            settledPotKes: 0,
+            ringFencedPotKes: batchPotTotalKes,
+            trueFreeSpendableKes: 0,
+            isRingFenceBreached: false,
+            ringFenceShortfallKes: 0,
+            parkingLabel: 'Safaricom Ziidi MMF (Zero-Fee Nightly Parking)',
+            parkingApyPct: 13.5,
+            dailyParkedInterestNetKes: 2.36,
+            weeklyParkedInterestNetKes: 16.55,
+            annualParkedInterestNetKes: 862,
+            stayParkedInMmfKes: 0,
+            withdrawOnCloseoutKes: batchPotTotalKes,
+            weeklyKmDriven: 0,
+            skimCommissionKes: 0,
+            skimServiceReserveKes: 0,
+            skimBillsReserveKes: 0,
+            totalPrioritySkimsKes: 0,
+            cleanProfitForSplitsKes: batchPotTotalKes,
+            checklistItems: [],
+            pendingItemsCount: 0,
+            settledItemsCount: 0,
+            isCloseoutDayToday: false,
+            isThresholdReached: false,
+            shouldPromptCloseout: false,
+            triggerHeadline: '📦 Accumulating Weekly Holding Pot',
+            triggerReason: 'ACCUMULATING',
+            daysQueuedCount: batchPotEntries.length,
+            totalShiftsAccumulated: batchPotEntries.length,
+          };
+          const hpCfg = hp.config || {};
+          const checklistItems: any[] = Array.isArray(hp.checklistItems) ? hp.checklistItems : [];
+
+          return `
+        <div id="sunday-batch-card" class="bg-gradient-to-br from-slate-900 via-emerald-950/85 to-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-xl border ${hp.shouldPromptCloseout ? 'border-amber-400/80 ring-2 ring-amber-400/20' : 'border-emerald-700/50'} space-y-4">
+            <!-- Header + Trigger Status + Quick Actions -->
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-emerald-800/60 pb-3">
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-xl shadow-xs">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-xl shadow-xs shrink-0">
                         📦
                     </div>
                     <div>
                         <div class="flex items-center gap-2 flex-wrap">
-                            <h2 class="text-base sm:text-lg font-black text-white">Sunday Batch Waterfall Accumulator (Avoid Daily M-Pesa Charges)</h2>
+                            <h2 class="text-base sm:text-lg font-black text-white">Smart Ring-Fenced Holding Pot &amp; Closeout Engine</h2>
                             <span class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/40 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                Save ~${transfersAvoidedCount} Transfers / Week (~Ksh ${estMpesaFeesSavedKes} Fees Saved)
+                                Save ~${transfersAvoidedCount} Transfers / Wk (~Ksh ${estMpesaFeesSavedKes} Saved)
+                            </span>
+                            <span class="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-bold px-2 py-0.5 rounded-full">
+                                ☁️ Cloud Synced • ${hp.totalShiftsAccumulated} Shift${hp.totalShiftsAccumulated === 1 ? '' : 's'}
                             </span>
                         </div>
                         <p class="text-xs text-emerald-200/90 mt-0.5">
-                            Queue your Mon–${workDaysPerWeek === 5 ? 'Fri' : workDaysPerWeek === 6 ? 'Sat' : 'Sun'} net splits in a virtual <strong>Weekly Holding Pot (in your M-Pesa)</strong>, then make just <strong>${bucketCountForFeeCalc} bulk transfers on Sunday night</strong> instead of ${workDaysPerWeek * bucketCountForFeeCalc} daily micro-transfers!
+                            Ring-fence daily net splits across multiple shifts, earn zero-fee nightly Ziidi/M-Shwari interest, auto-skim priority obligations first, then tick off each M-Pesa transfer step-by-step!
                         </p>
                     </div>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="document.getElementById('holding-pot-settings-drawer')?.classList.toggle('hidden')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-700/50 text-xs font-extrabold rounded-xl transition active:scale-95">
+                        ⚙️ Pot Rules &amp; Triggers
+                    </button>
                     <form action="/rider/batch-pot/queue" method="POST" class="inline">
                         <input type="hidden" name="date" value="${today}">
                         <input type="hidden" name="net_amount" value="${Math.max(0, lastShiftNet || strictNetFloor)}">
+                        <input type="hidden" name="queue_mode" value="ACCUMULATE">
                         <button type="submit" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5">
-                            <span>➕ Queue Today's Split (Ksh ${Math.max(0, lastShiftNet || strictNetFloor).toLocaleString()})</span>
+                            <span>➕ Queue +Ksh ${Math.max(0, lastShiftNet || strictNetFloor).toLocaleString()}</span>
                         </button>
                     </form>
-                    ${batchPotEntries.length > 0 ? `
-                    <form action="/rider/batch-pot/disburse" method="POST" class="inline" onsubmit="return confirm('Execute Sunday Batch Disbursement of Ksh ${batchPotTotalKes.toLocaleString()} across ${batchBucketList.length} buckets now?');">
+                    ${hp.ringFencedPotKes > 0 ? `
+                    <form action="/rider/batch-pot/disburse" method="POST" class="inline" onsubmit="return confirm('Settle all ${hp.pendingItemsCount} remaining closeout items (Ksh ${hp.ringFencedPotKes.toLocaleString()}) via clean Internal Transfers from ${hp.sourceAccountName} now?');">
+                        <input type="hidden" name="source_account_id" value="${hp.sourceAccountId || ''}">
                         <button type="submit" class="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 text-xs font-black rounded-xl transition shadow-md flex items-center gap-1.5 active:scale-95">
-                            <span>🚀 Sunday Closeout: Disburse Ksh ${batchPotTotalKes.toLocaleString()}</span>
+                            <span>🚀 Disburse All Remaining (Ksh ${hp.ringFencedPotKes.toLocaleString()})</span>
                         </button>
                     </form>
-                    <form action="/rider/batch-pot/clear" method="POST" class="inline" onsubmit="return confirm('Clear the Weekly Batch Holding Pot?');">
+                    <form action="/rider/batch-pot/clear" method="POST" class="inline" onsubmit="return confirm('Clear the Weekly Batch Holding Pot across device & cloud?');">
                         <button type="submit" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950 text-gray-300 hover:text-rose-300 border border-slate-700 text-xs font-bold rounded-xl transition">
                             Reset
                         </button>
@@ -3764,80 +3825,234 @@ export function renderRiderDashboard(data: any): string {
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                <!-- Left 7 Cols: Daily Queued Shifts (Mon–Sat Holding Pot) -->
-                <div class="lg:col-span-7 bg-slate-950/80 border border-emerald-900/60 rounded-2xl p-4 space-y-2.5">
-                    <div class="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-                        <span class="font-extrabold text-emerald-300 uppercase tracking-wider">🗓️ Daily Queued Splits (${batchPotEntries.length} day${batchPotEntries.length === 1 ? '' : 's'} in Holding Pot)</span>
-                        <span class="font-black text-white">Total Held: <strong class="text-emerald-400">Ksh ${batchPotTotalKes.toLocaleString()}</strong></span>
-                    </div>
+            <!-- Flexible Trigger Alert Banner (Closeout Day OR Threshold Trigger) -->
+            <div class="p-3 rounded-2xl border ${hp.shouldPromptCloseout ? 'bg-amber-500/20 border-amber-400/60 text-amber-200' : 'bg-slate-950/70 border-slate-800 text-slate-300'} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-black">${hp.triggerHeadline}</span>
+                </div>
+                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-900/90 border border-slate-700 text-cyan-300 shrink-0">
+                    Trigger: ${hpCfg.closeout_day || 'SUNDAY'} or Ksh ${Number(hpCfg.threshold_kes || 5000).toLocaleString()}+
+                </span>
+            </div>
 
-                    ${batchPotEntries.length > 0 ? `
-                    <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
-                        ${batchPotEntries.map((e: any) => `
-                        <div class="p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 text-xs">
-                            <div>
-                                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black text-[10px] mr-1.5">${e.day_label || 'Shift'}</span>
-                                <span class="font-bold text-gray-200">${e.date}</span>
-                                <span class="font-black text-emerald-400 ml-2">Ksh ${Number(e.net_amount || 0).toLocaleString()} queued</span>
-                            </div>
-                            <div class="flex flex-wrap gap-1.5 text-[10px] text-gray-300">
-                                ${(e.splits || []).map((sp: any) => `
-                                <span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
-                                    ${sp.bucket_name.split(' ')[0]}: <strong class="text-cyan-300">Ksh ${Number(sp.amount || 0).toLocaleString()}</strong>
-                                </span>
-                                `).join('')}
-                            </div>
-                        </div>
-                        `).join('')}
-                    </div>
-                    ` : `
-                    <div class="p-4 text-center text-xs text-gray-400 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
-                        No shifts queued in this week's holding pot yet. When logging a shift below (with <strong>"📦 Queue to Sunday Batch Pot"</strong> checked) or tapping <strong>"➕ Queue Today's Split"</strong> above, Finatrack holds your daily splits here for zero-fee Sunday night disbursement!
-                    </div>
-                    `}
+            <!-- 1. RING-FENCED CASH METER (True Spendable vs. Locked in Holding Pot) & 2. ZERO-FEE INTEREST PARKING HACK -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div class="p-3.5 rounded-2xl bg-slate-950/85 border border-slate-800 space-y-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">📱 Total in ${hp.sourceAccountName}</span>
+                    <p class="text-lg font-black text-white convertible-amount" data-kes="${hp.walletTotalBalanceKes}">Ksh ${Number(hp.walletTotalBalanceKes || 0).toLocaleString()}</p>
+                    <p class="text-[10px] text-slate-400">Live linked source wallet balance</p>
                 </div>
 
-                <!-- Right 5 Cols: Sunday Evening Consolidated Breakdown -->
-                <div class="lg:col-span-5 bg-slate-950/80 border border-amber-700/50 rounded-2xl p-4 space-y-2.5 flex flex-col justify-between">
-                    <div class="space-y-2">
+                <div class="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/40 space-y-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300">🔒 Locked in Holding Pot (Do Not Touch)</span>
+                    <p class="text-lg font-black text-rose-300 convertible-amount" data-kes="${hp.ringFencedPotKes}">Ksh ${Number(hp.ringFencedPotKes || 0).toLocaleString()}</p>
+                    <p class="text-[10px] text-rose-200/80">${hp.settledPotKes > 0 ? `Ksh ${hp.settledPotKes.toLocaleString()} already sent` : 'Ring-fenced for closeout split'}</p>
+                </div>
+
+                <div class="p-3.5 rounded-2xl ${hp.isRingFenceBreached ? 'bg-rose-950/70 border-rose-400' : 'bg-emerald-950/50 border-emerald-500/40'} border space-y-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider ${hp.isRingFenceBreached ? 'text-rose-200' : 'text-emerald-300'}">
+                        ${hp.isRingFenceBreached ? '🚨 Ring-Fence Shortfall' : '🟢 True Free Cash to Spend'}
+                    </span>
+                    <p class="text-lg font-black ${hp.isRingFenceBreached ? 'text-rose-400' : 'text-emerald-400'} convertible-amount" data-kes="${hp.isRingFenceBreached ? hp.ringFenceShortfallKes : hp.trueFreeSpendableKes}">
+                        ${hp.isRingFenceBreached ? `-Ksh ${Number(hp.ringFenceShortfallKes).toLocaleString()}` : `Ksh ${Number(hp.trueFreeSpendableKes || 0).toLocaleString()}`}
+                    </p>
+                    <p class="text-[10px] text-slate-300">
+                        ${hp.isRingFenceBreached ? 'Wallet dipped below held pot!' : 'Safe to spend without touching pot'}
+                    </p>
+                </div>
+
+                <div class="p-3.5 rounded-2xl bg-cyan-950/45 border border-cyan-500/40 space-y-1">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-cyan-300">🇰🇪 Nightly Interest Parking (${hp.parkingApyPct}% p.a.)</span>
+                    <p class="text-lg font-black text-cyan-300">+Ksh ${Number(hp.weeklyParkedInterestNetKes || 0).toFixed(2)}<span class="text-xs font-bold text-cyan-200">/wk</span></p>
+                    <p class="text-[10px] text-cyan-200/90">
+                        ${hp.stayParkedInMmfKes > 0
+                          ? `Keep <strong>Ksh ${hp.stayParkedInMmfKes.toLocaleString()}</strong> in Ziidi • Withdraw only <strong>Ksh ${hp.withdrawOnCloseoutKes.toLocaleString()}</strong>`
+                          : `Park nightly in Ziidi/M-Shwari (0 fee) → +Ksh ${Math.round(hp.annualParkedInterestNetKes || 0).toLocaleString()}/yr`}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Collapsible Smart Holding Pot Settings Drawer -->
+            <form id="holding-pot-settings-drawer" action="/rider/batch-pot/config" method="POST" class="hidden p-4 rounded-2xl bg-slate-950/95 border border-cyan-700/60 space-y-3 text-xs">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span class="font-black text-cyan-300 uppercase tracking-wider">⚙️ Configure Ring-Fence Wallet, Parking Strategy, Triggers &amp; Priority Skims</span>
+                    <button type="button" onclick="document.getElementById('holding-pot-settings-drawer')?.classList.add('hidden')" class="text-gray-400 hover:text-white">✕</button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-bold text-emerald-300 mb-1">1. Source Holding Wallet</label>
+                        <select name="source_account_id" class="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl font-bold text-white text-xs">
+                            <option value="">Auto-Detect M-Pesa Wallet</option>
+                            ${(accounts || []).map((a: any) => `<option value="${a.id}" ${String(hp.sourceAccountId) === String(a.id) ? 'selected' : ''}>${a.name} (Ksh ${Number(a.balance || 0).toLocaleString()})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-cyan-300 mb-1">2. Zero-Fee Nightly Parking</label>
+                        <select name="parking_strategy" class="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl font-bold text-cyan-300 text-xs">
+                            <option value="ZIIDI_MMF" ${hpCfg.parking_strategy === 'ZIIDI_MMF' ? 'selected' : ''}>Safaricom Ziidi MMF (13.5% p.a. • 0 Fee)</option>
+                            <option value="MSHWARI" ${hpCfg.parking_strategy === 'MSHWARI' ? 'selected' : ''}>M-Shwari Lock/Save (7.5% p.a. • 0 Fee)</option>
+                            <option value="MPESA_WALLET" ${hpCfg.parking_strategy === 'MPESA_WALLET' ? 'selected' : ''}>Normal M-Pesa Wallet (0% p.a.)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-amber-300 mb-1">3. Preferred Closeout Day</label>
+                        <select name="closeout_day" class="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl font-bold text-amber-300 text-xs">
+                            ${['SUNDAY', 'TUESDAY', 'SATURDAY', 'FRIDAY', 'MONDAY', 'WEDNESDAY', 'THURSDAY'].map(d => `<option value="${d}" ${hpCfg.closeout_day === d ? 'selected' : ''}>${d.charAt(0) + d.slice(1).toLowerCase()}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-amber-300 mb-1">4. Threshold Trigger (Ksh)</label>
+                        <input type="number" step="500" min="500" name="threshold_kes" value="${hpCfg.threshold_kes || 5000}" class="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl font-black text-amber-300 text-xs">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80 items-center">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="auto_skim_commission" value="1" ${hpCfg.auto_skim_commission !== false ? 'checked' : ''} class="rounded text-emerald-500">
+                        <span class="text-[11px] font-bold text-gray-200">Step 1: Skim Uber/Bolt Debt</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="auto_skim_service" value="1" ${hpCfg.auto_skim_service !== false ? 'checked' : ''} class="rounded text-emerald-500">
+                        <span class="text-[11px] font-bold text-gray-200">Step 2: Skim Service/Tyre Wear</span>
+                    </label>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[11px] text-gray-400">Wear Rate (Ksh/km):</span>
+                        <input type="number" step="0.5" min="0" name="service_rate_per_km" value="${hpCfg.service_rate_per_km ?? 2.5}" class="w-20 p-1.5 bg-slate-900 border border-slate-700 rounded-lg font-bold text-white text-xs">
+                    </div>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="auto_skim_bills" value="1" ${hpCfg.auto_skim_bills !== false ? 'checked' : ''} class="rounded text-emerald-500">
+                        <span class="text-[11px] font-bold text-gray-200">Step 3: Skim 7-Day Bills</span>
+                    </label>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-xl text-xs transition active:scale-95">
+                        💾 Save Holding Pot Rules
+                    </button>
+                </div>
+            </form>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <!-- Left 5 Cols: Daily Multi-Shift Accumulation Log -->
+                <div class="lg:col-span-5 bg-slate-950/80 border border-emerald-900/60 rounded-2xl p-4 space-y-2.5 flex flex-col justify-between">
+                    <div class="space-y-2.5">
                         <div class="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-                            <span class="font-extrabold text-amber-300 uppercase tracking-wider">👑 Sunday Evening Closeout Totals</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">Bulk M-Pesa Transfer</span>
+                            <span class="font-extrabold text-emerald-300 uppercase tracking-wider">🗓️ Queued Days (${batchPotEntries.length} day${batchPotEntries.length === 1 ? '' : 's'} • ${hp.totalShiftsAccumulated} shift${hp.totalShiftsAccumulated === 1 ? '' : 's'})</span>
+                            <span class="font-black text-white">Gross Pot: <strong class="text-emerald-400">Ksh ${Number(hp.grossPotTotalKes || 0).toLocaleString()}</strong></span>
                         </div>
-                        ${batchBucketList.length > 0 ? `
-                        <div class="space-y-1.5 pt-1">
-                            ${batchBucketList.map((b) => `
-                            <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-                                <span class="font-bold text-gray-200 truncate pr-2">${b.bucket_name} <span class="text-[10px] text-gray-400">(${b.percentage}%)</span></span>
-                                <span class="font-black text-emerald-400 shrink-0">Ksh ${b.amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+
+                        ${batchPotEntries.length > 0 ? `
+                        <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                            ${batchPotEntries.map((e: any) => `
+                            <div class="p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl flex flex-col gap-1 text-xs">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black text-[10px]">${e.day_label || 'Shift'}</span>
+                                        <span class="font-bold text-gray-200">${e.date}</span>
+                                        ${Number(e.shifts_count || 1) > 1 ? `<span class="px-1.5 py-0.5 rounded bg-indigo-500/25 text-indigo-300 font-bold text-[10px]">+${e.shifts_count} shifts summed</span>` : ''}
+                                        ${Number(e.km_driven || 0) > 0 ? `<span class="text-[10px] text-slate-400">• ${e.km_driven} km</span>` : ''}
+                                    </div>
+                                    <span class="font-black text-emerald-400">Ksh ${Number(e.net_amount || 0).toLocaleString()}</span>
+                                </div>
+                            </div>
+                            `).join('')}
+                        </div>
+                        ` : `
+                        <div class="p-4 text-center text-xs text-gray-400 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
+                            No shifts queued in this week's holding pot yet. Check <strong>"📦 Queue to Batch Pot"</strong> when logging shifts below (multiple stints on the same day auto-sum!) or tap <strong>"➕ Queue"</strong> above.
+                        </div>
+                        `}
+                    </div>
+
+                    <!-- Priority Auto-Skim Summary Box -->
+                    <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1 text-[11px]">
+                        <div class="flex justify-between text-slate-300">
+                            <span>Gross Queued Pot:</span>
+                            <strong class="text-white">Ksh ${Number(hp.grossPotTotalKes || 0).toLocaleString()}</strong>
+                        </div>
+                        <div class="flex justify-between text-amber-300">
+                            <span>− Priority Skims (Comm + Service + 7d Bills):</span>
+                            <strong>-Ksh ${Number(hp.totalPrioritySkimsKes || 0).toLocaleString()}</strong>
+                        </div>
+                        <div class="flex justify-between text-emerald-400 font-black pt-1 border-t border-slate-800">
+                            <span>= Clean Net Profit for % Splits:</span>
+                            <span>Ksh ${Number(hp.cleanProfitForSplitsKes || 0).toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right 7 Cols: Interactive Step-by-Step M-Pesa Closeout Checklist -->
+                <div class="lg:col-span-7 bg-slate-950/80 border border-amber-700/50 rounded-2xl p-4 space-y-3 flex flex-col justify-between">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
+                            <span class="font-extrabold text-amber-300 uppercase tracking-wider">✅ Interactive M-Pesa Closeout Checklist (Step-by-Step)</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                                ${hp.settledItemsCount}/${checklistItems.length} Sent • ${hp.pendingItemsCount} Pending
+                            </span>
+                        </div>
+
+                        ${checklistItems.length > 0 ? `
+                        <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                            ${checklistItems.map((item: any) => `
+                            <div class="p-3 rounded-xl border ${item.isSettled ? 'bg-emerald-950/30 border-emerald-700/50 opacity-75' : item.stepNumber < 4 ? 'bg-amber-950/25 border-amber-700/50' : 'bg-slate-900/90 border-slate-800'} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                                <div class="space-y-0.5 pr-2">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-[10px] font-black px-2 py-0.5 rounded ${item.stepNumber < 4 ? 'bg-amber-500/20 text-amber-300' : 'bg-indigo-500/20 text-indigo-300'}">${item.stepBadge}</span>
+                                        <span class="font-black text-white ${item.isSettled ? 'line-through text-emerald-300' : ''}">${item.title}</span>
+                                        ${item.stayParkedInMmf ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">Stay Parked in Ziidi</span>` : ''}
+                                    </div>
+                                    <p class="text-[11px] text-slate-400">${item.subtitle} • Dest: <strong class="text-slate-200">${item.destinationLabel}</strong></p>
+                                </div>
+
+                                <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                                    <span class="font-black text-sm text-emerald-400 mr-1">Ksh ${Number(item.amount || 0).toLocaleString()}</span>
+                                    <button type="button" onclick="navigator.clipboard?.writeText('${Math.round(Number(item.amount || 0))}'); this.textContent='Copied!'; var self=this; setTimeout(function(){self.textContent='📋 Copy';}, 1200);" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[10px] font-bold transition">
+                                        📋 Copy
+                                    </button>
+                                    ${item.isSettled ? `
+                                    <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-lg text-[10px] font-black">✓ Sent</span>
+                                    ` : `
+                                    <form action="/rider/batch-pot/disburse-item" method="POST" class="inline">
+                                        <input type="hidden" name="item_key" value="${item.key}">
+                                        <input type="hidden" name="title" value="${item.title}">
+                                        <input type="hidden" name="target_type" value="${item.targetType}">
+                                        <input type="hidden" name="target_id" value="${item.targetId || ''}">
+                                        <input type="hidden" name="source_account_id" value="${hp.sourceAccountId || ''}">
+                                        <input type="hidden" name="amount" value="${item.amount}">
+                                        <input type="hidden" name="stay_parked" value="${item.stayParkedInMmf ? '1' : '0'}">
+                                        <input type="hidden" name="total_items" value="${checklistItems.length}">
+                                        <button type="submit" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-black transition active:scale-95 shadow-2xs">
+                                            ✓ Mark Sent
+                                        </button>
+                                    </form>
+                                    `}
+                                </div>
                             </div>
                             `).join('')}
                         </div>
                         ` : `
                         <div class="space-y-1.5 pt-1 text-xs text-gray-400">
-                            <p>Example ${workDaysPerWeek}-Day Consolidated Sunday Transfer (at Ksh ${strictNetFloor.toLocaleString()}/day):</p>
+                            <p>Example ${workDaysPerWeek}-Day Priority-First Closeout Waterfall (at Ksh ${strictNetFloor.toLocaleString()}/day):</p>
                             <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
-                                <span>📈 Ziidi MMF (30%)</span>
+                                <span>Step 1–3: Auto-Skim Uber Debt + Bike Wear + 7d Bills</span>
+                                <strong class="text-amber-300">Skimmed First</strong>
+                            </div>
+                            <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
+                                <span>Step 4a: 📈 Ziidi MMF (30% • Stays Parked Earning 13.5%)</span>
                                 <strong class="text-emerald-400">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.3).toLocaleString()}</strong>
                             </div>
                             <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
-                                <span>🔒 Lock Savings (30%)</span>
-                                <strong class="text-cyan-300">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.3).toLocaleString()}</strong>
-                            </div>
-                            <div class="flex justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
-                                <span>🎯 Goals / Sacco (20%)</span>
-                                <strong class="text-amber-300">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.2).toLocaleString()}</strong>
+                                <span>Step 4b: 🔒 Lock Savings (30%) &amp; 🎯 Goals/SACCO (20%)</span>
+                                <strong class="text-cyan-300">Ksh ${Math.round(strictNetFloor * workDaysPerWeek * 0.5).toLocaleString()}</strong>
                             </div>
                         </div>
                         `}
                     </div>
                     <p class="text-[11px] text-emerald-300/90 pt-2 border-t border-slate-800">
-                        💡 <strong>Result:</strong> Only <strong>${bucketCountForFeeCalc} bulk M-Pesa transfers on Sunday night</strong> instead of ${workDaysPerWeek * bucketCountForFeeCalc} micro-transfers during the week!
+                        💡 <strong>True Internal Transfer Accounting:</strong> Clicking <strong>✓ Mark Sent</strong> deducts from <strong>${hp.sourceAccountName}</strong> and credits each bucket with zero double-counting of income!
                     </p>
                 </div>
             </div>
-        </div>
+        </div>`;
+        })()}
 
         <!-- 🛵 Active Motorbike & Fleet Management Card -->
         <div id="fleet-card" class="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
