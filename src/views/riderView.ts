@@ -7,6 +7,7 @@ export function renderRiderDashboard(data: any): string {
     odometer_config = null,
     strict_saver_config = null,
     flex_schedule = null,
+    smart_shift_defaults = null,
     platform_remittance = null,
     weekly_batch_pot = [],
     has_quick_pin = false,
@@ -4283,6 +4284,57 @@ export function renderRiderDashboard(data: any): string {
                     </button>
                 </div>
             </div>
+
+            <!-- ⚡ 1-TAP SMART SHIFT PRE-FILL & ROADSIDE QUICK-LOG (Put Less In, Let Finatrack Auto-Fill!) -->
+            <div class="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50 via-cyan-50/70 to-emerald-50 dark:from-slate-900 dark:via-indigo-950/70 dark:to-slate-900 border border-indigo-200 dark:border-indigo-800/70 space-y-3">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5">
+                    <div class="text-xs space-y-0.5">
+                        <p class="font-black text-indigo-900 dark:text-cyan-300 flex items-center gap-1.5">
+                            <span>🧠</span>
+                            <span>Smart Shift Auto-Fill ${smart_shift_defaults?.sampleSize ? `(Learned from last ${smart_shift_defaults.sampleSize} shifts)` : '(From Strict Saver Contract)'}</span>
+                        </p>
+                        <p class="text-[11px] text-gray-600 dark:text-slate-300">
+                            Typical: ⛽ <strong>Ksh ${Number(smart_shift_defaults?.fuelCost ?? strictFuelAllowance).toLocaleString()}</strong> • 🍲 <strong>Ksh ${Number(smart_shift_defaults?.foodSpent ?? strictLunchAllowance).toLocaleString()}</strong> • 📱 <strong>Ksh ${Number(smart_shift_defaults?.airtimeSpent ?? strictAirtimeAllowance).toLocaleString()}</strong> • 🛣️ <strong>~${Number(smart_shift_defaults?.avgKm ?? 110)} km</strong> — tap once &amp; just type Gross Earned!
+                        </p>
+                    </div>
+                    <button type="button" onclick="smartAutoFillRiderShift()" class="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white text-xs font-black rounded-xl shadow-sm transition active:scale-95 shrink-0 flex items-center gap-1.5">
+                        <span>⚡ Auto-Fill Typical Shift</span>
+                    </button>
+                </div>
+
+                <!-- 1-Line Roadside Quick-Log -->
+                <form action="/smart-entry" method="POST" class="flex flex-col sm:flex-row gap-2 pt-2 border-t border-indigo-200/70 dark:border-indigo-800/50">
+                    <input type="hidden" name="redirect_to" value="/rider">
+                    <input type="text" name="smart_input" autocomplete="off" placeholder='⚡ 2-Sec Roadside Log: e.g. "puncture 200", "fuel 500 cash", "private errand 800" or paste M-Pesa SMS...' class="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-cyan-400" required>
+                    <button type="submit" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-xs transition active:scale-95 shrink-0">
+                        ⚡ Quick Log
+                    </button>
+                </form>
+            </div>
+            <script>
+            function smartAutoFillRiderShift() {
+                var d = {
+                    fuel: ${Number(smart_shift_defaults?.fuelCost ?? strictFuelAllowance)},
+                    food: ${Number(smart_shift_defaults?.foodSpent ?? strictLunchAllowance)},
+                    airtime: ${Number(smart_shift_defaults?.airtimeSpent ?? strictAirtimeAllowance)},
+                    km: ${Number(smart_shift_defaults?.avgKm ?? 110)},
+                    startTime: '${String(smart_shift_defaults?.startTime || '08:00').replace(/'/g, '')}',
+                    endTime: '${String(smart_shift_defaults?.endTime || '19:00').replace(/'/g, '')}'
+                };
+                var setVal = function(sel, val) { var el = document.querySelector(sel); if (el) el.value = String(val); };
+                setVal('#shift_fuel_cost_input', d.fuel);
+                setVal('input[name="food_spent"]', d.food);
+                setVal('input[name="airtime_spent"]', d.airtime);
+                setVal('#shift_km_input', d.km);
+                setVal('#input_start_time', d.startTime);
+                setVal('#input_end_time', d.endTime);
+                if (typeof calcDuration === 'function') calcDuration();
+                if (typeof onShiftKmOrFuelInput === 'function') onShiftKmOrFuelInput();
+                if (typeof updateStrictSaverAudit === 'function') updateStrictSaverAudit();
+                var grossEl = document.querySelector('input[name="total_earned"]');
+                if (grossEl) { grossEl.focus(); grossEl.select(); }
+            }
+            </script>
 
             <form id="rider-shift-log-form" action="/rider/logs" method="POST" onsubmit="return handleShiftFormSubmit(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <input type="hidden" name="power_type" id="input_power_type" value="${activePowerType}">

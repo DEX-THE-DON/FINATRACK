@@ -14,6 +14,7 @@ import { renderSalariedDashboard } from './views/salariedView';
 import { renderAuthView } from './views/authView';
 import { getActiveProfile, setActiveProfile, PROFILES, ProfileMode } from './utils/profile';
 import { getPaystackConfig, isUserPaywalled } from './utils/paystack';
+import { computeSystemIntelligence, inferSmartShiftDefaults } from './utils/smartEngine';
 import {
   toDecimal,
   calculateMonthlyYield,
@@ -950,11 +951,25 @@ app.get('/', async (c) => {
     isRiderView: false,
   });
 
+  const systemIntelligence = computeSystemIntelligence({
+    accounts: accs,
+    transactions: txs,
+    recurringBills: reconciledRecurringBills,
+    debts: enrichedDebts,
+    goals: goals || [],
+    monthlyIncome,
+    monthlyExpenses,
+    currentDay,
+    daysInMonth,
+    todayIso: todayIsoStr,
+  });
+
   const html = renderFinanceDashboard({
     accounts: accs,
     transactions: txs,
     rider_logs: effectiveRiderLogs,
     notifications: smartNotifications,
+    smart_intelligence: systemIntelligence,
     goals: goals || [],
     budgets: categoryBudgets,
     income_targets: incomeTargets,
@@ -1260,6 +1275,8 @@ app.get('/rider', async (c) => {
     historicalRecords: shiftLogs || [],
   });
 
+  const smartShiftDefaults = inferSmartShiftDefaults(shiftLogs || [], strictSaverConfig, primaryActiveBike);
+
   const html = renderRiderDashboard({
     active_bike: primaryActiveBike,
     bikes: activeBikes,
@@ -1268,6 +1285,7 @@ app.get('/rider', async (c) => {
     odometer_config: odometerConfig,
     strict_saver_config: strictSaverConfig,
     flex_schedule: riderFlexSchedule,
+    smart_shift_defaults: smartShiftDefaults,
     weekly_rest_days: riderRestDays,
     platform_remittance: platformRemittanceConfig,
     weekly_batch_pot: getWeeklyBatchPot(c),

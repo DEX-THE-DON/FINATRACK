@@ -18,6 +18,7 @@ import {
 } from '../utils/math';
 import { parseMultipleMpesaMessages } from '../utils/mpesa';
 import { parseMultipleBankMessages } from '../utils/bankSms';
+import { parseSmartCommand } from '../utils/smartEngine';
 import { renderFinancialStatement } from '../views/statementView';
 import { Decimal } from 'decimal.js';
 import { getStrictSaverConfig, saveStrictSaverConfigCookie, getSavedRiderLogs, saveRiderLogsCookie, toggleRestDay } from './rider';
@@ -875,6 +876,108 @@ financeRoutes.post('/rest-day/toggle', async (c) => {
     ? `🛋️ Marked ${dateStr} as an Off / Rest Day! Weekly targets & pacing adapted.`
     : `🛵 Cleared off day for ${dateStr}! Active work day restored.`;
   return c.redirect(`/?toast=${encodeURIComponent(msg)}#target-checkers-card`, 303);
+});
+
+// ------------------------------------------------------------------------------
+// ⚡ UNIVERSAL 1-LINE SMART ENTRY (Shorthand Commands OR Raw M-Pesa / Bank SMS)
+// ------------------------------------------------------------------------------
+financeRoutes.post('/smart-entry', async (c) => {
+  const { supabase, userId } = await getRequestContext(c);
+  const body = await c.req.parseBody();
+  const rawInput = String(body['smart_input'] || '').trim();
+  const redirectTo = String(body['redirect_to'] || '/').startsWith('/') ? String(body['redirect_to']) : '/';
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  if (!rawInput) {
+    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚠️ Type a quick entry like "fuel 500" or "uber 2.5k, lunch 150" or paste an M-Pesa SMS.')}`, 303);
+  }
+
+  let accQuery = supabase.from('accounts').select('*');
+  if (userId) accQuery = accQuery.eq('user_id', userId);
+  const { data: accounts } = await accQuery;
+  const accList = accounts || [];
+
+  const parsedEntries = parseSmartCommand(rawInput, accList, todayIso);
+  if (parsedEntries.length === 0) {
+    return c.redirect(`${redirectTo}?toast=${encodeURIComponent('⚠️ Could not detect an amount. Try e.g. "fuel 500", "uber 2500", or paste an M-Pesa SMS.')}`, 303);
+  }
+
+  let billsList: RecurringBillItem[] = [];
+  let billsUpdated = false;
+  try {
+    billsList = getRecurringBills(c);
+  } catch (e) {}
+
+  const summaryParts: string[] = [];
+  const accountBalances = new Map<string, Decimal>();
+  for (const a of accList) {
+    accountBalances.set(String(a.id), toDecimal(a.balance || 0));
+  }
+
+  for (const item of parsedEntries) {
+    const currentMonth = item.date.slice(0, 7);
+    const { data: insertedTx, error } = await supabase.from('transactions').insert({
+      ...(userId ? { user_id: userId } : {}),
+      account_id: item.account_id || null,
+      transaction_type: item.transaction_type,
+      category: item.category,
+      amount: item.amount,
+      date: item.date,
+      description: item.description,
+    }).select().single();
+
+    if (error) {
+      console.error('Smart entry insert failed:', error);
+      continue;
+    }
+
+    // Auto-sync recurring bill if expense matches
+    if (item.transaction_type === 'EXPENSE' && billsList.length > 0) {
+      const probeTx = {
+        transaction_type: item.transaction_type,
+        category: item.category,
+        description: item.description,
+        date: item.date,
+        amount: item.amount,
+      };
+      const matchedIdx = billsList.findIndex(b => doesTransactionMatchRecurringBill(probeTx, b, currentMonth));
+      if (matchedIdx >= 0) {
+        const b = billsList[matchedIdx];
+        billsList[matchedIdx] = {
+          ...b,
+          amount: item.amount > 0 ? item.amount : b.amount,
+          is_paid_this_month: true,
+          last_paid_month: currentMonth,
+          last_paid_date: item.date,
+          account_id: item.account_id || b.account_id,
+          last_tx_id: insertedTx?.id ? String(insertedTx.id) : b.last_tx_id,
+          unpaid_override_month: undefined,
+        };
+        billsUpdated = true;
+      }
+    }
+
+    // Auto-update account balance
+    if (item.account_id && accountBalances.has(item.account_id)) {
+      const prev = accountBalances.get(item.account_id)!;
+      const next = item.transaction_type === 'INCOME' ? prev.plus(item.amount) : prev.minus(item.amount);
+      accountBalances.set(item.account_id, next);
+      await supabase.from('accounts').update({ balance: next.toNumber() }).eq('id', item.account_id);
+    }
+
+    const sign = item.transaction_type === 'INCOME' ? '+' : '-';
+    summaryParts.push(`${sign}Ksh ${item.amount.toLocaleString()} (${item.description})`);
+  }
+
+  if (billsUpdated) {
+    saveRecurringBillsCookie(c, billsList);
+  }
+
+  const toastMsg = summaryParts.length > 0
+    ? `⚡ Smart Auto-Logged ${summaryParts.length} item${summaryParts.length === 1 ? '' : 's'}: ${summaryParts.slice(0, 3).join(' • ')}${summaryParts.length > 3 ? ` +${summaryParts.length - 3} more` : ''}`
+    : '⚠️ Could not save entries.';
+
+  return c.redirect(`${redirectTo}?toast=${encodeURIComponent(toastMsg)}`, 303);
 });
 
 

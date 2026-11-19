@@ -214,6 +214,16 @@ export function renderTraderDashboard(data: {
 
     <main class="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
 
+        <!-- ⚡ Smart 1-Line Auto-Entry Bar (Trader / Mama Mboga Mode) -->
+        <form action="/smart-entry" method="POST" class="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/70 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input type="hidden" name="redirect_to" value="/trader">
+            <span class="text-xs font-black text-emerald-700 dark:text-emerald-300 shrink-0 flex items-center gap-1.5">
+                <span>🧠</span> <span>1-Line Smart Log:</span>
+            </span>
+            <input type="text" name="smart_input" autocomplete="off" placeholder='e.g. "sales 4.5k, stock 2k, transport 200" or paste M-Pesa SMS...' class="flex-1 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-400 outline-none" required>
+            <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl transition active:scale-95 shrink-0">⚡ Auto-Log</button>
+        </form>
+
         <!-- ☀️ Top Soko / Market Briefing Card -->
         <div class="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 border border-emerald-500/50 p-4 sm:p-6 rounded-2xl sm:rounded-3xl text-white shadow-xl space-y-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">

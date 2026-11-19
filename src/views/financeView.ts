@@ -6,6 +6,7 @@ export function renderFinanceDashboard(data: any): string {
     transactions = [],
     rider_logs = [],
     notifications = [],
+    smart_intelligence = null,
     goals = [],
     budgets = [],
     income_targets = {
@@ -3075,6 +3076,94 @@ export function renderFinanceDashboard(data: any): string {
             </div>
         </div>
 
+        <!-- ⚡ SMART 1-LINE AUTO-ENTRY & AUTOPILOT INTELLIGENCE HUB (Put Less In, Let Finatrack Do The Work!) -->
+        <div id="smart-autopilot-hub" class="bg-gradient-to-br from-slate-900 via-indigo-950/90 to-slate-900 text-white rounded-3xl p-4 sm:p-5 border border-indigo-700/50 shadow-xl space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-lg shadow-md shrink-0">
+                        🧠
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-base font-black text-white leading-tight flex items-center gap-2 flex-wrap">
+                            <span>Smart 1-Line Auto-Entry &amp; Autopilot</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-extrabold uppercase tracking-wider">Zero-Friction AI</span>
+                        </h3>
+                        <p class="text-[11px] text-indigo-200/80">Type shorthand (e.g. <code class="text-cyan-300">uber 2.5k, fuel 500, lunch 150</code>) OR paste any M-Pesa / Bank SMS — Finatrack auto-categorizes, updates wallets &amp; syncs bills!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1-Line Smart Command Input -->
+            <form action="/smart-entry" method="POST" class="flex flex-col sm:flex-row gap-2">
+                <input type="hidden" name="redirect_to" value="/">
+                <input
+                    id="smart-command-input"
+                    type="text"
+                    name="smart_input"
+                    autocomplete="off"
+                    placeholder='Try: "fuel 500", "uber 2.5k, lunch 150, airtime 50", "kplc 1000", or paste M-Pesa SMS...'
+                    class="flex-1 px-3.5 py-2.5 bg-slate-950/90 border border-indigo-700/70 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40 rounded-xl text-xs sm:text-sm font-semibold text-white placeholder-slate-400 outline-none"
+                    required
+                >
+                <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 text-xs sm:text-sm font-black rounded-xl shadow-md transition active:scale-95 shrink-0 flex items-center justify-center gap-1.5">
+                    <span>⚡ Auto-Log</span>
+                </button>
+            </form>
+
+            <!-- 1-Tap Quick-Fill Chips -->
+            <div class="flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span class="text-slate-400 font-bold uppercase tracking-wider mr-1">1-Tap:</span>
+                ${[
+                  { label: '+ Uber 2.5k', val: 'uber 2500' },
+                  { label: '+ Bolt 1.8k', val: 'bolt 1800' },
+                  { label: '- Fuel 500', val: 'fuel 500' },
+                  { label: '- EV Swap 300', val: 'ev swap 300' },
+                  { label: '- Lunch 150', val: 'lunch 150' },
+                  { label: '- Airtime 50', val: 'airtime 50' },
+                ].map(chip => `
+                <button type="button" onclick="(function(){var el=document.getElementById('smart-command-input');if(el){el.value=el.value?el.value+', ${chip.val}':'${chip.val}';el.focus();}})()" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-indigo-800/80 border border-slate-700 hover:border-indigo-500 text-slate-200 font-bold transition active:scale-95">
+                    ${chip.label}
+                </button>
+                `).join('')}
+            </div>
+
+            <!-- Live Autopilot Insights Grid -->
+            ${smart_intelligence && Array.isArray(smart_intelligence.insights) && smart_intelligence.insights.length > 0 ? `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-2 border-t border-indigo-800/50">
+                ${smart_intelligence.insights.map((ins: any) => {
+                  const toneBorder = ins.tone === 'rose' ? 'border-rose-500/50 bg-rose-950/40'
+                    : ins.tone === 'amber' ? 'border-amber-500/50 bg-amber-950/35'
+                    : ins.tone === 'cyan' ? 'border-cyan-500/50 bg-cyan-950/35'
+                    : ins.tone === 'emerald' ? 'border-emerald-500/50 bg-emerald-950/35'
+                    : 'border-indigo-500/50 bg-indigo-950/40';
+                  const badgeTone = ins.tone === 'rose' ? 'bg-rose-500/20 text-rose-300'
+                    : ins.tone === 'amber' ? 'bg-amber-500/20 text-amber-300'
+                    : ins.tone === 'cyan' ? 'bg-cyan-500/20 text-cyan-300'
+                    : ins.tone === 'emerald' ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-indigo-500/20 text-indigo-300';
+                  return `
+                  <div class="p-3 rounded-2xl border ${toneBorder} flex flex-col justify-between gap-2">
+                      <div class="space-y-1">
+                          <div class="flex items-center justify-between gap-2">
+                              <span class="text-xs font-black text-white flex items-center gap-1.5">
+                                  <span>${ins.icon}</span>
+                                  <span>${ins.title}</span>
+                              </span>
+                              <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${badgeTone} shrink-0">${ins.badge}</span>
+                          </div>
+                          <p class="text-[11px] text-slate-300 leading-relaxed">${ins.message}</p>
+                      </div>
+                      ${ins.actionLabel && ins.actionHref ? `
+                      <div class="flex justify-end">
+                          <a href="${ins.actionHref}" class="text-[10px] font-extrabold text-cyan-300 hover:text-cyan-200 underline underline-offset-2">${ins.actionLabel} →</a>
+                      </div>
+                      ` : ''}
+                  </div>`;
+                }).join('')}
+            </div>
+            ` : ''}
+        </div>
+
         <!-- Mobile Quick Action Pills (Horizontal scroll on phone - non-sticky so it doesn't collide with quick-jump-dock) -->
         <div class="flex sm:hidden overflow-x-auto gap-2 py-1 no-scrollbar -mx-3.5 px-3.5">
             <button onclick="document.getElementById('waterfall-card')?.scrollIntoView({behavior: 'smooth'})" class="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 active:scale-95 text-slate-950 text-xs font-black rounded-xl shadow-xs shrink-0 transition">
@@ -6012,8 +6101,8 @@ export function renderFinanceDashboard(data: any): string {
                         <input type="text" name="custom_category" id="tx-custom-category" placeholder="e.g. Medical, Tithe, School Fees, Client Tip..." class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 text-gray-900 dark:text-white rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <div class="sm:col-span-2">
-                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Where did money go / come from? (Note / Memo)</label>
-                        <input type="text" name="description" id="tx-description-input" placeholder="e.g. Paid mechanic Kamau for brake pads, Client tip, Java lunch, KPLC Token..." class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500">
+                        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Where did money go / come from? (Note / Memo — <span class="text-emerald-600 dark:text-emerald-400 font-bold">Auto-Categorizes as you type ✨</span>)</label>
+                        <input type="text" name="description" id="tx-description-input" oninput="smartAutoCategorizeTx(this.value)" placeholder="e.g. Paid mechanic Kamau for brake pads, Client tip, Java lunch, KPLC Token..." class="w-full p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500">
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-sm transition shadow-xs active:scale-95 flex items-center justify-center gap-1.5">
@@ -6022,6 +6111,33 @@ export function renderFinanceDashboard(data: any): string {
                     </div>
                 </div>
             </form>
+            <script>
+            function smartAutoCategorizeTx(text) {
+                var val = String(text || '').toLowerCase();
+                if (!val || val.length < 3) return;
+                var typeEl = document.getElementById('tx-type-select');
+                var catEl = document.getElementById('tx-category-select');
+                if (!typeEl || !catEl || (catEl.value && catEl.value.indexOf('BILL:') === 0)) return;
+                var rules = [
+                    { re: /\b(ev|swap|battery|spiro|roam|charge)\b/, type: 'EXPENSE', cat: 'EV Battery Swap & Charging' },
+                    { re: /\b(fuel|petrol|rubis|total|shell|ola|kobil|diesel)\b/, type: 'EXPENSE', cat: 'Fuel & Petrol' },
+                    { re: /\b(service|oil|tyre|tire|puncture|brake|mechanic|spare|repair|wash)\b/, type: 'EXPENSE', cat: 'Bike Maintenance & Repairs' },
+                    { re: /\b(lunch|dinner|food|naivas|quickmart|carrefour|grocer|chapati|chai|milk|bread|mboga)\b/, type: 'EXPENSE', cat: 'Food & Groceries' },
+                    { re: /\b(kplc|token|wifi|zuku|airtime|bundle|water|bill|electric)\b/, type: 'EXPENSE', cat: 'Utilities & Bills' },
+                    { re: /\b(loan|debt|fuliza|mshwari|tala|branch|hustler|repay|kodi)\b/, type: 'EXPENSE', cat: 'Debt & Loan Repayments' },
+                    { re: /\b(uber|bolt|glovo|little|delivery|boda|shift|trip|errand)\b/, type: 'INCOME', cat: 'Rider & Boda Deliveries' },
+                    { re: /\b(interest|yield|dividend|ziidi|britam|mmf)\b/, type: 'INCOME', cat: 'MMF Interest' },
+                    { re: /\b(salary|wage|bonus|received|client|tip|income|mpesa)\b/, type: 'INCOME', cat: 'M-Pesa Income' }
+                ];
+                for (var i = 0; i < rules.length; i++) {
+                    if (rules[i].re.test(val)) {
+                        typeEl.value = rules[i].type;
+                        catEl.value = rules[i].cat;
+                        break;
+                    }
+                }
+            }
+            </script>
 
             <!-- Recent Transactions Table & Mobile Feed -->
             <div class="pt-4 border-t dark:border-gray-800 space-y-3">

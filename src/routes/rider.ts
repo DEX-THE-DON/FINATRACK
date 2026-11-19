@@ -1276,7 +1276,7 @@ riderRoutes.post('/rider/strict-contract', async (c) => {
 });
 
 // Toggle any day as a flexible Rest / Off Day
-riderRoutes.post('/rest-day/toggle', async (c) => {
+riderRoutes.post('/rider/rest-day/toggle', async (c) => {
   const body = await c.req.parseBody();
   const dateStr = String(body['date'] || new Date().toISOString().slice(0, 10));
   const isRest = toggleRestDay(c, dateStr);
